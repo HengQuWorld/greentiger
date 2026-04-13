@@ -4,7 +4,7 @@ set(MBEDTLS_SOURCE_DIR "${REPO_ROOT}/third_party/mbedtls-3.6.6")
 set(LIBSSH2_SOURCE_DIR "${REPO_ROOT}/third_party/libssh2")
 set(SHARED_NATIVE_IS_OHOS FALSE)
 
-if(NOT EXISTS "${MBEDTLS_SOURCE_DIR}/include/mbedtls/rsa.h")
+if(NOT EXISTS "${MBEDTLS_SOURCE_DIR}/include/mbedtls/mbedtls_config.h")
   message(FATAL_ERROR "Missing required submodule: third_party/mbedtls-3.6.6")
 endif()
 
