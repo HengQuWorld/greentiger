@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "GreenTiger Remote Desktop"
+    },
+    {
+      "name": "module_desc",
+      "value": "GreenTiger Remote Desktop"
+    },
+    {
+      "name": "ability_desc",
+      "value": "GreenTiger Remote Desktop"
+    }
+  ]
+}

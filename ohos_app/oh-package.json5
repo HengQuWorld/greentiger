@@ -1,0 +1,10 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "harmony_vnc_client",
+  "version": "1.7.3",
+  "description": "翠虎远程桌面",
+  "main": "",
+  "author": "横渠天地（北京）科技有限公司",
+  "license": "GPL-2.0",
+  "dependencies": {}
+}

@@ -1,0 +1,12 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "翠虎远程桌面客户端",
+  "main": "",
+  "author": "横渠天地",
+  "license": "GPL-2.0",
+  "dependencies": {
+    "libvncviewer.so": "file:./src/main/cpp/types/libvncviewer"
+  }
+}
