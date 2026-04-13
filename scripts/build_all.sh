@@ -55,6 +55,14 @@ require_command() {
 }
 
 bootstrap_sources() {
+  log "Checking Python dependencies for Mbed TLS"
+  if command -v python3 >/dev/null 2>&1; then
+    if ! python3 -c "import jsonschema, jinja2" >/dev/null 2>&1; then
+      log "Installing missing python dependencies (jsonschema, jinja2)..."
+      python3 -m pip install --user jsonschema jinja2 >/dev/null 2>&1 || \
+      python3 -m pip install --break-system-packages jsonschema jinja2 >/dev/null 2>&1 || true
+    fi
+  fi
   log "Initializing required submodules"
   (
     cd "${REPO_ROOT}"
