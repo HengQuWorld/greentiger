@@ -1,0 +1,11 @@
+[submodule "third_party/tigervnc"]
+	path = third_party/tigervnc
+	url = https://github.com/gaord/tigervnc.git
+	branch = 1.16-branch-port
+[submodule "third_party/libssh2"]
+	path = third_party/libssh2
+	url = https://github.com/gaord/libssh2.git
+	branch = ssh-mbedtls-cmake-compat
+[submodule "third_party/mbedtls-3.6.6"]
+	path = third_party/mbedtls-3.6.6
+	url = https://github.com/Mbed-TLS/mbedtls.git
