@@ -401,6 +401,19 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeRefresh(JNIEnv*, jclass, 
   return static_cast<jint>(vncclient_refresh(state->client));
 }
 
+extern "C" JNIEXPORT jint JNICALL
+Java_com_hengqutiandi_vncviewer_native_VncClient_nativeRequestUpdate(
+  JNIEnv*, jclass, jlong handle, jboolean incremental)
+{
+  auto* state = HandleToState(handle);
+  if (!state || !state->client)
+    return -1;
+
+  return static_cast<jint>(vncclient_request_update(
+    state->client,
+    incremental == JNI_TRUE ? 1 : 0));
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeGetServerName(JNIEnv* env, jclass, jlong handle)
 {

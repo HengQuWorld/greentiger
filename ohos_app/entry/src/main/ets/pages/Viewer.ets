@@ -41,6 +41,7 @@ interface VncClientData {
   disconnect(): void;
   process(): number;
   refresh(): number;
+  requestUpdate?(incremental?: boolean): number;
   consumeDamage(): VncRect | null;
   getFramebufferInfo(): VncFramebufferInfo;
   copyFrameRGBA(order: number): ArrayBuffer | null;
@@ -3336,7 +3337,7 @@ struct Viewer {
     this.debugPmFormat = 1; // 1 = swap R/B (BGRA) for correct colors on RGBA_8888
     this.vncClient.setDebugOptions(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
     this.lastServerRefreshRequestTs = Date.now();
-    this.vncClient.refresh();
+    this.vncClient.requestUpdate?.(true);
     for (let i = 0; i < 4; i++) {
       try {
         const prc = this.vncClient.process();
@@ -3382,7 +3383,7 @@ struct Viewer {
     }
     this.lastServerRefreshRequestTs = now;
     try {
-      this.vncClient.refresh();
+      this.vncClient.requestUpdate?.(true);
     } catch (e) {
     }
     this.requestTick();
@@ -3464,7 +3465,7 @@ struct Viewer {
         if (this.shouldRequestRefreshForDamage(dmg, now)) {
           this.lastServerRefreshRequestTs = now;
           try {
-            this.vncClient.refresh();
+            this.vncClient.requestUpdate?.(true);
             shouldContinueTickSoon = true;
           } catch (e) {
           }
@@ -3472,7 +3473,7 @@ struct Viewer {
       } else if (this.shouldRequestServerRefresh(now)) {
         this.lastServerRefreshRequestTs = now;
         try {
-          this.vncClient.refresh();
+          this.vncClient.requestUpdate?.(true);
           shouldContinueTickSoon = true;
         } catch (e) {
         }

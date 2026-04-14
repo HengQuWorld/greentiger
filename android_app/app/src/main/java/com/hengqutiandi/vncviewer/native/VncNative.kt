@@ -76,6 +76,8 @@ class VncClient : AutoCloseable {
 
     fun refresh(): Int = nativeRefresh(handle)
 
+    fun requestUpdate(incremental: Boolean = true): Int = nativeRequestUpdate(handle, incremental)
+
     fun getFramebufferInfo(): FramebufferInfo {
         val values = nativeGetFramebufferInfo(handle)
         return FramebufferInfo(
@@ -203,6 +205,9 @@ class VncClient : AutoCloseable {
 
         @JvmStatic
         external fun nativeRefresh(handle: Long): Int
+
+        @JvmStatic
+        external fun nativeRequestUpdate(handle: Long, incremental: Boolean): Int
 
         @JvmStatic
         external fun nativeGetFramebufferInfo(handle: Long): IntArray

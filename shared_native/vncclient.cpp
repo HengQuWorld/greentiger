@@ -237,6 +237,19 @@ public:
 
   SharedPixelBuffer* framebuffer() const { return framebuffer_; }
 
+  int requestFramebufferUpdate(bool incremental)
+  {
+    if (state() != rfb::CConnection::RFBSTATE_NORMAL)
+      return -1;
+
+    rfb::CMsgWriter* w = writer();
+    if (!w)
+      return -1;
+
+    w->writeFramebufferUpdateRequest({0, 0, server.width(), server.height()}, incremental);
+    return 0;
+  }
+
   int getSecurityLevel() const {
     if (!csecurity) return 0;
     int type = csecurity->getType();
@@ -739,6 +752,20 @@ int vncclient_refresh(vncclient_handle* client)
     return -1;
   try {
     client->impl.conn->refreshFramebuffer();
+    client->impl.sock->outStream().flush();
+    return 0;
+  } catch (std::exception& e) {
+    return fail(&client->impl, e.what());
+  }
+}
+
+int vncclient_request_update(vncclient_handle* client, int incremental)
+{
+  if (!validClient(client) || !client->impl.conn || !client->impl.sock)
+    return -1;
+  try {
+    if (client->impl.conn->requestFramebufferUpdate(incremental != 0) != 0)
+      return -1;
     client->impl.sock->outStream().flush();
     return 0;
   } catch (std::exception& e) {

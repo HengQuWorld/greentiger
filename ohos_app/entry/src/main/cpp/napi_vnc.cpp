@@ -613,6 +613,30 @@ static napi_value VncRefresh(napi_env env, napi_callback_info info)
   return out;
 }
 
+static napi_value VncRequestUpdate(napi_env env, napi_callback_info info)
+{
+  size_t argc = 1;
+  napi_value argv[1];
+  napi_value jsthis = nullptr;
+  napi_get_cb_info(env, info, &argc, argv, &jsthis, nullptr);
+  ClientState* st_ptr = nullptr;
+  napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
+  if (!st_ptr) return nullptr;
+  auto& st = *st_ptr;
+  bool incremental = true;
+  if (argc >= 1)
+    GetBoolArg(env, argv[0], &incremental);
+  int rc = -1;
+  try {
+    if (st.client) rc = vncclient_request_update(st.client, incremental ? 1 : 0);
+  } catch (...) {
+    rc = -999;
+  }
+  napi_value out;
+  napi_create_int32(env, rc, &out);
+  return out;
+}
+
 static napi_value VncConsumeDamage(napi_env env, napi_callback_info info)
 {
   napi_value jsthis = nullptr;
@@ -1235,6 +1259,7 @@ static napi_value Init(napi_env env, napi_value exports)
     { "disconnect", 0, VncDisconnect, 0, 0, 0, napi_default, 0 },
     { "process", 0, VncProcess, 0, 0, 0, napi_default, 0 },
     { "refresh", 0, VncRefresh, 0, 0, 0, napi_default, 0 },
+    { "requestUpdate", 0, VncRequestUpdate, 0, 0, 0, napi_default, 0 },
     { "consumeDamage", 0, VncConsumeDamage, 0, 0, 0, napi_default, 0 },
     { "getFramebufferInfo", 0, VncGetFramebufferInfo, 0, 0, 0, napi_default, 0 },
     { "copyFrameRGBA", 0, VncCopyFrameRGBA, 0, 0, 0, napi_default, 0 },

@@ -747,8 +747,6 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
                 connectedAtTs = now
                 lastFramebufferUpdateTs = now
                 serverName = client.getServerName().trim()
-                client.refresh()
-                lastServerRefreshRequestTs = now
                 updateFrame(forceFull = true)
             }
             connected
@@ -783,7 +781,7 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
                 if (damage != null) {
                     lastFramebufferUpdateTs = now
                 } else if (shouldRequestServerRefresh(now)) {
-                    client.refresh()
+                    client.requestUpdate(incremental = true)
                     lastServerRefreshRequestTs = now
                 }
                 val needsFullSync = bitmap == null || (damage == null && now - lastFullFrameSyncTs >= fallbackFullFrameSyncMs)

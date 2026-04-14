@@ -70,6 +70,7 @@ const char* vncclient_get_name(vncclient_handle* client);
 
 int vncclient_process(vncclient_handle* client);
 int vncclient_refresh(vncclient_handle* client);
+int vncclient_request_update(vncclient_handle* client, int incremental);
 
 int vncclient_get_framebuffer(vncclient_handle* client,
                               int* width, int* height,
