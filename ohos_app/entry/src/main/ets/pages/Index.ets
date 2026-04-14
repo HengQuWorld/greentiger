@@ -2,6 +2,7 @@ import image from '@ohos.multimedia.image';
 import dataPreferences from '@ohos.data.preferences';
 import fs from '@ohos.file.fs';
 import common from '@ohos.app.ability.common';
+import { pasteboard } from '@kit.BasicServicesKit';
 import util from '@ohos.util';
 import { KeyCode } from '@ohos.multimodalInput.keyCode';
 import { BUILD_VERSION } from '../utils/BuildInfo';
@@ -54,7 +55,7 @@ interface StartWant {
 interface BrowserWant {
   action: string;
   uri: string;
-  entities: string[];
+  entities?: string[];
   parameters?: Record<string, boolean>;
 }
 
@@ -116,6 +117,7 @@ const PRIVACY_POLICY_RAWFILE = 'privacy-policy.md';
 const USER_AGREEMENT_RAWFILE = 'user-agreement.md';
 const PRIVACY_POLICY_URL = 'https://www.hengqu.world/agreements/privacy-policy';
 const USER_AGREEMENT_URL = 'https://www.hengqu.world/agreements/user-agreement';
+const PROJECT_CONTACT_EMAIL = 'contact@hengqu.world';
 const PROJECT_HOMEPAGE_URL = 'https://www.hengqu.world';
 const PROJECT_SOURCE_URL = 'https://github.com/hengquworld/greentiger';
 interface VncRect {
@@ -272,15 +274,29 @@ struct Index {
     const want: BrowserWant = {
       action: 'ohos.want.action.viewData',
       uri: url,
-      entities: ['entity.system.browsable'],
       parameters: {
         'ohos.ability.params.showDefaultPicker': true
       }
     };
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      want.entities = ['entity.system.browsable'];
+    }
     context.startAbility(want)
       .catch((e: ErrorLike) => {
         console.error('Failed to open external url', e);
         this.toast('无法打开链接');
+      });
+  }
+
+  private copyText(text: string, successMessage: string): void {
+    const pasteData: pasteboard.PasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+    pasteboard.getSystemPasteboard().setData(pasteData)
+      .then(() => {
+        this.toast(successMessage);
+      })
+      .catch((e: ErrorLike) => {
+        console.error('Failed to copy text', e);
+        this.toast('复制失败');
       });
   }
 
@@ -830,6 +846,41 @@ struct Index {
     }
     .alignItems(VerticalAlign.Top)
     .onClick(() => this.openAgreementDialog(mode));
+  }
+
+  @Builder
+  private buildAboutActionRow(label: string, value: string, actionLabel: string, uri: string, copyMessage: string): void {
+    Row() {
+      Text(label)
+        .fontSize(13)
+        .fontColor(this.cTextSecondary)
+        .width(80);
+      Column() {
+        Text(value)
+          .fontSize(15)
+          .lineHeight(22)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.cPrimary)
+          .onClick(() => this.openExternalUrl(uri));
+        Row() {
+          Text(actionLabel)
+            .fontSize(12)
+            .lineHeight(18)
+            .fontColor(this.cPrimary)
+            .onClick(() => this.openExternalUrl(uri));
+          Text('复制')
+            .fontSize(12)
+            .lineHeight(18)
+            .fontColor(this.cTextSecondary)
+            .margin({ left: 16 })
+            .onClick(() => this.copyText(value, copyMessage));
+        }
+        .margin({ top: 4 });
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start);
+    }
+    .alignItems(VerticalAlign.Top);
   }
 
   @Builder
@@ -3252,20 +3303,23 @@ struct Index {
                   .alignItems(VerticalAlign.Top)
                   .margin({ bottom: 14 });
 
-                  Row() {
-                    Text('官方网站')
-                      .fontSize(13)
-                      .fontColor(this.cTextSecondary)
-                      .width(80);
-                    Text('www.hengqu.world')
-                      .fontSize(15)
-                      .lineHeight(22)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor(this.cPrimary)
-                      .layoutWeight(1);
-                  }
-                  .alignItems(VerticalAlign.Center)
-                  .onClick(() => this.openExternalUrl(PROJECT_HOMEPAGE_URL));
+                  this.buildAboutActionRow(
+                    '商务合作',
+                    PROJECT_CONTACT_EMAIL,
+                    '写邮件',
+                    `mailto:${PROJECT_CONTACT_EMAIL}`,
+                    '邮箱已复制'
+                  );
+
+                  Blank().height(14);
+
+                  this.buildAboutActionRow(
+                    '官方网站',
+                    PROJECT_HOMEPAGE_URL,
+                    '访问',
+                    PROJECT_HOMEPAGE_URL,
+                    '网址已复制'
+                  );
                 }
                 .width('100%')
                 .padding(18)
@@ -3335,20 +3389,15 @@ struct Index {
                   .alignItems(VerticalAlign.Top)
                   .margin({ bottom: 14 });
 
-                  Row() {
-                    Text('源码获取')
-                      .fontSize(13)
-                      .fontColor(this.cTextSecondary)
-                      .width(80);
-                    Text(PROJECT_SOURCE_URL)
-                      .fontSize(14)
-                      .lineHeight(21)
-                      .fontColor(this.cPrimary)
-                      .layoutWeight(1);
-                  }
-                  .alignItems(VerticalAlign.Top)
-                  .margin({ bottom: 14 })
-                  .onClick(() => this.openExternalUrl(PROJECT_SOURCE_URL));
+                  this.buildAboutActionRow(
+                    '源码获取',
+                    PROJECT_SOURCE_URL,
+                    '访问',
+                    PROJECT_SOURCE_URL,
+                    '网址已复制'
+                  );
+
+                  Blank().height(14);
 
                   Row() {
                     Text('第三方组件')

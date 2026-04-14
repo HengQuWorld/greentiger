@@ -164,7 +164,9 @@ private enum class AppScreen {
     Viewer
 }
 
+private const val PROJECT_CONTACT_EMAIL = "contact@hengqu.world"
 private const val PROJECT_HOMEPAGE_URL = "https://www.hengqu.world"
+private const val PROJECT_SOURCE_URL = "https://github.com/hengquworld/greentiger"
 private const val PRIVACY_POLICY_ASSET_NAME = "privacy-policy.md"
 private const val USER_AGREEMENT_ASSET_NAME = "user-agreement.md"
 
@@ -3780,6 +3782,12 @@ private fun AboutDialog(
     onShowPrivacyPolicy: () -> Unit,
     onShowUserAgreement: () -> Unit
 ) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val copyText: (String, String) -> Unit = { value, message ->
+        clipboardManager.setText(AnnotatedString(value))
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("翠虎远程桌面") },
@@ -3793,9 +3801,21 @@ private fun AboutDialog(
                 Text("Version ${BuildConfig.BUILD_VERSION}")
                 HorizontalDivider()
                 Text("公司信息", fontWeight = FontWeight.SemiBold)
-                Text("开发团队：横渠天地（北京）科技有限公司")
-                Text("商务合作：contact@hengqu.world")
-                Text("官方网站：$PROJECT_HOMEPAGE_URL")
+                AboutInfoRow(label = "开发团队", value = "横渠天地（北京）科技有限公司")
+                AboutActionRow(
+                    label = "商务合作",
+                    value = PROJECT_CONTACT_EMAIL,
+                    actionLabel = "写邮件",
+                    onOpen = { openEmailClient(context, PROJECT_CONTACT_EMAIL) },
+                    onCopy = { copyText(PROJECT_CONTACT_EMAIL, "邮箱已复制") }
+                )
+                AboutActionRow(
+                    label = "官方网站",
+                    value = PROJECT_HOMEPAGE_URL,
+                    actionLabel = "访问",
+                    onOpen = { openExternalLink(context, PROJECT_HOMEPAGE_URL) },
+                    onCopy = { copyText(PROJECT_HOMEPAGE_URL, "网址已复制") }
+                )
                 HorizontalDivider()
                 Text("协议与隐私", fontWeight = FontWeight.SemiBold)
                 FlowRow(
@@ -3811,8 +3831,14 @@ private fun AboutDialog(
                 }
                 HorizontalDivider()
                 Text("开源许可", fontWeight = FontWeight.SemiBold)
-                Text("本应用采用 GPL-2.0 许可发布，并包含多个第三方开源组件。")
-                Text("源码获取：https://github.com/hengquworld/greentiger")
+                AboutInfoRow(label = "开源许可", value = "本应用采用 GPL-2.0 许可发布，并包含多个第三方开源组件。")
+                AboutActionRow(
+                    label = "源码获取",
+                    value = PROJECT_SOURCE_URL,
+                    actionLabel = "访问",
+                    onOpen = { openExternalLink(context, PROJECT_SOURCE_URL) },
+                    onCopy = { copyText(PROJECT_SOURCE_URL, "网址已复制") }
+                )
                 Text("第三方组件：\n• TigerVNC (GPL-2.0)\n• libssh2 (BSD-3-Clause)\n• mbedTLS (Apache-2.0 / GPL-2.0)\n• GnuTLS (LGPL-2.1+)\n• Nettle (GPL-2.0+ / LGPL-3.0+)")
                 HorizontalDivider()
                 Text("免责声明", fontWeight = FontWeight.SemiBold)
@@ -3825,6 +3851,102 @@ private fun AboutDialog(
             }
         }
     )
+}
+
+@Composable
+private fun AboutInfoRow(
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.width(72.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun AboutActionRow(
+    label: String,
+    value: String,
+    actionLabel: String,
+    onOpen: () -> Unit,
+    onCopy: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.width(72.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            TextButton(
+                onClick = onOpen,
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(value)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    onClick = onOpen,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(actionLabel)
+                }
+                TextButton(
+                    onClick = onCopy,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("复制")
+                }
+            }
+        }
+    }
+}
+
+private fun openExternalLink(context: Context, url: String) {
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+    }.onFailure {
+        Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun openEmailClient(context: Context, email: String) {
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$email")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+    }.onFailure {
+        Toast.makeText(context, "无法打开邮箱应用", Toast.LENGTH_SHORT).show()
+    }
 }
 
 @Composable
