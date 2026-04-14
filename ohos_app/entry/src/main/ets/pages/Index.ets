@@ -995,16 +995,8 @@ struct Index {
   }
 
   private hasConfiguredEditSshDetails(): boolean {
-    return !!(this.editSshHost ?? '').trim() ||
-      !!(this.editSshUser ?? '').trim() ||
-      !!(this.editSshPassword ?? '') ||
-      !!(this.editSshPrivateKeyPath ?? '').trim() ||
-      !!(this.editSshPublicKeyPath ?? '').trim() ||
-      !!(this.editSshPrivateKeyPassphrase ?? '') ||
-      !!(this.editSshKnownHostsPath ?? '').trim() ||
-      this.editSshStrictHostKeyCheck ||
-      !!(this.editSshRemoteHost ?? '').trim() ||
-      (this.editSshPortText ?? '').trim() !== `${DEFAULT_SSH_PORT}`;
+    // 只要没有配置过 SSH 服务器地址，就认为是未配置状态，可以直接补全默认值模板
+    return !!(this.editSshHost ?? '').trim();
   }
 
   private updateEditUser(value: string): void {
@@ -2160,21 +2152,25 @@ struct Index {
           }
 
           Row() {
-            Text(this.editSshReuseDesktopUser ? '重用桌面用户名' : '单独填写 SSH 用户名')
+            Text(this.isReusingEditDesktopCredentials() ? '重用桌面账号密码' : '单独填写 SSH 账号信息')
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .layoutWeight(1);
             BrandSwitch({
-              isOn: this.editSshReuseDesktopUser,
+              isOn: this.isReusingEditDesktopCredentials(),
               isEnabled: true,
               onChange: (next: boolean) => this.setEditSshReuseDesktopCredentials(next)
             });
           }
           .padding({ bottom: 8 });
 
-          Text(this.editSshReuseDesktopUser
-            ? ((this.editUser ?? '').trim() ? `使用基本页中的桌面用户名：${(this.editUser ?? '').trim()}` : '请先在基本页填写桌面用户名。')
-            : 'SSH 用户名可以与桌面账号不同。')
+          Text(this.isReusingEditDesktopCredentials()
+            ? (this.editSshAuthType === SSH_AUTH_PUBLIC_KEY
+              ? ((this.editUser ?? '').trim() ? `当前复用基本页中的桌面用户名：${(this.editUser ?? '').trim()}` : '请先在基本页填写桌面用户名。')
+              : ((this.editUser ?? '').trim()
+                ? `当前复用基本页中的桌面账号；用户名：${(this.editUser ?? '').trim()}`
+                : '请先在基本页填写桌面用户名和密码。'))
+            : 'SSH 账号信息可以与桌面账号不同。')
             .fontSize(11)
             .lineHeight(16)
             .fontColor(this.cTextTertiary)
@@ -2232,20 +2228,8 @@ struct Index {
                 .onChange((v: string) => this.editSshPassword = v)
                 .padding({ bottom: 8 });
             }
-            Row() {
-              Text(this.editSshReuseDesktopPassword ? '重用桌面密码' : '单独填写 SSH 密码')
-                .fontSize(12)
-                .fontColor(this.cTextSecondary)
-                .layoutWeight(1);
-              BrandSwitch({
-                isOn: this.editSshReuseDesktopPassword,
-                isEnabled: true,
-                onChange: (next: boolean) => this.setEditSshReuseDesktopCredentials(next)
-              });
-            }
-            .padding({ bottom: 8 });
             Text(this.editSshReuseDesktopPassword
-              ? ((this.editPassword ?? '') ? '使用基本页中的桌面密码。' : '请先在基本页填写桌面密码。')
+              ? ((this.editPassword ?? '') ? 'SSH 密码跟随基本页中的桌面密码。' : '请先在基本页填写桌面密码。')
               : '如果 SSH 使用独立密码，可单独填写。')
               .fontSize(11)
               .lineHeight(16)

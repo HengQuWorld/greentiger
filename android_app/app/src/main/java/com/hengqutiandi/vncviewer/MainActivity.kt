@@ -4306,17 +4306,10 @@ private fun normalizeEditSshConfig(config: SshConnectionConfig?, address: String
 private fun isReusingDesktopCredentials(ssh: SshConnectionConfig): Boolean =
     ssh.reuseDesktopUser || ssh.reuseDesktopPassword
 
-private fun hasConfiguredSshDetails(ssh: SshConnectionConfig): Boolean =
-    ssh.sshHost.isNotBlank() ||
-        ssh.sshUser.isNotBlank() ||
-        ssh.sshPassword.isNotBlank() ||
-        ssh.privateKeyPath.isNotBlank() ||
-        ssh.publicKeyPath.isNotBlank() ||
-        ssh.privateKeyPassphrase.isNotBlank() ||
-        ssh.knownHostsPath.isNotBlank() ||
-        ssh.strictHostKeyCheck ||
-        ssh.remoteHost.isNotBlank() ||
-        ssh.sshPort != DEFAULT_SSH_PORT
+private fun shouldAutoFillSshDefaults(ssh: SshConnectionConfig): Boolean {
+    // 只要没有配置过 SSH 服务器地址，就认为是未配置状态，可以直接补全默认值模板
+    return ssh.sshHost.isBlank()
+}
 
 private fun EditConnectionState.withDesktopUser(value: String): EditConnectionState =
     copy(
@@ -4361,7 +4354,7 @@ private fun EditConnectionState.createAutoFilledSshConfig(): SshConnectionConfig
 
 private fun EditConnectionState.withSshEnabled(enabled: Boolean): EditConnectionState =
     if (enabled) {
-        val nextSsh = if (!ssh.enabled && !hasConfiguredSshDetails(ssh)) {
+        val nextSsh = if (!ssh.enabled && shouldAutoFillSshDefaults(ssh)) {
             createAutoFilledSshConfig()
         } else {
             normalizeEditSshConfig(ssh.copy(enabled = true), address)
