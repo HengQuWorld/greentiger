@@ -2000,6 +2000,35 @@ struct Index {
   }
 
   @Builder
+  private buildInheritedFieldCard(label: string, value: string, supportingText: string, missing: boolean = false): void {
+    Column({ space: 4 }) {
+      Text(label)
+        .fontSize(12)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.cPrimary)
+        .width('100%');
+      Text(value)
+        .fontSize(13)
+        .lineHeight(18)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(missing ? this.cTextTertiary : this.cTextPrimary)
+        .width('100%');
+      Text(supportingText)
+        .fontSize(11)
+        .lineHeight(16)
+        .fontColor(this.cTextSecondary)
+        .width('100%');
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding(12)
+    .backgroundColor(this.cPrimarySoft)
+    .border({ width: 1, color: this.cPrimaryOutline })
+    .borderRadius(14)
+    .margin({ bottom: 8 });
+  }
+
+  @Builder
   private buildEditAdvancedSection(): void {
     Column() {
       Column() {
@@ -2115,10 +2144,20 @@ struct Index {
             .onChange((v: string) => this.editSshHost = v)
             .padding({ bottom: 8 });
 
-          TextInput({ text: this.editSshUser, placeholder: 'SSH 用户名' })
-            .enabled(!this.editSshReuseDesktopUser)
-            .onChange((v: string) => this.editSshUser = v)
-            .padding({ bottom: 8 });
+          if (this.editSshReuseDesktopUser) {
+            this.buildInheritedFieldCard(
+              'SSH 用户名',
+              (this.editUser ?? '').trim() ? `跟随基本页账号：${(this.editUser ?? '').trim()}` : '等待复用基本页中的桌面用户名',
+              (this.editUser ?? '').trim()
+                ? '当前字段由基本页“账号”接管；关闭上方复用开关后可单独填写。'
+                : '当前字段由基本页“账号”接管；先在基本页填写后，这里会自动同步。',
+              (this.editUser ?? '').trim().length === 0
+            );
+          } else {
+            TextInput({ text: this.editSshUser, placeholder: 'SSH 用户名' })
+              .onChange((v: string) => this.editSshUser = v)
+              .padding({ bottom: 8 });
+          }
 
           Row() {
             Text(this.editSshReuseDesktopUser ? '重用桌面用户名' : '单独填写 SSH 用户名')
@@ -2178,11 +2217,21 @@ struct Index {
               .onChange((v: string) => this.editSshPrivateKeyPassphrase = v)
               .padding({ bottom: 8 });
           } else {
-            TextInput({ text: this.editSshPassword, placeholder: 'SSH 密码' })
-              .type(InputType.Password)
-              .enabled(!this.editSshReuseDesktopPassword)
-              .onChange((v: string) => this.editSshPassword = v)
-              .padding({ bottom: 8 });
+            if (this.editSshReuseDesktopPassword) {
+              this.buildInheritedFieldCard(
+                'SSH 密码',
+                (this.editPassword ?? '') ? '已复用基本页中的桌面密码' : '等待复用基本页中的桌面密码',
+                (this.editPassword ?? '')
+                  ? '当前字段由基本页“密码”接管；关闭上方复用开关后可单独填写。'
+                  : '当前字段由基本页“密码”接管；先在基本页填写后，这里会自动同步。',
+                (this.editPassword ?? '').length === 0
+              );
+            } else {
+              TextInput({ text: this.editSshPassword, placeholder: 'SSH 密码' })
+                .type(InputType.Password)
+                .onChange((v: string) => this.editSshPassword = v)
+                .padding({ bottom: 8 });
+            }
             Row() {
               Text(this.editSshReuseDesktopPassword ? '重用桌面密码' : '单独填写 SSH 密码')
                 .fontSize(12)

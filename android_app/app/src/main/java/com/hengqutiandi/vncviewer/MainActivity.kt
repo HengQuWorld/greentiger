@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -67,6 +68,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +107,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
@@ -478,6 +481,44 @@ private fun PasswordField(
             }
         }
     )
+}
+
+@Composable
+private fun LockedInheritedField(
+    label: String,
+    value: String,
+    supportingText: String
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = supportingText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
+    }
 }
 
 private data class RemoteFramePlacement(
@@ -4653,15 +4694,6 @@ private fun AdvancedEditConnectionContent(
                 label = { Text("SSH 服务器") },
                 placeholder = { Text("例如 bastion.example.com") }
             )
-            OutlinedTextField(
-                value = state.ssh.sshUser,
-                onValueChange = {
-                    onStateChange(state.copy(ssh = state.ssh.copy(sshUser = it)))
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("SSH 用户名") },
-                enabled = !reuseDesktopCredentials
-            )
             SettingSwitchRow(
                 title = "重用桌面账号密码",
                 supportingText = when {
@@ -4676,6 +4708,26 @@ private fun AdvancedEditConnectionContent(
                 checked = reuseDesktopCredentials,
                 onCheckedChange = { onStateChange(state.withSshDesktopReuse(it)) }
             )
+            if (reuseDesktopCredentials) {
+                LockedInheritedField(
+                    label = "SSH 用户名",
+                    value = state.user.trim().ifBlank { "等待复用基本页中的桌面用户名" },
+                    supportingText = if (state.user.isBlank()) {
+                        "当前字段由基本页“账号”接管；先在基本页填写后，这里会自动同步。"
+                    } else {
+                        "当前字段由基本页“账号”接管；关闭上方复用开关后可单独填写。"
+                    }
+                )
+            } else {
+                OutlinedTextField(
+                    value = state.ssh.sshUser,
+                    onValueChange = {
+                        onStateChange(state.copy(ssh = state.ssh.copy(sshUser = it)))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("SSH 用户名") }
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = "登录方式",
@@ -4718,16 +4770,27 @@ private fun AdvancedEditConnectionContent(
                     label = "私钥口令"
                 )
             } else {
-                PasswordField(
-                    value = state.ssh.sshPassword,
-                    onValueChange = {
-                        onStateChange(state.copy(ssh = state.ssh.copy(sshPassword = it)))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "SSH 密码",
-                    enabled = !reuseDesktopCredentials,
-                    imeAction = ImeAction.Done
-                )
+                if (reuseDesktopCredentials) {
+                    LockedInheritedField(
+                        label = "SSH 密码",
+                        value = if (state.password.isBlank()) "等待复用基本页中的桌面密码" else "已复用基本页中的桌面密码",
+                        supportingText = if (state.password.isBlank()) {
+                            "当前字段由基本页“密码”接管；先在基本页填写后，这里会自动同步。"
+                        } else {
+                            "当前字段由基本页“密码”接管；关闭上方复用开关后可单独填写。"
+                        }
+                    )
+                } else {
+                    PasswordField(
+                        value = state.ssh.sshPassword,
+                        onValueChange = {
+                            onStateChange(state.copy(ssh = state.ssh.copy(sshPassword = it)))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = "SSH 密码",
+                        imeAction = ImeAction.Done
+                    )
+                }
             }
             OutlinedTextField(
                 value = state.ssh.sshPort.toString(),
@@ -4859,8 +4922,28 @@ private fun SettingSwitchRow(
     onCheckedChange: (Boolean) -> Unit,
     supportingText: String? = null
 ) {
+    val shape = RoundedCornerShape(18.dp)
+    val borderColor = if (checked) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+    }
+    val containerColor = if (checked) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+    }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(width = 1.dp, color = borderColor, shape = shape)
+            .background(color = containerColor, shape = shape)
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -4881,10 +4964,26 @@ private fun SettingSwitchRow(
                 )
             }
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.surface,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                    uncheckedThumbColor = MaterialTheme.colorScheme.surface,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                    uncheckedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+                ),
+                modifier = Modifier.semantics {
+                    contentDescription = "$title，${if (checked) "已开启" else "未开启"}"
+                }
+            )
+        }
     }
 }
 
