@@ -1,12 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 144 144">
   <defs>
-    <!-- Background: Deep Teal (matches #2c4f54 cPrimary) -->
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#406d73" />
-      <stop offset="100%" stop-color="#1d3538" />
-    </linearGradient>
-    
-    <!-- Accent: Green (keeps the "Green Tiger" theme alive but professional) -->
+    <!-- Accent: Green -->
     <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#34d399" />
       <stop offset="100%" stop-color="#10b981" />
@@ -17,8 +11,6 @@
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
-
-  <rect x="0" y="0" width="144" height="144" rx="32" ry="32" fill="url(#bg)" />
 
   <g transform="translate(24, 28)">
     <!-- Monitor Screen -->

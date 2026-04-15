@@ -23,7 +23,8 @@ plugins {
 val batikRasterizer by configurations.creating
 val generatedLauncherResDir = layout.buildDirectory.dir("generated/res/harmonyLauncher")
 val generatedAgreementAssetsDir = layout.buildDirectory.dir("generated/assets/agreements")
-val harmonyLauncherSvg = rootDir.resolve("../ohos_app/entry/src/main/resources/base/media/app_icon.svg")
+val harmonyLauncherBgSvg = rootDir.resolve("../ohos_app/AppScope/resources/base/media/app_icon_background.svg")
+val harmonyLauncherFgSvg = rootDir.resolve("../ohos_app/AppScope/resources/base/media/app_icon_foreground.svg")
 val agreementDocsDir = rootDir.resolve("../docs")
 val syncAgreementsScript = rootDir.resolve("../scripts/sync_agreements.py")
 
@@ -139,7 +140,8 @@ dependencies {
 }
 
 val generateLauncherIconsFromHarmonySvg = tasks.register("generateLauncherIconsFromHarmonySvg") {
-    inputs.file(harmonyLauncherSvg)
+    inputs.file(harmonyLauncherBgSvg)
+    inputs.file(harmonyLauncherFgSvg)
     outputs.dir(generatedLauncherResDir)
     doLast {
         val outputRoot = generatedLauncherResDir.get().asFile
@@ -148,10 +150,18 @@ val generateLauncherIconsFromHarmonySvg = tasks.register("generateLauncherIconsF
         delete(sanitizedSvg)
         outputRoot.mkdirs()
         sanitizedSvg.parentFile.mkdirs()
-        sanitizedSvg.writeText(
-            harmonyLauncherSvg.readText()
-                .replace("fill=\"rgba(255,255,255,0.04)\"", "fill=\"#FFFFFF\" fill-opacity=\"0.04\"")
-        )
+        
+        val bgContent = harmonyLauncherBgSvg.readText()
+        val fgContent = harmonyLauncherFgSvg.readText()
+        
+        val bgDefs = bgContent.substringAfter("<defs>").substringBefore("</defs>")
+        var mergedSvg = fgContent.replace("<defs>", "<defs>\n$bgDefs")
+        mergedSvg = mergedSvg.replace("</defs>", "</defs>\n  <rect x=\"0\" y=\"0\" width=\"144\" height=\"144\" rx=\"32\" ry=\"32\" fill=\"url(#bg)\" />")
+        mergedSvg = mergedSvg.replace("fill=\"rgba(255,255,255,0.04)\"", "fill=\"#FFFFFF\" fill-opacity=\"0.04\"")
+        mergedSvg = mergedSvg.replace("width=\"1024\" height=\"1024\"", "width=\"144\" height=\"144\"")
+        
+        sanitizedSvg.writeText(mergedSvg)
+        
         val densities = listOf(
             "mipmap-mdpi" to 48,
             "mipmap-hdpi" to 72,
@@ -166,6 +176,7 @@ val generateLauncherIconsFromHarmonySvg = tasks.register("generateLauncherIconsF
                 javaexec {
                     classpath = batikRasterizer
                     mainClass.set("org.apache.batik.apps.rasterizer.Main")
+                    jvmArgs("-Djava.awt.headless=true")
                     args(
                         "-m", "image/png",
                         "-w", sizePx.toString(),
