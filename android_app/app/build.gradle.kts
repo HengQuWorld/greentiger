@@ -11,9 +11,35 @@ fun getGitVersion(): String {
         }
         return stdout.toString().trim()
     } catch (e: Exception) {
-        return "unknown"
+        return "1.0.0"
     }
 }
+
+fun getGitVersionCode(versionName: String): Int {
+    try {
+        val cleanVersionName = versionName.replace("^v".toRegex(), "").split("-")[0]
+        val parts = cleanVersionName.split(".")
+        val major = parts.getOrNull(0)?.toIntOrNull() ?: 1
+        val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+        
+        var commitCount = 0
+        if (versionName.contains("-")) {
+            val splits = versionName.split("-")
+            if (splits.size > 1) {
+                commitCount = splits[1].toIntOrNull() ?: 0
+            }
+        }
+        
+        return major * 1000000 + minor * 100000 + patch * 10000 + commitCount
+    } catch (e: Exception) {
+        return 1000000
+    }
+}
+
+val gitVersionName = getGitVersion()
+val gitVersionCode = getGitVersionCode(gitVersionName)
+println("[Build] Dynamic App Version: $gitVersionName ($gitVersionCode)")
 
 plugins {
     id("com.android.application")
@@ -36,9 +62,9 @@ android {
         applicationId = "com.hengqutiandi.vncviewer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1740000
-        versionName = "1.7.4"
-        buildConfigField("String", "BUILD_VERSION", "\"${getGitVersion()}\"")
+        versionCode = gitVersionCode
+        versionName = gitVersionName
+        buildConfigField("String", "BUILD_VERSION", "\"$gitVersionName\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

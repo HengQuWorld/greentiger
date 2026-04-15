@@ -1,6 +1,41 @@
 import { appTasks } from '@ohos/hvigor-ohos-plugin';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as childProcess from 'child_process';
+
+function getGitVersionName(): string {
+  try {
+    return childProcess.execSync('git describe --tags --always --dirty', { encoding: 'utf-8' }).trim();
+  } catch (e) {
+    return '1.0.0';
+  }
+}
+
+function getGitVersionCode(versionName: string): number {
+  try {
+    const cleanVersionName = versionName.replace(/^v/, '').split('-')[0];
+    const parts = cleanVersionName.split('.');
+    const major = parseInt(parts[0]) || 1;
+    const minor = parseInt(parts[1]) || 0;
+    const patch = parseInt(parts[2]) || 0;
+    
+    let commitCount = 0;
+    if (versionName.includes('-')) {
+      const splits = versionName.split('-');
+      if (splits.length > 1) {
+        commitCount = parseInt(splits[1]) || 0;
+      }
+    }
+    
+    return major * 1000000 + minor * 100000 + patch * 10000 + commitCount;
+  } catch (e) {
+    return 1000000;
+  }
+}
+
+const gitVersionName = getGitVersionName();
+const gitVersionCode = getGitVersionCode(gitVersionName);
+console.log(`[Build] Dynamic App Version: ${gitVersionName} (${gitVersionCode})`);
 
 function getSigningConfig() {
   const propertiesPath = path.resolve(__dirname, 'local.properties');
@@ -47,6 +82,10 @@ export default {
   config: {
     ohos: {
       overrides: {
+        appOpt: {
+          versionCode: gitVersionCode,
+          versionName: gitVersionName
+        },
         signingConfig: getSigningConfig()
       }
     }
