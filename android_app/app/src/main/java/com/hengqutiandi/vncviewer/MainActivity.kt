@@ -772,7 +772,9 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
         return try {
             val normalizedSsh = normalizeSshConfigForAddress(ssh, "${hostPort.host}:${hostPort.port}")
             if (normalizedSsh.enabled) {
-                val sshRc = client.setSshTunnel(normalizedSsh.toNativeConfig())
+                val sshRc = withContext(Dispatchers.IO) {
+                    client.setSshTunnel(normalizedSsh.toNativeConfig())
+                }
                 if (sshRc != 0) {
                     connected = false
                     lastError = client.getLastError().ifBlank { "SSH 隧道配置失败" }
@@ -781,7 +783,9 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
             } else {
                 client.clearSshTunnel()
             }
-            val rc = client.connect(hostPort.host, hostPort.port, user, password)
+            val rc = withContext(Dispatchers.IO) {
+                client.connect(hostPort.host, hostPort.port, user, password)
+            }
             connected = rc == 0
             securityLevel = if (connected) client.getSecurityLevel() else 0
             lastError = client.getLastError()
@@ -1464,7 +1468,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
         )
     }
 
-    androidx.compose.runtime.LaunchedEffect(viewerLaunchArgs, currentScreen, autoConnectAttempted, launchAgreementsAccepted) {
+    androidx.compose.runtime.LaunchedEffect(viewerLaunchArgs, currentScreen, launchAgreementsAccepted) {
         if (!launchAgreementsAccepted || !isViewerWindow || currentScreen != AppScreen.Viewer || autoConnectAttempted) {
             return@LaunchedEffect
         }
@@ -1477,9 +1481,12 @@ private fun GreenTigerApp(launchIntent: Intent?) {
             return@LaunchedEffect
         }
         if (!viewerSession.connected && !viewerSession.connecting) {
-            if (!viewerSession.connect(parsed, args.user.trim(), args.password, args.ssh)) {
-                showToast(viewerSession.lastError.ifBlank { "连接失败" })
-                activity?.finish()
+            val success = viewerSession.connect(parsed, args.user.trim(), args.password, args.ssh)
+            if (!success && isActive) {
+                withContext(Dispatchers.Main) {
+                    showToast(viewerSession.lastError.ifBlank { "连接失败" })
+                    activity?.finish()
+                }
             }
         }
     }

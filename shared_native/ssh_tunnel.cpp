@@ -78,16 +78,55 @@ int ConnectTcp(const std::string& host, int port, std::string* error)
     fd = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
     if (fd < 0)
       continue;
-    if (connect(fd, it->ai_addr, it->ai_addrlen) == 0)
-      break;
-    CloseFd(fd);
-    fd = -1;
+      
+    // Set non-blocking
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    int connect_rc = connect(fd, it->ai_addr, it->ai_addrlen);
+    if (connect_rc < 0) {
+      if (errno == EINPROGRESS) {
+        fd_set fdset;
+        FD_ZERO(&fdset);
+        FD_SET(fd, &fdset);
+        struct timeval tv;
+        tv.tv_sec = 15;
+        tv.tv_usec = 0;
+
+        connect_rc = select(fd + 1, nullptr, &fdset, nullptr, &tv);
+        if (connect_rc > 0) {
+          int so_error = 0;
+          socklen_t len = sizeof(so_error);
+          getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &len);
+          if (so_error == 0) {
+            // Success
+          } else {
+            CloseFd(fd);
+            fd = -1;
+            continue;
+          }
+        } else {
+          // Timeout or error
+          CloseFd(fd);
+          fd = -1;
+          continue;
+        }
+      } else {
+        CloseFd(fd);
+        fd = -1;
+        continue;
+      }
+    }
+
+    // Restore blocking mode
+    fcntl(fd, F_SETFL, flags);
+    break;
   }
 
   freeaddrinfo(result);
 
   if (fd < 0 && error)
-    *error = "connect SSH host failed: " + std::string(std::strerror(errno));
+    *error = "Connection failed or timed out after 15s";
   return fd;
 }
 
