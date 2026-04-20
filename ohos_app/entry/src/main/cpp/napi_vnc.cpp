@@ -414,6 +414,39 @@ static napi_value CopyFrameRectRGBA(napi_env env, ClientState& st, int32_t byteO
   return arraybuffer;
 }
 
+struct ConnectData {
+  napi_async_work work = nullptr;
+  napi_deferred deferred = nullptr;
+  ClientState* st = nullptr;
+  std::string addr;
+  int32_t basePort = 5900;
+  std::string user;
+  std::string pass;
+  int rc = -1;
+};
+
+static void VncConnectExecute(napi_env env, void* data) {
+  auto* req = static_cast<ConnectData*>(data);
+  if (!req->st || !req->st->client) return;
+  req->rc = vncclient_connect(req->st->client, req->addr.c_str(), req->basePort);
+  if (req->rc == 0 && req->st->client) {
+    vncclient_announce_clipboard(req->st->client, 1);
+    std::lock_guard<std::mutex> lock(req->st->mu);
+    if (req->st->debugEnabled && req->st->debugLevel >= 1) {
+      AppendDebugLogLocked(*(req->st), "clipboard initialized announce=1");
+    }
+  }
+}
+
+static void VncConnectComplete(napi_env env, napi_status status, void* data) {
+  auto* req = static_cast<ConnectData*>(data);
+  napi_value result;
+  napi_create_int32(env, req->rc, &result);
+  napi_resolve_deferred(env, req->deferred, result);
+  napi_delete_async_work(env, req->work);
+  delete req;
+}
+
 static napi_value VncConnect(napi_env env, napi_callback_info info)
 {
   size_t argc = 4;
@@ -461,8 +494,8 @@ static napi_value VncConnect(napi_env env, napi_callback_info info)
 
   {
     std::lock_guard<std::mutex> lock(st.mu);
-    st.user = std::move(user);
-    st.password = std::move(pass);
+    st.user = user;
+    st.password = pass;
     st.damage.reset();
     st.remoteClipboardAnnounce = -1;
     st.remoteClipboardDirty = false;
@@ -472,23 +505,32 @@ static napi_value VncConnect(napi_env env, napi_callback_info info)
   if (st.pendingSshConfig.has_value()) {
     int sshRc = ApplySshTunnelConfig(st.client, *st.pendingSshConfig);
     if (sshRc != 0) {
-      napi_value out;
-      napi_create_int32(env, sshRc, &out);
-      return out;
+      napi_value promise;
+      napi_deferred deferred;
+      napi_create_promise(env, &deferred, &promise);
+      napi_value result;
+      napi_create_int32(env, sshRc, &result);
+      napi_resolve_deferred(env, deferred, result);
+      return promise;
     }
   }
 
-  int rc = vncclient_connect(st.client, addr.c_str(), basePort);
-  if (rc == 0 && st.client) {
-    vncclient_announce_clipboard(st.client, 1);
-    std::lock_guard<std::mutex> lock(st.mu);
-    if (st.debugEnabled && st.debugLevel >= 1) {
-      AppendDebugLogLocked(st, "clipboard initialized announce=1");
-    }
-  }
-  napi_value out;
-  napi_create_int32(env, rc, &out);
-  return out;
+  auto* req = new ConnectData();
+  req->st = &st;
+  req->addr = addr;
+  req->basePort = basePort;
+  req->user = user;
+  req->pass = pass;
+
+  napi_value promise;
+  napi_create_promise(env, &req->deferred, &promise);
+
+  napi_value resourceName;
+  napi_create_string_utf8(env, "VncConnect", NAPI_AUTO_LENGTH, &resourceName);
+  napi_create_async_work(env, nullptr, resourceName, VncConnectExecute, VncConnectComplete, req, &req->work);
+  napi_queue_async_work(env, req->work);
+
+  return promise;
 }
 
 static napi_value VncDisconnect(napi_env env, napi_callback_info info)

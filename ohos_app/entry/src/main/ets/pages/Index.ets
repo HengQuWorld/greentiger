@@ -67,7 +67,7 @@ interface ErrorLike {
 }
 
 interface VncClient {
-  connect(host: string, port: number, user?: string, pass?: string): number;
+  connect(host: string, port: number, user?: string, pass?: string): Promise<number>;
   setSshTunnel?(config: SshTunnelConfig): number;
   clearSshTunnel?(): void;
   disconnect(): void;
@@ -1494,7 +1494,7 @@ struct Index {
         return;
       }
       (vnc as VncClient).setDebugOptions?.(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
-      const rc = ((vnc as VncClient).connect?.(parsed.host, parsed.port, this.user, this.password) as number) ?? -1;
+      const rc = (await (vnc as VncClient).connect?.(parsed.host, parsed.port, this.user, this.password)) ?? -1;
       this.connected = (rc === 0);
       this.pm = undefined;
       this.lastMask = 0;

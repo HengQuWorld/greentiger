@@ -1,5 +1,5 @@
 export class VncClient {
-  connect(host: string, port: number, user?: string, pass?: string): number;
+  connect(host: string, port: number, user?: string, pass?: string): Promise<number>;
   disconnect(): void;
   process(): number;
   refresh(): number;

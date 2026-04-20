@@ -9,6 +9,13 @@
 #include <string>
 #include <vector>
 
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cerrno>
+
 #include <core/Configuration.h>
 #include <core/Exception.h>
 #include <core/LogWriter.h>
@@ -519,6 +526,75 @@ static bool validClient(vncclient_handle* client)
   return client != nullptr;
 }
 
+static int connectWithTimeout(const std::string& host, int port, int timeout_sec, std::string* error) {
+  struct addrinfo hints = {};
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  struct addrinfo* res = nullptr;
+  
+  std::string portStr = std::to_string(port);
+  if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &res) != 0) {
+    if (error) *error = "Failed to resolve host: " + host;
+    return -1;
+  }
+
+  int sockfd = -1;
+  for (struct addrinfo* ptr = res; ptr != nullptr; ptr = ptr->ai_next) {
+    sockfd = socket(ptr->ai_family, ptr->ai_socktype, ptr->ai_protocol);
+    if (sockfd < 0) continue;
+
+    // Set non-blocking
+    int flags = fcntl(sockfd, F_GETFL, 0);
+    fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+
+    int rc = connect(sockfd, ptr->ai_addr, ptr->ai_addrlen);
+    if (rc < 0) {
+      if (errno == EINPROGRESS) {
+        fd_set fdset;
+        FD_ZERO(&fdset);
+        FD_SET(sockfd, &fdset);
+        struct timeval tv;
+        tv.tv_sec = timeout_sec;
+        tv.tv_usec = 0;
+
+        rc = select(sockfd + 1, nullptr, &fdset, nullptr, &tv);
+        if (rc > 0) {
+          int so_error = 0;
+          socklen_t len = sizeof(so_error);
+          getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &so_error, &len);
+          if (so_error == 0) {
+            // Success
+          } else {
+            close(sockfd);
+            sockfd = -1;
+            continue;
+          }
+        } else {
+          // Timeout or error
+          close(sockfd);
+          sockfd = -1;
+          continue;
+        }
+      } else {
+        close(sockfd);
+        sockfd = -1;
+        continue;
+      }
+    }
+
+    // Restore blocking mode
+    fcntl(sockfd, F_SETFL, flags);
+    break; // Successfully connected
+  }
+
+  freeaddrinfo(res);
+
+  if (sockfd < 0) {
+    if (error) *error = "Connection failed or timed out after " + std::to_string(timeout_sec) + "s";
+  }
+  return sockfd;
+}
+
 }
 
 struct vncclient_handle {
@@ -611,7 +687,13 @@ int vncclient_connect(vncclient_handle* client, const char* host_port, int base_
       connectPort = client->impl.sshTunnel->localPort();
     }
 
-    client->impl.sock = new network::TcpSocket(connectHost.c_str(), connectPort);
+    std::string connectErr;
+    int fd = connectWithTimeout(connectHost, connectPort, 15, &connectErr);
+    if (fd < 0) {
+      return fail(&client->impl, connectErr);
+    }
+
+    client->impl.sock = new network::TcpSocket(fd);
     client->impl.conn->bindSocket(client->impl.sock, connectHost.c_str());
     client->impl.lastError.clear();
     return 0;
@@ -822,7 +904,7 @@ int vncclient_send_pointer(vncclient_handle* client,
   if (!validClient(client) || !client->impl.conn || !client->impl.sock)
     return -1;
   try {
-    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL)
+    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL || !client->impl.conn->writer())
       return -1;
     rfb::CMsgWriter* w = client->impl.conn->writer();
     if (!w)
@@ -842,6 +924,8 @@ int vncclient_send_key_press(vncclient_handle* client,
   if (!validClient(client) || !client->impl.conn || !client->impl.sock)
     return -1;
   try {
+    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL || !client->impl.conn->writer())
+      return -1;
     client->impl.conn->sendKeyPress(system_key_code, key_code, key_sym);
     client->impl.sock->outStream().flush();
     return 0;
@@ -856,6 +940,8 @@ int vncclient_send_key_release(vncclient_handle* client,
   if (!validClient(client) || !client->impl.conn || !client->impl.sock)
     return -1;
   try {
+    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL || !client->impl.conn->writer())
+      return -1;
     client->impl.conn->sendKeyRelease(system_key_code);
     client->impl.sock->outStream().flush();
     return 0;
@@ -869,6 +955,8 @@ int vncclient_release_all_keys(vncclient_handle* client)
   if (!validClient(client) || !client->impl.conn || !client->impl.sock)
     return -1;
   try {
+    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL || !client->impl.conn->writer())
+      return -1;
     client->impl.conn->releaseAllKeys();
     client->impl.sock->outStream().flush();
     return 0;
@@ -882,6 +970,8 @@ int vncclient_request_clipboard(vncclient_handle* client)
   if (!validClient(client) || !client->impl.conn || !client->impl.sock)
     return -1;
   try {
+    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL || !client->impl.conn->writer())
+      return -1;
     client->impl.conn->requestClipboard();
     client->impl.sock->outStream().flush();
     return 0;
@@ -895,6 +985,8 @@ int vncclient_announce_clipboard(vncclient_handle* client, int available)
   if (!validClient(client) || !client->impl.conn || !client->impl.sock)
     return -1;
   try {
+    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL || !client->impl.conn->writer())
+      return -1;
     client->impl.conn->announceClipboard(available != 0);
     client->impl.sock->outStream().flush();
     return 0;
@@ -908,6 +1000,8 @@ int vncclient_send_clipboard(vncclient_handle* client, const char* utf8)
   if (!validClient(client) || !client->impl.conn || !client->impl.sock)
     return -1;
   try {
+    if (client->impl.conn->state() != rfb::CConnection::RFBSTATE_NORMAL || !client->impl.conn->writer())
+      return -1;
     client->impl.conn->sendClipboardData(utf8 ? utf8 : "");
     client->impl.sock->outStream().flush();
     return 0;

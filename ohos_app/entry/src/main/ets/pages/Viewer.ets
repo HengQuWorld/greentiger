@@ -35,7 +35,7 @@ interface VncFramebufferInfo {
 type WantParamValue = string | number | boolean | undefined;
 
 interface VncClientData {
-  connect(host: string, port: number, user?: string, pass?: string): number;
+  connect(host: string, port: number, user?: string, pass?: string): Promise<number>;
   setSshTunnel?(config: SshTunnelConfig): number;
   clearSshTunnel?(): void;
   disconnect(): void;
@@ -3674,7 +3674,7 @@ struct Viewer {
         this.vncClient.clearSshTunnel?.();
       }
       this.vncClient.setDebugOptions(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
-      const rc = (this.vncClient.connect?.(parsed.host, parsed.port, this.user, this.password) as number) ?? -1;
+      const rc = (await this.vncClient.connect?.(parsed.host, parsed.port, this.user, this.password)) ?? -1;
       this.connected = (rc === 0);
       this.securityLevel = this.connected ? (this.vncClient.getSecurityLevel?.() ?? 0) : 0;
       this.releaseViewerPixelMaps();
