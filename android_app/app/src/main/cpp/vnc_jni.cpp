@@ -116,11 +116,14 @@ static jbyteArray CopyFramebuffer(JNIEnv* env, ClientState* state, std::optional
   const size_t size = static_cast<size_t>(copyRect.w) * static_cast<size_t>(copyRect.h) * 4u;
   std::vector<uint8_t> out(size);
   for (int row = 0; row < copyRect.h; row++) {
-    const uint8_t* srcRow = rgba +
+    const uint32_t* srcRow = reinterpret_cast<const uint32_t*>(rgba +
       static_cast<size_t>(copyRect.y + row) * static_cast<size_t>(stride) +
-      static_cast<size_t>(copyRect.x) * 4u;
-    uint8_t* dstRow = out.data() + static_cast<size_t>(row) * static_cast<size_t>(copyRect.w) * 4u;
-    std::memcpy(dstRow, srcRow, static_cast<size_t>(copyRect.w) * 4u);
+      static_cast<size_t>(copyRect.x) * 4u);
+    uint32_t* dstRow = reinterpret_cast<uint32_t*>(out.data() + 
+      static_cast<size_t>(row) * static_cast<size_t>(copyRect.w) * 4u);
+    for (int col = 0; col < copyRect.w; col++) {
+      dstRow[col] = srcRow[col] | 0xFF000000u;
+    }
   }
 
   jbyteArray result = env->NewByteArray(static_cast<jsize>(out.size()));
@@ -164,13 +167,15 @@ static jint BlitFramebufferToBitmap(
     return -1;
 
   for (int row = 0; row < copyRect.h; row++) {
-    const uint8_t* srcRow = rgba +
+    const uint32_t* srcRow = reinterpret_cast<const uint32_t*>(rgba +
       static_cast<size_t>(copyRect.y + row) * static_cast<size_t>(stride) +
-      static_cast<size_t>(copyRect.x) * 4u;
-    uint8_t* dstRow = static_cast<uint8_t*>(pixels) +
+      static_cast<size_t>(copyRect.x) * 4u);
+    uint32_t* dstRow = reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(pixels) +
       static_cast<size_t>(copyRect.y + row) * static_cast<size_t>(info.stride) +
-      static_cast<size_t>(copyRect.x) * 4u;
-    std::memcpy(dstRow, srcRow, static_cast<size_t>(copyRect.w) * 4u);
+      static_cast<size_t>(copyRect.x) * 4u);
+    for (int col = 0; col < copyRect.w; col++) {
+      dstRow[col] = srcRow[col] | 0xFF000000u;
+    }
   }
 
   AndroidBitmap_unlockPixels(env, bitmap);
