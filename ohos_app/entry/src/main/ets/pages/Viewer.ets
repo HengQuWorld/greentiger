@@ -18,6 +18,7 @@ import {
   resolveConnectionAddress
 } from '../utils/ConnectionUtils';
 import { keySymFromEvent } from '../utils/KeyMap';
+import { SharedViewerRect, VncClientLike, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
 import { VncClient } from 'libvncviewer.so';
 
 interface ClickEvent {
@@ -94,6 +95,34 @@ interface WindowLike {
   setWindowSystemBarEnable?: (bars: Array<'status' | 'navigation'>, callback?: (err: WindowErrorLike) => void) => void;
   setWindowSystemBarProperties?: (props: SystemBarPropertiesLike) => void;
   setWindowDecorVisible?: (visible: boolean) => void;
+  resize?: (width: number, height: number) => Promise<void>;
+  showWindow?: () => Promise<void>;
+  destroyWindow?: () => Promise<void>;
+  setUIContent?: (path: string) => Promise<void>;
+}
+
+interface WindowCreateConfigLike {
+  name: string;
+  windowType: number;
+  ctx?: common.UIAbilityContext;
+  decorEnabled?: boolean;
+  title?: string;
+}
+
+interface WindowSizeLike {
+  width: number;
+  height: number;
+}
+
+interface WindowTypeLike {
+  TYPE_DIALOG?: number;
+  TYPE_FLOAT?: number;
+}
+
+interface WindowModuleLike {
+  WindowType?: WindowTypeLike;
+  createWindow?: (config: WindowCreateConfigLike) => Promise<Object>;
+  findWindow?: (name: string) => Object;
 }
 
 interface WindowErrorLike {
@@ -274,7 +303,9 @@ struct Viewer {
   @State private monitorCount: number = 0;
   @State private detectingDisplayLayout: boolean = false;
   @State private monitorLayoutLocked: boolean = false;
+  @State private monitorWindowsOpenCount: number = 0;
   private monitorSlots: VncRect[] = [];
+  private readonly sharedSessionId: string = generateId();
   private manualDragActive: boolean = false;
   private manualDragStartX: number = 0;
   private manualDragStartY: number = 0;
@@ -405,6 +436,8 @@ struct Viewer {
   }
 
   aboutToAppear() {
+    viewerMultiWindowStore.ensureSession(this.sharedSessionId);
+    this.refreshMonitorWindowsState();
     const booted = this.applyWantParams();
     if (booted) {
       this.updateWindowTitle();
@@ -421,6 +454,7 @@ struct Viewer {
 
   onPageShow(): void {
     this.updateWindowTitle();
+    this.refreshMonitorWindowsState();
     this.applyFullscreenToWindow();
     this.tryAutoConnect();
   }
@@ -430,6 +464,8 @@ struct Viewer {
       this.disconnect(true);
     } catch (e) {
     }
+    void this.closeMonitorWindows(false);
+    viewerMultiWindowStore.disposeSession(this.sharedSessionId);
   }
 
   private applyWantParams(): boolean {
@@ -542,9 +578,7 @@ struct Viewer {
 
   private updateWindowTitle(): void {
     try {
-      const addr = (this.address ?? '').trim();
-      const name = (this.connName ?? '').trim();
-      const title = (name ? name : (addr || 'Viewer')) + (addr ? `  ${addr}` : '');
+      const title = this.getWindowTitleText();
       const ctx = this.getHostContext();
       if (!ctx) return;
       window.getLastWindow(ctx)
@@ -557,6 +591,162 @@ struct Viewer {
         .catch(() => {
         });
     } catch (e) {
+    }
+    viewerMultiWindowStore.updateSessionTitle(this.sharedSessionId, this.getWindowTitleText());
+  }
+
+  private getWindowTitleText(): string {
+    const addr = (this.address ?? '').trim();
+    const name = (this.connName ?? '').trim();
+    return (name ? name : (addr || 'Viewer')) + (addr ? `  ${addr}` : '');
+  }
+
+  private getActiveMonitorRectsForWindows(): VncRect[] {
+    if (this.monitors.length > 0) return this.monitors;
+    const preview = this.getDisplayPreviewMonitorRects();
+    if (preview.length > 0) return preview;
+    if (this.fbW > 0 && this.fbH > 0) {
+      return [{ x: 0, y: 0, w: this.fbW, h: this.fbH }];
+    }
+    return [];
+  }
+
+  private toSharedViewerRects(rects: VncRect[]): SharedViewerRect[] {
+    return rects.map((rect: VncRect): SharedViewerRect => {
+      return {
+        x: Math.floor(rect.x),
+        y: Math.floor(rect.y),
+        w: Math.floor(rect.w),
+        h: Math.floor(rect.h)
+      };
+    });
+  }
+
+  private syncSharedSessionSnapshot(): void {
+    const title = this.getWindowTitleText();
+    const rects = this.toSharedViewerRects(this.getActiveMonitorRectsForWindows());
+    viewerMultiWindowStore.publishFrame(
+      this.sharedSessionId,
+      title,
+      this.connected && this.fbW > 0 && this.fbH > 0,
+      this.fbW,
+      this.fbH,
+      this.frameCache,
+      rects
+    );
+  }
+
+  private refreshMonitorWindowsState(): void {
+    this.monitorWindowsOpenCount = viewerMultiWindowStore.listWindowNames(this.sharedSessionId).length;
+  }
+
+  private getMonitorWindowTitle(index: number): string {
+    return `${this.getWindowTitleText()} - 屏幕 ${index + 1}`;
+  }
+
+  private estimateMonitorWindowSize(rect: VncRect): WindowSizeLike {
+    const aspect = rect.h > 0 ? (rect.w / rect.h) : 1.6;
+    let width = Math.round(Math.max(480, Math.min(1280, rect.w)));
+    let height = Math.round(width / Math.max(0.4, Math.min(3.2, aspect)));
+    height = Math.max(320, Math.min(900, height));
+    width = Math.max(420, Math.min(1400, width));
+    const size: WindowSizeLike = { width, height };
+    return size;
+  }
+
+  private async destroyNamedMonitorWindow(windowName: string): Promise<void> {
+    try {
+      const winObj = window.findWindow?.(windowName);
+      if (!winObj) return;
+      await (winObj as WindowLike).destroyWindow?.();
+    } catch (e) {
+    }
+  }
+
+  private async createMonitorWindow(index: number, rect: VncRect): Promise<boolean> {
+    const ctx = this.getHostContext();
+    if (!ctx) {
+      console.error('createMonitorWindow: getHostContext returned undefined');
+      return false;
+    }
+    const windowName = `viewer-display:${this.sharedSessionId}:${index}`;
+    const title = this.getMonitorWindowTitle(index);
+    viewerMultiWindowStore.registerWindow({
+      windowName,
+      sessionId: this.sharedSessionId,
+      monitorIndex: index,
+      title
+    });
+    try {
+      console.info('createMonitorWindow: starting DisplayAbility for monitor', index);
+      interface WantParameters {
+        sessionId: string;
+        monitorIndex: number;
+        title: string;
+      }
+      interface StartWant {
+        deviceId: string;
+        bundleName: string;
+        abilityName: string;
+        moduleName: string;
+        parameters?: WantParameters;
+      }
+      const wantParams: WantParameters = {
+        sessionId: this.sharedSessionId,
+        monitorIndex: index,
+        title: title
+      };
+      const want: StartWant = {
+        deviceId: '',
+        bundleName: ctx.abilityInfo.bundleName,
+        abilityName: 'DisplayAbility',
+        moduleName: ctx.abilityInfo.moduleName,
+        parameters: wantParams
+      };
+      await ctx.startAbility(want as object);
+      console.info('createMonitorWindow: DisplayAbility started successfully for monitor', index);
+      return true;
+    } catch (e) {
+      console.error('createMonitorWindow: error starting DisplayAbility:', e);
+      viewerMultiWindowStore.removeWindow(windowName);
+      return false;
+    }
+  }
+
+  private async closeMonitorWindows(showStatus: boolean = true): Promise<void> {
+    const names = viewerMultiWindowStore.listWindowNames(this.sharedSessionId);
+    for (let i = 0; i < names.length; i++) {
+      await this.destroyNamedMonitorWindow(names[i]);
+      viewerMultiWindowStore.removeWindow(names[i]);
+    }
+    this.refreshMonitorWindowsState();
+    if (showStatus && names.length > 0) {
+      this.showStatusBanner('已关闭显示窗口');
+    }
+  }
+
+  private async openMonitorWindows(): Promise<void> {
+    if (!this.connected) {
+      this.toast('请先建立连接');
+      return;
+    }
+    const rects = this.getDisplayPreviewMonitorRects();
+    if (rects.length <= 1) {
+      this.toast('当前至少需要检测到两个远端屏幕');
+      return;
+    }
+    this.syncSharedSessionSnapshot();
+    await this.closeMonitorWindows(false);
+    let opened = 0;
+    for (let i = 0; i < rects.length; i++) {
+      const ok = await this.createMonitorWindow(i, rects[i]);
+      if (ok) opened++;
+    }
+    this.refreshMonitorWindowsState();
+    if (opened > 0) {
+      this.showStatusBanner(`已打开 ${opened} 个显示窗口`);
+    } else {
+      this.toast('打开显示窗口失败');
     }
   }
 
@@ -2699,6 +2889,7 @@ struct Viewer {
       this.viewportMode = 'all';
     }
     this.clampZoomOffset();
+    this.syncSharedSessionSnapshot();
   }
 
   private getDisplayPreviewContainer(): VncRect {
@@ -3095,6 +3286,7 @@ struct Viewer {
     this.creatingPm = true;
     try {
       const cached = this.replaceFrameCache(buf);
+      this.syncSharedSessionSnapshot();
       await this.replacePixelMapFromBuffer(cached);
     } catch (e) {
       console.error('Failed to create PixelMap', e);
@@ -3273,6 +3465,7 @@ struct Viewer {
     try {
       if (!this.writeBufferToPixelMap(this.pm, rectBuf, rect)) return false;
       this.pmVersion++;
+      this.syncSharedSessionSnapshot();
       return true;
     } catch (e) {
       console.error('Failed to present damage rect', e);
@@ -3315,6 +3508,7 @@ struct Viewer {
       if (!buf) return;
       const cached = this.replaceFrameCache(buf);
       this.refineMonitorsFromFrame(dmg === null || !usePartial);
+      this.syncSharedSessionSnapshot();
 
       if (this.debugEnabled) {
         try {
@@ -3643,6 +3837,7 @@ struct Viewer {
 
   private async connect(): Promise<void> {
     if (this.connecting) return;
+    viewerMultiWindowStore.ensureSession(this.sharedSessionId);
     this.connecting = true;
     this.lastError = '';
     this.panelMode = 'none';
@@ -3676,6 +3871,10 @@ struct Viewer {
       this.vncClient.setDebugOptions(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
       const rc = (await this.vncClient.connect?.(parsed.host, parsed.port, this.user, this.password)) ?? -1;
       this.connected = (rc === 0);
+      viewerMultiWindowStore.updateSessionConnectionState(this.sharedSessionId, this.connected);
+      if (this.connected) {
+        viewerMultiWindowStore.setVncClient(this.sharedSessionId, this.vncClient as VncClientLike);
+      }
       this.securityLevel = this.connected ? (this.vncClient.getSecurityLevel?.() ?? 0) : 0;
       this.releaseViewerPixelMaps();
       this.frameCache = null;
@@ -3708,6 +3907,7 @@ struct Viewer {
       this.showStatusBanner('已连接，当前为控制模式');
     } catch (e) {
       this.connected = false;
+      viewerMultiWindowStore.updateSessionConnectionState(this.sharedSessionId, false);
       this.releaseViewerPixelMaps();
       this.frameCache = null;
       this.lastFullFrameSyncTs = 0;
@@ -3753,6 +3953,8 @@ struct Viewer {
 
   private disconnect(preserveError: boolean = false): void {
     this.stopLoop();
+    void this.closeMonitorWindows(false);
+    viewerMultiWindowStore.setVncClient(this.sharedSessionId, null);
     try { this.vncClient.disconnect(); } catch (e) {}
     try { this.vncClient.clearSshTunnel?.(); } catch (e) {}
     this.connected = false;
@@ -3791,6 +3993,8 @@ struct Viewer {
     this.monitorCount = 0;
     this.monitorLayoutLocked = false;
     this.monitorSlots = [];
+    viewerMultiWindowStore.clearSessionFrame(this.sharedSessionId, this.getWindowTitleText());
+    this.refreshMonitorWindowsState();
     if (!preserveError) this.lastError = '';
   }
 
@@ -5296,6 +5500,45 @@ struct Viewer {
             .onClick(() => {
               this.pulseChromeInteraction();
               this.confirmMonitorLayout();
+            });
+        }
+        .width('100%');
+        Text(this.monitorWindowsOpenCount > 0
+          ? `已打开 ${this.monitorWindowsOpenCount} 个显示窗口，可拖到本地不同显示器上。`
+          : '可将每个远端屏幕拆成独立窗口，便于拖到本地不同显示器。')
+          .fontSize(11)
+          .lineHeight(16)
+          .fontColor(this.cTextSecondary)
+          .width('100%');
+        Row({ space: 8 }) {
+          Button('拆分多窗口显示')
+            .layoutWeight(1)
+            .height(36)
+            .fontSize(12)
+            .fontColor(this.cPrimaryFg)
+            .backgroundColor(this.cPrimary)
+            .borderRadius(14)
+            .enabled(this.getDisplayPreviewMonitorRects().length > 1 && this.connected)
+            .opacity(this.getDisplayPreviewMonitorRects().length > 1 && this.connected ? 1 : 0.5)
+            .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+            .onClick(() => {
+              this.pulseChromeInteraction();
+              void this.openMonitorWindows();
+            });
+          Button('关闭显示窗口')
+            .layoutWeight(1)
+            .height(36)
+            .fontSize(12)
+            .fontColor(this.cPrimary)
+            .backgroundColor(this.cSurfaceAlt)
+            .border({ width: 1, color: this.cBorder })
+            .borderRadius(14)
+            .enabled(this.monitorWindowsOpenCount > 0)
+            .opacity(this.monitorWindowsOpenCount > 0 ? 1 : 0.5)
+            .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+            .onClick(() => {
+              this.pulseChromeInteraction();
+              void this.closeMonitorWindows();
             });
         }
         .width('100%');
