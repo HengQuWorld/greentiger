@@ -743,6 +743,12 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
         private set
     var lastPointerY by mutableIntStateOf(0)
         private set
+    var multiWindowSessionId by mutableStateOf("")
+        private set
+
+    fun assignMultiWindowSessionId(id: String) {
+        publishState { multiWindowSessionId = id }
+    }
 
     private inline fun <T> publishState(block: () -> T): T = Snapshot.withMutableSnapshot(block)
 
@@ -906,6 +912,17 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
         }
     }
 
+    fun toVncClientLike(): VncClientLike {
+        return object : VncClientLike {
+            override fun sendPointer(x: Int, y: Int, mask: Int) {
+                this@ViewerSession.sendPointer(x, y, mask)
+            }
+            override fun sendKey(keysym: Int, down: Boolean) {
+                this@ViewerSession.sendKey(keysym, down)
+            }
+        }
+    }
+
     fun disconnect() {
         try {
             client.disconnect()
@@ -914,6 +931,10 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
         try {
             client.clearSshTunnel()
         } catch (_: Throwable) {
+        }
+        val sid = multiWindowSessionId
+        if (sid.isNotBlank()) {
+            viewerMultiWindowStore.clearSessionFrame(sid, serverName)
         }
         publishState {
             connected = false
@@ -1041,6 +1062,28 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
         lastFramebufferUpdateTs = now
         publishState {
             frameVersion += 1
+        }
+        if (multiWindowSessionId.isNotBlank()) {
+            val sharedMonitors = monitors.map { it.toSharedRect() }
+            val sourceBitmap = bitmap
+            val sharedFrame = if (sourceBitmap != null && !sourceBitmap.isRecycled) {
+                try {
+                    sourceBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                } catch (_: Throwable) {
+                    null
+                }
+            } else {
+                null
+            }
+            viewerMultiWindowStore.publishFrame(
+                sessionId = multiWindowSessionId,
+                title = serverName,
+                connected = true,
+                fbW = info.width,
+                fbH = info.height,
+                frame = sharedFrame,
+                monitors = sharedMonitors
+            )
         }
     }
 }
@@ -2270,6 +2313,32 @@ private fun ViewerScreen(
         showDisplaySheet = false
         pulseChromeInteraction()
     }
+    val openDisplayWindows: () -> Unit = {
+        dismissDisplaySheet()
+        if (session.connected && session.monitors.isNotEmpty()) {
+            val sid = "viewer-${System.currentTimeMillis()}-${connId.hashCode()}"
+            session.assignMultiWindowSessionId(sid)
+            viewerMultiWindowStore.ensureSession(sid)
+            viewerMultiWindowStore.setVncClient(sid, session.toVncClientLike())
+            viewerMultiWindowStore.updateSessionTitle(sid, titleText)
+            viewerMultiWindowStore.updateSessionConnectionState(sid, true)
+            val sharedMonitors = session.monitors.map { it.toSharedRect() }
+            viewerMultiWindowStore.updateSessionMonitors(sid, sharedMonitors)
+            session.monitors.forEachIndexed { index, rect ->
+                val windowTitle = "$titleText - 屏幕 ${index + 1}"
+                viewerMultiWindowStore.registerWindow(
+                    ViewerWindowBinding(
+                        windowName = "viewer-display:$sid:$index",
+                        sessionId = sid,
+                        monitorIndex = index,
+                        title = windowTitle
+                    )
+                )
+                val intent = createDisplayIntent(context, DisplayLaunchParams(sessionId = sid, monitorIndex = index, title = windowTitle))
+                context.startActivity(intent)
+            }
+        }
+    }
     val focusAllMonitors: () -> Unit = {
         dismissDisplaySheet()
         session.setCurrentMonitor(null)
@@ -2588,10 +2657,12 @@ private fun ViewerScreen(
     if (showDisplaySheet) {
         ViewerDisplaySheet(
             monitors = session.monitors,
+            isManualLayout = session.isManualMonitorLayout,
             onDismiss = dismissDisplaySheet,
             onShowAll = focusAllMonitors,
             onSelectMonitor = focusMonitor,
-            onEditMonitors = beginMonitorLayoutEdit
+            onEditMonitors = beginMonitorLayoutEdit,
+            onOpenMultiWindow = { openDisplayWindows() }
         )
     }
 
@@ -3612,10 +3683,12 @@ private fun ViewerControlSheet(
 @Composable
 private fun ViewerDisplaySheet(
     monitors: List<android.graphics.Rect>,
+    isManualLayout: Boolean,
     onDismiss: () -> Unit,
     onShowAll: () -> Unit,
     onSelectMonitor: (android.graphics.Rect) -> Unit,
-    onEditMonitors: () -> Unit
+    onEditMonitors: () -> Unit,
+    onOpenMultiWindow: () -> Unit
 ) {
     val primaryTextColor = Color(0xFFF5F5F4)
     val secondaryTextColor = Color(0xFFD6E3E8)
@@ -3684,6 +3757,35 @@ private fun ViewerDisplaySheet(
                     ),
                     label = { Text("编辑屏幕布局", style = MaterialTheme.typography.bodyMedium) }
                 )
+                if (monitors.isNotEmpty()) {
+                    if (isManualLayout) {
+                        AssistChip(
+                            onClick = onOpenMultiWindow,
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = Color(0xFF1a3a2a),
+                                labelColor = Color(0xFFa7f3d0)
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(
+                                enabled = true,
+                                borderColor = Color(0xFF2d5a45)
+                            ),
+                            label = { Text("拆分多窗口显示", style = MaterialTheme.typography.bodyMedium) }
+                        )
+                    } else {
+                        AssistChip(
+                            onClick = onEditMonitors,
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = Color(0xFF3a2a1a),
+                                labelColor = Color(0xFFf3d0a7)
+                            ),
+                            border = AssistChipDefaults.assistChipBorder(
+                                enabled = true,
+                                borderColor = Color(0xFF5a452d)
+                            ),
+                            label = { Text("先框定屏幕布局再分窗", style = MaterialTheme.typography.bodyMedium) }
+                        )
+                    }
+                }
             }
         }
     }
