@@ -1,7 +1,5 @@
 package com.hengqutiandi.vncviewer
 
-import android.app.Activity
-import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -14,7 +12,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -95,16 +92,6 @@ internal fun Intent.toDisplayLaunchParams(): DisplayLaunchParams? {
     )
 }
 
-@Suppress("DEPRECATION")
-private fun applyTaskLabel(activity: Activity?, label: String) {
-    if (activity == null || label.isBlank()) return
-    activity.title = label
-    try {
-        activity.setTaskDescription(ActivityManager.TaskDescription(label))
-    } catch (_: Throwable) {
-    }
-}
-
 class DisplayActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -173,82 +160,6 @@ private fun mapTouchToRemote(touchX: Float, touchY: Float, layout: IntLayout): P
     val rx = (layout.srcX + fracX * layout.srcW).toInt().coerceIn(layout.srcX, layout.srcX + layout.srcW - 1)
     val ry = (layout.srcY + fracY * layout.srcH).toInt().coerceIn(layout.srcY, layout.srcY + layout.srcH - 1)
     return rx to ry
-}
-
-private fun keySymFromAndroidKey(code: Int, shiftDown: Boolean, capsOn: Boolean): Int {
-    if (code in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z) {
-        val uppercase = capsOn.xor(shiftDown)
-        val base = if (uppercase) 'A'.code else 'a'.code
-        return base + (code - KeyEvent.KEYCODE_A)
-    }
-    if (code in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9) {
-        if (!shiftDown) return '0'.code + (code - KeyEvent.KEYCODE_0)
-        return when (code) {
-            KeyEvent.KEYCODE_0 -> ')'.code
-            KeyEvent.KEYCODE_1 -> '!'.code
-            KeyEvent.KEYCODE_2 -> '@'.code
-            KeyEvent.KEYCODE_3 -> '#'.code
-            KeyEvent.KEYCODE_4 -> '$'.code
-            KeyEvent.KEYCODE_5 -> '%'.code
-            KeyEvent.KEYCODE_6 -> '^'.code
-            KeyEvent.KEYCODE_7 -> '&'.code
-            KeyEvent.KEYCODE_8 -> '*'.code
-            KeyEvent.KEYCODE_9 -> '('.code
-            else -> 0
-        }
-    }
-    return when (code) {
-        KeyEvent.KEYCODE_SPACE -> 0x20
-        KeyEvent.KEYCODE_ENTER -> 0xFF0D
-        KeyEvent.KEYCODE_TAB -> 0xFF09
-        KeyEvent.KEYCODE_ESCAPE -> 0xFF1B
-        KeyEvent.KEYCODE_DEL -> 0xFF08
-        KeyEvent.KEYCODE_FORWARD_DEL -> 0xFFFF
-        KeyEvent.KEYCODE_BACK -> 0xFF08
-        KeyEvent.KEYCODE_DPAD_UP -> 0xFF52
-        KeyEvent.KEYCODE_DPAD_DOWN -> 0xFF54
-        KeyEvent.KEYCODE_DPAD_LEFT -> 0xFF51
-        KeyEvent.KEYCODE_DPAD_RIGHT -> 0xFF53
-        KeyEvent.KEYCODE_DPAD_CENTER -> 0xFF0D
-        KeyEvent.KEYCODE_PAGE_UP -> 0xFF55
-        KeyEvent.KEYCODE_PAGE_DOWN -> 0xFF56
-        KeyEvent.KEYCODE_MOVE_HOME -> 0xFF50
-        KeyEvent.KEYCODE_MOVE_END -> 0xFF57
-        KeyEvent.KEYCODE_INSERT -> 0xFF63
-        KeyEvent.KEYCODE_NUM_LOCK -> 0xFF7F
-        KeyEvent.KEYCODE_CAPS_LOCK -> 0xFFE5
-        KeyEvent.KEYCODE_SCROLL_LOCK -> 0xFF14
-        KeyEvent.KEYCODE_SYSRQ -> 0xFF15
-        KeyEvent.KEYCODE_BREAK -> 0xFF6B
-        KeyEvent.KEYCODE_MINUS -> if (shiftDown) '_'.code else '-'.code
-        KeyEvent.KEYCODE_EQUALS -> if (shiftDown) '+'.code else '='.code
-        KeyEvent.KEYCODE_LEFT_BRACKET -> if (shiftDown) '{'.code else '['.code
-        KeyEvent.KEYCODE_RIGHT_BRACKET -> if (shiftDown) '}'.code else ']'.code
-        KeyEvent.KEYCODE_BACKSLASH -> if (shiftDown) '|'.code else '\\'.code
-        KeyEvent.KEYCODE_SEMICOLON -> if (shiftDown) ':'.code else ';'.code
-        KeyEvent.KEYCODE_APOSTROPHE -> if (shiftDown) '"'.code else '\''.code
-        KeyEvent.KEYCODE_COMMA -> if (shiftDown) '<'.code else ','.code
-        KeyEvent.KEYCODE_PERIOD -> if (shiftDown) '>'.code else '.'.code
-        KeyEvent.KEYCODE_SLASH -> if (shiftDown) '?'.code else '/'.code
-        KeyEvent.KEYCODE_GRAVE -> if (shiftDown) '~'.code else '`'.code
-        KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.KEYCODE_SHIFT_RIGHT -> 0xFFE1
-        KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_CTRL_RIGHT -> 0xFFE3
-        KeyEvent.KEYCODE_ALT_LEFT, KeyEvent.KEYCODE_ALT_RIGHT -> 0xFFE9
-        KeyEvent.KEYCODE_META_LEFT, KeyEvent.KEYCODE_META_RIGHT -> 0xFFEB
-        KeyEvent.KEYCODE_F1 -> 0xFFBE
-        KeyEvent.KEYCODE_F2 -> 0xFFBF
-        KeyEvent.KEYCODE_F3 -> 0xFFC0
-        KeyEvent.KEYCODE_F4 -> 0xFFC1
-        KeyEvent.KEYCODE_F5 -> 0xFFC2
-        KeyEvent.KEYCODE_F6 -> 0xFFC3
-        KeyEvent.KEYCODE_F7 -> 0xFFC4
-        KeyEvent.KEYCODE_F8 -> 0xFFC5
-        KeyEvent.KEYCODE_F9 -> 0xFFC6
-        KeyEvent.KEYCODE_F10 -> 0xFFC7
-        KeyEvent.KEYCODE_F11 -> 0xFFC8
-        KeyEvent.KEYCODE_F12 -> 0xFFC9
-        else -> 0
-    }
 }
 
 @Composable
@@ -374,6 +285,12 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         }
     }
 
+    val keySender = object : KeySender {
+        override fun sendKey(keysym: Int, down: Boolean) {
+            safeSendKey(keysym, down)
+        }
+    }
+
     fun beginInteraction() {
         isInteracting = true
     }
@@ -387,49 +304,6 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
             frameVersion = pendingVersion
             pendingBitmap = null
         }
-    }
-
-    fun sendRemoteBackspace(count: Int) {
-        repeat(max(0, count)) {
-            safeSendKey(0xff08, true)
-            safeSendKey(0xff08, false)
-        }
-    }
-
-    fun sendCommittedText(text: String) {
-        var index = 0
-        while (index < text.length) {
-            val codePoint = text.codePointAt(index)
-            val keysym = when {
-                codePoint == '\n'.code -> 0xff0d
-                codePoint in 0x20..0x7E -> codePoint
-                codePoint in 0xA0..0xFF -> codePoint
-                else -> 0x01000000 or codePoint
-            }
-            safeSendKey(keysym, true)
-            safeSendKey(keysym, false)
-            index += Character.charCount(codePoint)
-        }
-    }
-
-    fun computeTextDelta(previous: String, next: String): Pair<Int, String> {
-        val prevChars = previous.map { it }.toList()
-        val nextChars = next.map { it }.toList()
-        var prefixLen = 0
-        while (prefixLen < prevChars.size && prefixLen < nextChars.size && prevChars[prefixLen] == nextChars[prefixLen]) {
-            prefixLen++
-        }
-        var suffixLen = 0
-        while (
-            suffixLen < prevChars.size - prefixLen &&
-            suffixLen < nextChars.size - prefixLen &&
-            prevChars[prevChars.size - 1 - suffixLen] == nextChars[nextChars.size - 1 - suffixLen]
-        ) {
-            suffixLen++
-        }
-        val deletedCount = prevChars.size - prefixLen - suffixLen
-        val insertedText = nextChars.subList(prefixLen, nextChars.size - suffixLen).joinToString("")
-        return deletedCount to insertedText
     }
 
     val handleKeyEvent: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
@@ -547,19 +421,19 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     return@BasicTextField
                 }
                 if (nextValue.text.isEmpty()) {
-                    sendRemoteBackspace(1)
+                    sendRemoteBackspace(keySender, 1)
                     softInputCommittedText = " "
                     softInputFieldValue = TextFieldValue(" ", selection = androidx.compose.ui.text.TextRange(1))
                     return@BasicTextField
                 }
                 val oldRealText = if (softInputCommittedText.startsWith(" ")) softInputCommittedText.substring(1) else softInputCommittedText
                 val newRealText = if (nextValue.text.startsWith(" ")) nextValue.text.substring(1) else nextValue.text
-                val (deletedCount, insertedText) = computeTextDelta(oldRealText, newRealText)
-                if (deletedCount > 0) {
-                    sendRemoteBackspace(deletedCount)
+                val delta = buildTextDelta(oldRealText, newRealText)
+                if (delta.deletedCount > 0) {
+                    sendRemoteBackspace(keySender, delta.deletedCount)
                 }
-                if (insertedText.isNotEmpty()) {
-                    sendCommittedText(insertedText)
+                if (delta.insertedText.isNotEmpty()) {
+                    sendCommittedText(keySender, delta.insertedText)
                 }
                 softInputCommittedText = " " + newRealText
                 softInputFieldValue = nextValue.copy(text = softInputCommittedText)

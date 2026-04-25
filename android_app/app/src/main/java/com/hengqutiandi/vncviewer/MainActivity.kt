@@ -322,18 +322,6 @@ private data class OpenViewerWindow(
     val isCurrent: Boolean
 )
 
-@Suppress("DEPRECATION")
-private fun applyTaskLabel(activity: Activity?, label: String) {
-    if (activity == null || label.isBlank()) {
-        return
-    }
-    activity.title = label
-    try {
-        activity.setTaskDescription(ActivityManager.TaskDescription(label))
-    } catch (_: Throwable) {
-    }
-}
-
 private fun resolveViewerHostTarget(address: String, ssh: SshConnectionConfig): String {
     val target = buildConnectionPresentation(address, ssh).vncTarget.trim()
     return target.takeUnless { it.isBlank() || it == "未填写" } ?: address.trim()
@@ -579,11 +567,6 @@ private data class ViewerZoomState(
     val offsetY: Float = 0f
 )
 
-private data class TextDelta(
-    val deletedCount: Int,
-    val insertedText: String
-)
-
 private const val VIEWER_ZOOM_MIN_SCALE = 1f
 private const val VIEWER_ZOOM_MAX_SCALE = 4f
 private const val VIEWER_ZOOM_STEP_SCALE = 0.25f
@@ -598,68 +581,6 @@ private val VIEWER_CHROME_PRIMARY_FG = Color.White
 private val VIEWER_CHROME_SURFACE = Color(0xC70C1416)
 private val VIEWER_CHROME_SURFACE_SOFT = Color(0x14000000)
 private val VIEWER_CHROME_BORDER = Color.White.copy(alpha = 0.12f)
-
-private fun String.toCodePointList(): List<Int> {
-    val codePoints = ArrayList<Int>(length)
-    var index = 0
-    while (index < length) {
-        val codePoint = codePointAt(index)
-        codePoints.add(codePoint)
-        index += Character.charCount(codePoint)
-    }
-    return codePoints
-}
-
-private fun buildTextDelta(previous: String, next: String): TextDelta {
-    val previousChars = previous.toCodePointList()
-    val nextChars = next.toCodePointList()
-
-    var prefix = 0
-    while (prefix < previousChars.size && prefix < nextChars.size && previousChars[prefix] == nextChars[prefix]) {
-        prefix++
-    }
-
-    var suffix = 0
-    while (
-        suffix < previousChars.size - prefix &&
-        suffix < nextChars.size - prefix &&
-        previousChars[previousChars.size - 1 - suffix] == nextChars[nextChars.size - 1 - suffix]
-    ) {
-        suffix++
-    }
-
-    val insertedText = nextChars
-        .subList(prefix, nextChars.size - suffix)
-        .joinToString(separator = "") { String(Character.toChars(it)) }
-
-    return TextDelta(
-        deletedCount = previousChars.size - prefix - suffix,
-        insertedText = insertedText
-    )
-}
-
-private fun sendRemoteBackspace(session: ViewerSession, count: Int) {
-    repeat(max(0, count)) {
-        session.sendKey(0xff08, true)
-        session.sendKey(0xff08, false)
-    }
-}
-
-private fun sendCommittedText(session: ViewerSession, text: String) {
-    var index = 0
-    while (index < text.length) {
-        val codePoint = text.codePointAt(index)
-        val keysym = when {
-            codePoint == '\n'.code -> 0xff0d
-            codePoint in 0x20..0x7E -> codePoint
-            codePoint in 0xA0..0xFF -> codePoint
-            else -> 0x01000000 or codePoint
-        }
-        session.sendKey(keysym, true)
-        session.sendKey(keysym, false)
-        index += Character.charCount(codePoint)
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -696,7 +617,7 @@ private fun TouchScrollStepSelector(
     }
 }
 
-private class ViewerSession(storageRoot: String) : AutoCloseable {
+private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     private val fallbackFullFrameSyncMs = 500L
     private val monitorDetectionIntervalMs = 1500L
     private val emptyMonitorDetectionIntervalMs = 300L
@@ -878,7 +799,7 @@ private class ViewerSession(storageRoot: String) : AutoCloseable {
         }
     }
 
-    fun sendKey(keysym: Int, down: Boolean) {
+    override fun sendKey(keysym: Int, down: Boolean) {
         if (connected && keysym != 0) {
             client.sendKey(keysym, down)
         }
@@ -5780,90 +5701,4 @@ private fun handleViewerMotionEvent(
         }
     }
     return false
-}
-
-private fun keySymFromAndroidKey(code: Int, shiftDown: Boolean, capsOn: Boolean): Int {
-    if (code in android.view.KeyEvent.KEYCODE_A..android.view.KeyEvent.KEYCODE_Z) {
-        val uppercase = capsOn.xor(shiftDown)
-        val base = if (uppercase) 'A'.code else 'a'.code
-        return base + (code - android.view.KeyEvent.KEYCODE_A)
-    }
-
-    if (code in android.view.KeyEvent.KEYCODE_0..android.view.KeyEvent.KEYCODE_9) {
-        val shifted = listOf(')', '!', '@', '#', '$', '%', '^', '&', '*', '(')
-        return if (shiftDown) shifted[code - android.view.KeyEvent.KEYCODE_0].code else '0'.code + (code - android.view.KeyEvent.KEYCODE_0)
-    }
-
-    return when (code) {
-        android.view.KeyEvent.KEYCODE_ENTER -> 0xff0d
-        android.view.KeyEvent.KEYCODE_DEL -> 0xff08
-        android.view.KeyEvent.KEYCODE_FORWARD_DEL -> 0xffff
-        android.view.KeyEvent.KEYCODE_ESCAPE -> 0xff1b
-        android.view.KeyEvent.KEYCODE_BACK -> 0xff1b
-        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> 0xff51
-        android.view.KeyEvent.KEYCODE_DPAD_UP -> 0xff52
-        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> 0xff53
-        android.view.KeyEvent.KEYCODE_DPAD_DOWN -> 0xff54
-        android.view.KeyEvent.KEYCODE_TAB -> 0xff09
-        android.view.KeyEvent.KEYCODE_SPACE -> 0x20
-        android.view.KeyEvent.KEYCODE_SHIFT_LEFT -> 0xffe1
-        android.view.KeyEvent.KEYCODE_SHIFT_RIGHT -> 0xffe2
-        android.view.KeyEvent.KEYCODE_CTRL_LEFT -> 0xffe3
-        android.view.KeyEvent.KEYCODE_CTRL_RIGHT -> 0xffe4
-        android.view.KeyEvent.KEYCODE_ALT_LEFT -> 0xffe9
-        android.view.KeyEvent.KEYCODE_ALT_RIGHT -> 0xffea
-        android.view.KeyEvent.KEYCODE_META_LEFT -> 0xffe7
-        android.view.KeyEvent.KEYCODE_META_RIGHT -> 0xffe8
-        android.view.KeyEvent.KEYCODE_COMMA -> if (shiftDown) '<'.code else ','.code
-        android.view.KeyEvent.KEYCODE_PERIOD -> if (shiftDown) '>'.code else '.'.code
-        android.view.KeyEvent.KEYCODE_MINUS -> if (shiftDown) '_'.code else '-'.code
-        android.view.KeyEvent.KEYCODE_EQUALS -> if (shiftDown) '+'.code else '='.code
-        android.view.KeyEvent.KEYCODE_LEFT_BRACKET -> if (shiftDown) '{'.code else '['.code
-        android.view.KeyEvent.KEYCODE_RIGHT_BRACKET -> if (shiftDown) '}'.code else ']'.code
-        android.view.KeyEvent.KEYCODE_BACKSLASH -> if (shiftDown) '|'.code else '\\'.code
-        android.view.KeyEvent.KEYCODE_SEMICOLON -> if (shiftDown) ':'.code else ';'.code
-        android.view.KeyEvent.KEYCODE_APOSTROPHE -> if (shiftDown) '"'.code else '\''.code
-        android.view.KeyEvent.KEYCODE_SLASH -> if (shiftDown) '?'.code else '/'.code
-        android.view.KeyEvent.KEYCODE_GRAVE -> if (shiftDown) '~'.code else '`'.code
-        android.view.KeyEvent.KEYCODE_MOVE_HOME -> 0xff50
-        android.view.KeyEvent.KEYCODE_MOVE_END -> 0xff57
-        android.view.KeyEvent.KEYCODE_PAGE_UP -> 0xff55
-        android.view.KeyEvent.KEYCODE_PAGE_DOWN -> 0xff56
-        android.view.KeyEvent.KEYCODE_INSERT -> 0xff63
-        android.view.KeyEvent.KEYCODE_CAPS_LOCK -> 0xffe5
-        android.view.KeyEvent.KEYCODE_SCROLL_LOCK -> 0xff14
-        android.view.KeyEvent.KEYCODE_NUM_LOCK -> 0xff7f
-        android.view.KeyEvent.KEYCODE_NUMPAD_0 -> 0xffb0
-        android.view.KeyEvent.KEYCODE_NUMPAD_1 -> 0xffb1
-        android.view.KeyEvent.KEYCODE_NUMPAD_2 -> 0xffb2
-        android.view.KeyEvent.KEYCODE_NUMPAD_3 -> 0xffb3
-        android.view.KeyEvent.KEYCODE_NUMPAD_4 -> 0xffb4
-        android.view.KeyEvent.KEYCODE_NUMPAD_5 -> 0xffb5
-        android.view.KeyEvent.KEYCODE_NUMPAD_6 -> 0xffb6
-        android.view.KeyEvent.KEYCODE_NUMPAD_7 -> 0xffb7
-        android.view.KeyEvent.KEYCODE_NUMPAD_8 -> 0xffb8
-        android.view.KeyEvent.KEYCODE_NUMPAD_9 -> 0xffb9
-        android.view.KeyEvent.KEYCODE_NUMPAD_DIVIDE -> 0xffaf
-        android.view.KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> 0xffaa
-        android.view.KeyEvent.KEYCODE_NUMPAD_SUBTRACT -> 0xffad
-        android.view.KeyEvent.KEYCODE_NUMPAD_ADD -> 0xffab
-        android.view.KeyEvent.KEYCODE_NUMPAD_DOT -> 0xffae
-        android.view.KeyEvent.KEYCODE_NUMPAD_EQUALS -> 0xffbd
-        android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> 0xff8d
-        android.view.KeyEvent.KEYCODE_SYSRQ -> 0xff15
-        android.view.KeyEvent.KEYCODE_BREAK -> 0xff6b
-        android.view.KeyEvent.KEYCODE_F1 -> 0xffbe
-        android.view.KeyEvent.KEYCODE_F2 -> 0xffbf
-        android.view.KeyEvent.KEYCODE_F3 -> 0xffc0
-        android.view.KeyEvent.KEYCODE_F4 -> 0xffc1
-        android.view.KeyEvent.KEYCODE_F5 -> 0xffc2
-        android.view.KeyEvent.KEYCODE_F6 -> 0xffc3
-        android.view.KeyEvent.KEYCODE_F7 -> 0xffc4
-        android.view.KeyEvent.KEYCODE_F8 -> 0xffc5
-        android.view.KeyEvent.KEYCODE_F9 -> 0xffc6
-        android.view.KeyEvent.KEYCODE_F10 -> 0xffc7
-        android.view.KeyEvent.KEYCODE_F11 -> 0xffc8
-        android.view.KeyEvent.KEYCODE_F12 -> 0xffc9
-        else -> 0
-    }
 }
