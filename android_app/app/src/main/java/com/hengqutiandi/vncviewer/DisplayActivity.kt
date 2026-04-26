@@ -17,6 +17,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -212,7 +213,6 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     var softInputCommittedText by remember { mutableStateOf(" ") }
 
     LaunchedEffect(sessionId, monitorIndex) {
-        title = launchParams.title.ifBlank { "屏幕 ${monitorIndex + 1}" }
         delay(200)
         focusRequester.requestFocus()
         while (isActive) {
@@ -399,6 +399,8 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         }
     }
 
+    val monitorLabel = "屏幕 ${monitorIndex + 1}"
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -549,6 +551,22 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     color = Color(0xFFd6d3d1)
                 )
             }
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = monitorLabel,
+                fontSize = 14.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.align(Alignment.Center)
+            )
         }
     }
 }
