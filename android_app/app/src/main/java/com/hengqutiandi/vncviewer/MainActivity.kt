@@ -1042,6 +1042,9 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     }
 }
 
+// 全局鼠标通用运动事件回调，由 ViewerScreen 注册，MainActivity 转发
+private var activeGenericMotionHandler: ((MotionEvent) -> Boolean)? = null
+
 class MainActivity : ComponentActivity() {
     private var launchIntent by mutableStateOf<Intent?>(null)
 
@@ -1064,6 +1067,14 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         launchIntent = intent
+    }
+
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        val handler = activeGenericMotionHandler
+        if (handler != null && isMouseEvent(ev)) {
+            if (handler(ev)) return true
+        }
+        return super.dispatchGenericMotionEvent(ev)
     }
 }
 
@@ -2489,6 +2500,33 @@ private fun ViewerScreen(
         }
         onDispose {
             session.onDisconnected = null
+        }
+    }
+
+    // 注册鼠标通用运动事件处理器（处理 hover/右键/滚轮等 generic motion 事件）
+    // placement/zoomState/session 在 lambda 捕获时是最新值，但 Compose 中需要用 rememberUpdatedState 保证最新
+    val latestPlacement = androidx.compose.runtime.rememberUpdatedState(placement)
+    val latestZoomState = androidx.compose.runtime.rememberUpdatedState(zoomState)
+    val latestTouchScrollStep = androidx.compose.runtime.rememberUpdatedState(touchScrollStep)
+    val latestInputState = androidx.compose.runtime.rememberUpdatedState(inputState)
+    val latestInteractionMode = androidx.compose.runtime.rememberUpdatedState(interactionMode)
+    val latestUpdateZoomState = androidx.compose.runtime.rememberUpdatedState(updateZoomState)
+
+    DisposableEffect(session) {
+        activeGenericMotionHandler = { event ->
+            handleViewerMotionEvent(
+                event = event,
+                placement = latestPlacement.value,
+                session = session,
+                touchScrollStep = latestTouchScrollStep.value,
+                inputState = latestInputState.value,
+                interactionMode = latestInteractionMode.value,
+                zoomState = latestZoomState.value,
+                onZoomStateChange = latestUpdateZoomState.value
+            )
+        }
+        onDispose {
+            activeGenericMotionHandler = null
         }
     }
 
@@ -5350,39 +5388,7 @@ private fun quickToggleViewerZoom(
     }
 }
 
-private fun pointerMaskFromButtons(buttonState: Int): Int {
-    var mask = 0
-    if (buttonState and MotionEvent.BUTTON_PRIMARY != 0) {
-        mask = mask or 1
-    }
-    if (buttonState and MotionEvent.BUTTON_TERTIARY != 0) {
-        mask = mask or 2
-    }
-    if (buttonState and MotionEvent.BUTTON_SECONDARY != 0) {
-        mask = mask or 4
-    }
-    return mask
-}
 
-private fun isMouseEvent(event: MotionEvent): Boolean {
-    return event.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE
-}
-
-private fun getTouchCenter(event: MotionEvent): Pair<Float, Float>? {
-    if (event.pointerCount < 2) {
-        return null
-    }
-    return ((event.getX(0) + event.getX(1)) / 2f) to ((event.getY(0) + event.getY(1)) / 2f)
-}
-
-private fun getTouchDistance(event: MotionEvent): Float {
-    if (event.pointerCount < 2) {
-        return 0f
-    }
-    val dx = event.getX(0) - event.getX(1)
-    val dy = event.getY(0) - event.getY(1)
-    return sqrt(dx * dx + dy * dy)
-}
 
 private fun handleInspectTap(
     localX: Float,
@@ -5735,6 +5741,9 @@ private fun handleViewerMotionEvent(
                     session.sendPointer(current.first, current.second, 0)
                 } else if (!inputState.touchMoved && clickElapsed <= 350L) {
                     session.sendClick(current.first, current.second, 1)
+                } else if (!inputState.touchMoved && clickElapsed > 500L) {
+                    // 长按触发鼠标右键
+                    session.sendClick(current.first, current.second, 4)
                 } else {
                     session.sendPointer(current.first, current.second, 0)
                 }

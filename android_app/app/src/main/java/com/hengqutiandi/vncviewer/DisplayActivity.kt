@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -92,6 +94,9 @@ internal fun Intent.toDisplayLaunchParams(): DisplayLaunchParams? {
     )
 }
 
+// 全局鼠标通用运动事件回调，由 DisplayScreen 注册，DisplayActivity 转发
+private var activeDisplayGenericMotionHandler: ((MotionEvent) -> Boolean)? = null
+
 class DisplayActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -107,6 +112,14 @@ class DisplayActivity : ComponentActivity() {
                 DisplayScreen(launchParams = launchParams)
             }
         }
+    }
+
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        val handler = activeDisplayGenericMotionHandler
+        if (handler != null && isMouseEvent(ev)) {
+            if (handler(ev)) return true
+        }
+        return super.dispatchGenericMotionEvent(ev)
     }
 }
 
@@ -186,6 +199,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     var touchStartX by remember { mutableFloatStateOf(0f) }
     var touchStartY by remember { mutableFloatStateOf(0f) }
+    var touchStartTs by remember { mutableStateOf(0L) }
     var touchMoved by remember { mutableStateOf(false) }
     var touchDragging by remember { mutableStateOf(false) }
 
@@ -247,14 +261,6 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            imageBitmap = null
-            displayBitmap = null
-            pendingBitmap = null
-        }
-    }
-
     val intLayout = remember(monitorRect, windowW, windowH, fbW, fbH) {
         computeIntLayout(monitorRect, windowW, windowH, fbW, fbH)
     }
@@ -272,6 +278,29 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
             lastSentX = x
             lastSentY = y
             lastSentMask = mask
+        } catch (_: Throwable) {
+        }
+    }
+
+    fun safeSendClick(x: Int, y: Int, mask: Int) {
+        safeSendPointer(x, y, mask, force = true)
+        safeSendPointer(x, y, 0, force = true)
+    }
+
+    fun safeSendScrollAt(x: Int, y: Int, mask: Int, baseMask: Int = 0, repeatCount: Int = 1) {
+        if (!connected || sessionId.isBlank()) return
+        val client = store.getVncClient(sessionId) ?: return
+        try {
+            if (baseMask != 0) {
+                client.sendPointer(x, y, baseMask)
+            }
+            repeat(repeatCount) {
+                client.sendPointer(x, y, mask)
+                client.sendPointer(x, y, if (baseMask != 0) baseMask else 0)
+            }
+            if (baseMask != 0) {
+                client.sendPointer(x, y, 0)
+            }
         } catch (_: Throwable) {
         }
     }
@@ -325,6 +354,51 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         safeSendKey(0xFF08, false)
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            imageBitmap = null
+            displayBitmap = null
+            pendingBitmap = null
+        }
+    }
+
+    // 注册鼠标通用运动事件处理器
+    val latestIntLayout = androidx.compose.runtime.rememberUpdatedState(intLayout)
+    val latestLastSentX = androidx.compose.runtime.rememberUpdatedState(lastSentX)
+    val latestLastSentY = androidx.compose.runtime.rememberUpdatedState(lastSentY)
+
+    DisposableEffect(Unit) {
+        activeDisplayGenericMotionHandler = { event ->
+            val intLayoutVal = latestIntLayout.value
+            val lastX = latestLastSentX.value
+            val lastY = latestLastSentY.value
+
+            val pointMapper = object : PointMapper {
+                override fun mapToRemote(x: Float, y: Float): Pair<Int, Int>? {
+                    return mapTouchToRemote(x, y, intLayoutVal)
+                }
+            }
+
+            val sender = object : ViewerMouseEventSender {
+                override fun sendPointer(x: Int, y: Int, mask: Int) {
+                    safeSendPointer(x, y, mask)
+                }
+
+                override fun sendScrollAt(x: Int, y: Int, mask: Int, baseMask: Int, repeatCount: Int) {
+                    safeSendScrollAt(x, y, mask, baseMask, repeatCount)
+                }
+
+                override val lastPointerX: Int get() = lastX
+                override val lastPointerY: Int get() = lastY
+            }
+
+            handleViewerMouseEvent(event, pointMapper, sender)
+        }
+        onDispose {
+            activeDisplayGenericMotionHandler = null
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -348,6 +422,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     beginInteraction()
                     touchStartX = localX
                     touchStartY = localY
+                    touchStartTs = System.currentTimeMillis()
                     touchMoved = false
                     touchDragging = false
                     safeSendPointer(remote.first, remote.second, 0)
@@ -373,12 +448,15 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                                 val cx = changed.position.x
                                 val cy = changed.position.y
                                 val currentRemote = toRemote(cx, cy)
+                                val clickElapsed = (System.currentTimeMillis() as Long) - touchStartTs
                                 if (touchDragging) {
                                     touchDragging = false
                                     safeSendPointer(currentRemote.first, currentRemote.second, 0)
-                                } else if (!touchMoved) {
-                                    safeSendPointer(currentRemote.first, currentRemote.second, 1)
-                                    safeSendPointer(currentRemote.first, currentRemote.second, 0)
+                                } else if (!touchMoved && clickElapsed <= 350L) {
+                                    safeSendClick(currentRemote.first, currentRemote.second, 1)
+                                } else if (!touchMoved && clickElapsed > 500L) {
+                                    // 长按触发鼠标右键
+                                    safeSendClick(currentRemote.first, currentRemote.second, 4)
                                 } else {
                                     safeSendPointer(currentRemote.first, currentRemote.second, 0)
                                 }

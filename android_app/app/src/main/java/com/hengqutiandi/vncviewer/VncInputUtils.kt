@@ -2,7 +2,12 @@ package com.hengqutiandi.vncviewer
 
 import android.app.Activity
 import android.app.ActivityManager
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.sqrt
 
 @Suppress("DEPRECATION")
 fun applyTaskLabel(activity: Activity?, label: String) {
@@ -161,4 +166,102 @@ fun sendCommittedText(sender: KeySender, text: String) {
         sender.sendKey(keysym, false)
         index += Character.charCount(codePoint)
     }
+}
+
+fun pointerMaskFromButtons(buttonState: Int): Int {
+    var mask = 0
+    if (buttonState and MotionEvent.BUTTON_PRIMARY != 0) {
+        mask = mask or 1
+    }
+    if (buttonState and MotionEvent.BUTTON_TERTIARY != 0) {
+        mask = mask or 2
+    }
+    if (buttonState and MotionEvent.BUTTON_SECONDARY != 0) {
+        mask = mask or 4
+    }
+    return mask
+}
+
+fun isMouseEvent(event: MotionEvent): Boolean {
+    return event.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE
+}
+
+fun getTouchCenter(event: MotionEvent): Pair<Float, Float>? {
+    if (event.pointerCount < 2) {
+        return null
+    }
+    return ((event.getX(0) + event.getX(1)) / 2f) to ((event.getY(0) + event.getY(1)) / 2f)
+}
+
+fun getTouchDistance(event: MotionEvent): Float {
+    if (event.pointerCount < 2) {
+        return 0f
+    }
+    val dx = event.getX(0) - event.getX(1)
+    val dy = event.getY(0) - event.getY(1)
+    return sqrt(dx * dx + dy * dy)
+}
+
+interface ViewerMouseEventSender {
+    fun sendPointer(x: Int, y: Int, mask: Int)
+    fun sendScrollAt(x: Int, y: Int, mask: Int, baseMask: Int = 0, repeatCount: Int = 1)
+    val lastPointerX: Int
+    val lastPointerY: Int
+}
+
+interface PointMapper {
+    fun mapToRemote(x: Float, y: Float): Pair<Int, Int>?
+}
+
+fun handleViewerMouseEvent(
+    event: MotionEvent,
+    pointMapper: PointMapper,
+    sender: ViewerMouseEventSender
+): Boolean {
+    if (!isMouseEvent(event)) {
+        return false
+    }
+    val remote = pointMapper.mapToRemote(event.x, event.y)
+    if (remote == null) {
+        if (
+            (event.buttonState != 0 || event.actionMasked == MotionEvent.ACTION_CANCEL) &&
+            sender.lastPointerX >= 0 &&
+            sender.lastPointerY >= 0
+        ) {
+            sender.sendPointer(sender.lastPointerX, sender.lastPointerY, 0)
+        }
+        return true
+    }
+    when (event.actionMasked) {
+        MotionEvent.ACTION_SCROLL -> {
+            val delta = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+            if (delta == 0f) {
+                return false
+            }
+            val repeatCount = max(1, abs(delta).toInt())
+            val scrollMask = if (delta > 0f) 8 else 16
+            sender.sendScrollAt(
+                x = remote.first,
+                y = remote.second,
+                mask = scrollMask,
+                baseMask = pointerMaskFromButtons(event.buttonState),
+                repeatCount = repeatCount
+            )
+            return true
+        }
+        MotionEvent.ACTION_HOVER_MOVE,
+        MotionEvent.ACTION_MOVE,
+        MotionEvent.ACTION_DOWN,
+        MotionEvent.ACTION_UP,
+        MotionEvent.ACTION_BUTTON_PRESS,
+        MotionEvent.ACTION_BUTTON_RELEASE -> {
+            sender.sendPointer(remote.first, remote.second, pointerMaskFromButtons(event.buttonState))
+            return true
+        }
+        MotionEvent.ACTION_CANCEL -> {
+            sender.sendPointer(remote.first, remote.second, 0)
+            return true
+        }
+    }
+    return false
 }
