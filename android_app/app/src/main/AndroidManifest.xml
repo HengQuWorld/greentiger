@@ -27,6 +27,7 @@
             android:exported="false"
             android:documentLaunchMode="always"
             android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode" />
     </application>
 

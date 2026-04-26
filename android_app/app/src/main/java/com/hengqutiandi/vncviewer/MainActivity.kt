@@ -146,7 +146,11 @@ import com.hengqutiandi.vncviewer.native.DamageRect as NativeDamageRect
 import com.hengqutiandi.vncviewer.native.FramebufferInfo
 import com.hengqutiandi.vncviewer.native.VncClient
 import com.hengqutiandi.vncviewer.ui.theme.GreenTigerTheme
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -667,6 +671,13 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     var multiWindowSessionId by mutableStateOf("")
         private set
 
+    // 独立协程作用域，不依赖 Compose/Activity 生命周期，确保分屏时连接不中断
+    private val stepScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var stepJob: Job? = null
+
+    // 连接断开时的回调（在 Main 线程调用）
+    var onDisconnected: ((errorMsg: String) -> Unit)? = null
+
     fun assignMultiWindowSessionId(id: String) {
         publishState { multiWindowSessionId = id }
     }
@@ -722,6 +733,8 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
                 lastFramebufferUpdateTs = now
                 serverName = client.getServerName().trim()
                 updateFrame(forceFull = true)
+                // 连接成功后启动独立 step 循环，不依赖 Compose/Activity 生命周期
+                startStepLoop()
             }
             connected
         } catch (t: Throwable) {
@@ -730,6 +743,24 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
             false
         } finally {
             connecting = false
+        }
+    }
+
+    private fun startStepLoop() {
+        stepJob?.cancel()
+        stepJob = stepScope.launch {
+            while (isActive && connected) {
+                val alive = step()
+                if (!alive) {
+                    // 通知 UI 连接已断开（切换到主线程）
+                    val errMsg = lastError.ifBlank { "连接已断开" }
+                    withContext(Dispatchers.Main) {
+                        onDisconnected?.invoke(errMsg)
+                    }
+                    break
+                }
+                delay(16L)
+            }
         }
     }
 
@@ -878,6 +909,8 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     }
 
     override fun close() {
+        stepJob?.cancel()
+        stepScope.cancel()
         disconnect()
         try {
             client.close()
@@ -885,7 +918,7 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         }
         bitmap?.recycle()
         bitmap = null
-}
+    }
 
     private fun rectListsEqual(a: List<android.graphics.Rect>, b: List<android.graphics.Rect>): Boolean {
         if (a.size != b.size) {
@@ -2238,15 +2271,35 @@ private fun ViewerScreen(
         dismissDisplaySheet()
         if (session.connected && session.monitors.isNotEmpty()) {
             val sid = "viewer-${System.currentTimeMillis()}-${connId.hashCode()}"
+            val capturedBitmap = session.bitmap
+            val capturedFrameSize = frameSize
+            val capturedMonitors = session.monitors.map { it.toSharedRect() }
+            val capturedTitle = titleText
             session.assignMultiWindowSessionId(sid)
             viewerMultiWindowStore.ensureSession(sid)
             viewerMultiWindowStore.setVncClient(sid, session.toVncClientLike())
-            viewerMultiWindowStore.updateSessionTitle(sid, titleText)
-            viewerMultiWindowStore.updateSessionConnectionState(sid, true)
-            val sharedMonitors = session.monitors.map { it.toSharedRect() }
-            viewerMultiWindowStore.updateSessionMonitors(sid, sharedMonitors)
-            session.monitors.forEachIndexed { index, rect ->
-                val windowTitle = "$titleText - 屏幕 ${index + 1}"
+            viewerMultiWindowStore.updateSessionTitle(sid, capturedTitle)
+            viewerMultiWindowStore.updateSessionMonitors(sid, capturedMonitors)
+            val sharedFrame = if (capturedBitmap != null && !capturedBitmap.isRecycled) {
+                try {
+                    capturedBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                } catch (_: Throwable) {
+                    null
+                }
+            } else {
+                null
+            }
+            viewerMultiWindowStore.publishFrame(
+                sessionId = sid,
+                title = capturedTitle,
+                connected = true,
+                fbW = capturedFrameSize.width,
+                fbH = capturedFrameSize.height,
+                frame = sharedFrame,
+                monitors = capturedMonitors
+            )
+            capturedMonitors.forEachIndexed { index, _ ->
+                val windowTitle = "$capturedTitle - 屏幕 ${index + 1}"
                 viewerMultiWindowStore.registerWindow(
                     ViewerWindowBinding(
                         windowName = "viewer-display:$sid:$index",
@@ -2425,27 +2478,34 @@ private fun ViewerScreen(
         }
     }
 
+    // 注册连接断开回调（step 循环已移入 ViewerSession 独立协程，不依赖 Compose 生命周期）
+    DisposableEffect(session, onBack, onShowToast) {
+        session.onDisconnected = { errMsg ->
+            onShowToast(errMsg)
+            val isMultiWindowMode = session.multiWindowSessionId.isNotBlank()
+            if (!isMultiWindowMode) {
+                onBack()
+            }
+        }
+        onDispose {
+            session.onDisconnected = null
+        }
+    }
+
+    // 剪贴板轮询（独立于 step 循环，仅在连接时运行）
     androidx.compose.runtime.LaunchedEffect(session.connected) {
         if (!session.connected) {
             return@LaunchedEffect
         }
         focusRequester.requestFocus()
         while (isActive && session.connected) {
-            val alive = withContext(Dispatchers.Default) {
-                session.step()
-            }
-            if (!alive) {
-                onShowToast(session.lastError.ifBlank { "连接已断开" })
-                onBack()
-                break
-            }
             val remoteText = withContext(Dispatchers.Default) {
                 session.takeRemoteClipboardText()
             }
             if (remoteText.isNotBlank()) {
                 onRemoteClipboard(remoteText)
             }
-            delay(16L)
+            delay(500L)
         }
     }
 

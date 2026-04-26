@@ -115,7 +115,6 @@ class ViewerMultiWindowStore private constructor() {
     ) {
         synchronized(lock) {
             val entry = getOrCreateSession(sessionId)
-            val oldFrame = entry.snapshot.frame
             entry.snapshot = entry.snapshot.copy(
                 title = title,
                 connected = connected,
@@ -126,9 +125,6 @@ class ViewerMultiWindowStore private constructor() {
                 frameVersion = entry.snapshot.frameVersion + 1,
                 updatedAt = System.currentTimeMillis()
             )
-            if (oldFrame !== frame && oldFrame != null && !oldFrame.isRecycled) {
-                try { oldFrame.recycle() } catch (_: Throwable) {}
-            }
         }
     }
 
@@ -155,8 +151,13 @@ class ViewerMultiWindowStore private constructor() {
     fun getSessionSnapshot(sessionId: String): SharedViewerSessionSnapshot? {
         return synchronized(lock) {
             val entry = sessions[sessionId] ?: return@synchronized null
+            val currentFrame = entry.snapshot.frame
+            val clonedFrame = if (currentFrame != null && !currentFrame.isRecycled) {
+                currentFrame.copy(currentFrame.config ?: Bitmap.Config.ARGB_8888, true)
+            } else null
             entry.snapshot.copy(
-                monitors = cloneRects(entry.snapshot.monitors)
+                monitors = cloneRects(entry.snapshot.monitors),
+                frame = clonedFrame
             )
         }
     }

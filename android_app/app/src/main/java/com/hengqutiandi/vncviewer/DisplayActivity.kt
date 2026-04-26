@@ -234,12 +234,11 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                         statusText = ""
                     } else {
                         statusText = ""
-                        val oldBitmap = displayBitmap
-                        displayBitmap = snapshot.frame
-                        imageBitmap = snapshot.frame?.asImageBitmap()
-                        frameVersion = snapshot.frameVersion
-                        if (oldBitmap !== displayBitmap && oldBitmap != null && !oldBitmap.isRecycled) {
-                            try { oldBitmap.recycle() } catch (_: Throwable) {}
+                        val newFrame = snapshot.frame
+                        if (newFrame != null) {
+                            displayBitmap = newFrame
+                            imageBitmap = newFrame.asImageBitmap()
+                            frameVersion = snapshot.frameVersion
                         }
                     }
                 }
@@ -250,8 +249,9 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     DisposableEffect(Unit) {
         onDispose {
-            displayBitmap?.recycle()
-            pendingBitmap?.recycle()
+            imageBitmap = null
+            displayBitmap = null
+            pendingBitmap = null
         }
     }
 
@@ -298,12 +298,11 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     fun endInteraction() {
         isInteracting = false
         pendingBitmap?.let { bmp ->
-            displayBitmap?.recycle()
             displayBitmap = bmp
             imageBitmap = bmp.asImageBitmap()
             frameVersion = pendingVersion
-            pendingBitmap = null
         }
+        pendingBitmap = null
     }
 
     val handleKeyEvent: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
@@ -339,7 +338,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                 windowW = size.width.coerceAtLeast(1)
                 windowH = size.height.coerceAtLeast(1)
             }
-            .pointerInput(sessionId, connected) {
+            .pointerInput(intLayout, sessionId, connected) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val localX = down.position.x
