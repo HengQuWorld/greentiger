@@ -646,6 +646,8 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         private set
     var connecting by mutableStateOf(false)
         private set
+    var bootstrapping by mutableStateOf(false)
+        private set
     var lastError by mutableStateOf("")
         private set
     var bitmap by mutableStateOf<Bitmap?>(null)
@@ -732,7 +734,18 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
                 connectedAtTs = now
                 lastFramebufferUpdateTs = now
                 serverName = client.getServerName().trim()
+                publishState { bootstrapping = true }
+                client.requestUpdate(incremental = false)
+                repeat(16) {
+                    val prc = client.process()
+                    if (prc != 0) return false
+                    val dmg = client.consumeDamage()
+                    if (dmg != null) {
+                        updateFrame(forceFull = false)
+                    }
+                }
                 updateFrame(forceFull = true)
+                publishState { bootstrapping = false }
                 // 连接成功后启动独立 step 循环，不依赖 Compose/Activity 生命周期
                 startStepLoop()
             }
@@ -891,6 +904,7 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         publishState {
             connected = false
             connecting = false
+            bootstrapping = false
             securityLevel = 0
             serverName = ""
         }
@@ -2761,7 +2775,10 @@ private fun ViewerScreen(
             contentAlignment = Alignment.Center
         ) {
             if (imageBitmap == null) {
-                EmptyStateCard("正在等待远端画面", "连接成功后会在这里显示远程桌面。")
+                EmptyStateCard(
+                    if (session.bootstrapping) "正在加载桌面画面..." else "正在等待远端画面",
+                    "连接成功后会在这里显示远程桌面。"
+                )
             } else {
                 Box(
                     modifier = Modifier.fillMaxSize()
@@ -2851,6 +2868,24 @@ private fun ViewerScreen(
                         }
                     }
                 }
+            }
+        }
+
+        if (session.bootstrapping && imageBitmap != null) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(20.dp)
+                    .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "正在加载桌面画面...",
+                    fontSize = 13.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
 

@@ -380,6 +380,7 @@ struct Viewer {
   @State private chromeVisible: boolean = true;
   @State private panelMode: 'none' | 'clipboard' | 'display' | 'more' | 'security' | 'connection' | 'developer' = 'none';
   @State private statusBannerText: string = '';
+  @State private bootstrapping: boolean = false;
   @State private fsBtnX: number = 0;
   @State private fsBtnY: number = 0;
   private fsBtnInited: boolean = false;
@@ -3531,8 +3532,9 @@ struct Viewer {
     this.debugPmFormat = 1; // 1 = swap R/B (BGRA) for correct colors on RGBA_8888
     this.vncClient.setDebugOptions(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
     this.lastServerRefreshRequestTs = Date.now();
-    this.vncClient.requestUpdate?.(true);
-    for (let i = 0; i < 4; i++) {
+    this.bootstrapping = true;
+    this.vncClient.requestUpdate?.(false);
+    for (let i = 0; i < 16; i++) {
       try {
         const prc = this.vncClient.process();
         if (prc !== 0) {
@@ -3540,6 +3542,13 @@ struct Viewer {
           this.disconnect(true);
           this.toast(this.lastError || '连接失败');
           return;
+        }
+        const dmg = this.vncClient.consumeDamage?.();
+        if (dmg) {
+          await this.ensurePixelMap();
+          if (this.pm) {
+            await this.updatePixelMap(dmg);
+          }
         }
       } catch (e) {
         this.lastError = (this.vncClient.getLastError() as string) ?? '';
@@ -3550,6 +3559,7 @@ struct Viewer {
     }
     this.refreshFramebufferInfo();
     await this.ensurePixelMap();
+    this.bootstrapping = false;
   }
 
   private requestTick(): void {
@@ -3959,6 +3969,7 @@ struct Viewer {
     try { this.vncClient.clearSshTunnel?.(); } catch (e) {}
     this.connected = false;
     this.connecting = false;
+    this.bootstrapping = false;
     this.panelMode = 'none';
     this.chromeVisible = true;
     this.clearChromeAutoHide();
@@ -5925,6 +5936,19 @@ struct Viewer {
       .width('100%')
       .alignItems(HorizontalAlign.Center)
       .margin({ top: this.isFullscreen ? 84 : 96 });
+    }
+    if (this.bootstrapping && this.pm) {
+      Column() {
+        Text('正在加载桌面画面...')
+          .fontSize(12)
+          .fontColor('#ffffff')
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .backgroundColor('rgba(0,0,0,0.65)')
+          .borderRadius(12);
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
+      .margin({ bottom: 40 });
     }
   }
 
