@@ -5749,8 +5749,7 @@ private fun handleViewerMotionEvent(
                 remote
             } else {
                 if (inputState.touchDragging && session.lastPointerX >= 0 && session.lastPointerY >= 0) {
-                    session.sendPointer(session.lastPointerX, session.lastPointerY, 0)
-                    inputState.touchDragging = false
+                    session.sendPointer(session.lastPointerX, session.lastPointerY, 1)
                 }
                 return true
             }

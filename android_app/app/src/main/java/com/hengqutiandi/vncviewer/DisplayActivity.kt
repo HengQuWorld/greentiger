@@ -171,8 +171,8 @@ private fun mapTouchToRemote(touchX: Float, touchY: Float, layout: IntLayout): P
     if (layout.dstW <= 0 || layout.dstH <= 0) return 0 to 0
     val fracX = dx / layout.dstW
     val fracY = dy / layout.dstH
-    val rx = (layout.srcX + fracX * layout.srcW).toInt().coerceIn(layout.srcX, layout.srcX + layout.srcW - 1)
-    val ry = (layout.srcY + fracY * layout.srcH).toInt().coerceIn(layout.srcY, layout.srcY + layout.srcH - 1)
+    val rx = (layout.srcX + fracX * layout.srcW).toInt()
+    val ry = (layout.srcY + fracY * layout.srcH).toInt()
     return rx to ry
 }
 
@@ -468,10 +468,13 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                                 return@awaitEachGesture
                             }
                             PointerEventType.Exit -> {
-                                touchDragging = false
-                                safeSendPointer(lastSentX.coerceAtLeast(0), lastSentY.coerceAtLeast(0), 0)
-                                endInteraction()
-                                return@awaitEachGesture
+                                if (touchDragging) {
+                                    val lastRemote = toRemote(
+                                        changed.position.x,
+                                        changed.position.y
+                                    )
+                                    safeSendPointer(lastRemote.first, lastRemote.second, 1)
+                                }
                             }
                             else -> {}
                         }
