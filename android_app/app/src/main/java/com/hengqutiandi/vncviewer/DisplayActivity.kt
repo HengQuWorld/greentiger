@@ -135,6 +135,11 @@ private data class IntLayout(
     val dstH: Int
 )
 
+private data class FrameSnapshot(
+    val image: ImageBitmap,
+    val layout: IntLayout
+)
+
 private fun computeIntLayout(
     monitorRect: SharedViewerRect,
     windowW: Int,
@@ -181,8 +186,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     val store = viewerMultiWindowStore
     var title by remember { mutableStateOf(launchParams.title.ifBlank { "显示窗口" }) }
     var statusText by remember { mutableStateOf("正在初始化...") }
-    var displayBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var frameSnapshot by remember { mutableStateOf<FrameSnapshot?>(null) }
     var frameVersion by remember { mutableIntStateOf(0) }
     var windowW by remember { mutableIntStateOf(1) }
     var windowH by remember { mutableIntStateOf(1) }
@@ -207,6 +211,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     var isInteracting by remember { mutableStateOf(false) }
     var pendingBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var pendingVersion by remember { mutableIntStateOf(-1) }
+    var interactSkipCounter by remember { mutableIntStateOf(0) }
 
     val focusRequester = remember { FocusRequester() }
     var softInputFieldValue by remember { mutableStateOf(TextFieldValue(" ")) }
@@ -223,35 +228,45 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     statusText = "主会话不存在或已结束"
                 }
             } else {
+                val curFbW = snapshot.fbW
+                val curFbH = snapshot.fbH
+                val curMonitor = snapshot.monitors.getOrNull(monitorIndex)
+                    ?.takeIf { it.w > 0 && it.h > 0 }
+                    ?: SharedViewerRect(0, 0, maxOf(1, curFbW), maxOf(1, curFbH))
                 if (isInteracting) {
-                    if (snapshot.frame != null && snapshot.fbW > 0 && snapshot.fbH > 0 &&
+                    if (snapshot.frame != null && curFbW > 0 && curFbH > 0 &&
                         snapshot.frameVersion != frameVersion
                     ) {
-                        pendingBitmap = snapshot.frame
-                        pendingVersion = snapshot.frameVersion
+                        fbW = curFbW
+                        fbH = curFbH
+                        monitorRect = curMonitor
+                        interactSkipCounter++
+                        if (interactSkipCounter % 3 == 0) {
+                            val layout = computeIntLayout(curMonitor, windowW, windowH, curFbW, curFbH)
+                            frameSnapshot = FrameSnapshot(snapshot.frame.asImageBitmap(), layout)
+                            frameVersion = snapshot.frameVersion
+                        } else {
+                            pendingBitmap = snapshot.frame
+                            pendingVersion = snapshot.frameVersion
+                        }
                     }
                 } else {
                     connected = snapshot.connected
-                    fbW = snapshot.fbW
-                    fbH = snapshot.fbH
-                    val monitor = snapshot.monitors.getOrNull(monitorIndex)
-                    if (monitor != null && monitor.w > 0 && monitor.h > 0) {
-                        monitorRect = monitor
-                    } else {
-                        monitorRect = SharedViewerRect(0, 0, maxOf(1, snapshot.fbW), maxOf(1, snapshot.fbH))
-                    }
+                    fbW = curFbW
+                    fbH = curFbH
+                    monitorRect = curMonitor
                     if (!snapshot.connected) {
                         statusText = "会话未连接"
-                    } else if (snapshot.frame == null || snapshot.fbW <= 0 || snapshot.fbH <= 0) {
+                    } else if (snapshot.frame == null || curFbW <= 0 || curFbH <= 0) {
                         statusText = "正在等待画面..."
-                    } else if (snapshot.frameVersion == frameVersion && displayBitmap != null) {
+                    } else if (snapshot.frameVersion == frameVersion && frameSnapshot != null) {
                         statusText = ""
                     } else {
                         statusText = ""
                         val newFrame = snapshot.frame
                         if (newFrame != null) {
-                            displayBitmap = newFrame
-                            imageBitmap = newFrame.asImageBitmap()
+                            val layout = computeIntLayout(curMonitor, windowW, windowH, curFbW, curFbH)
+                            frameSnapshot = FrameSnapshot(newFrame.asImageBitmap(), layout)
                             frameVersion = snapshot.frameVersion
                         }
                     }
@@ -265,8 +280,10 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         computeIntLayout(monitorRect, windowW, windowH, fbW, fbH)
     }
 
+    val latestLayout = androidx.compose.runtime.rememberUpdatedState(frameSnapshot?.layout ?: intLayout)
+
     fun toRemote(localX: Float, localY: Float): Pair<Int, Int> {
-        return mapTouchToRemote(localX, localY, intLayout)
+        return mapTouchToRemote(localX, localY, latestLayout.value)
     }
 
     fun safeSendPointer(x: Int, y: Int, mask: Int, force: Boolean = false) {
@@ -326,9 +343,10 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     fun endInteraction() {
         isInteracting = false
+        interactSkipCounter = 0
         pendingBitmap?.let { bmp ->
-            displayBitmap = bmp
-            imageBitmap = bmp.asImageBitmap()
+            val layout = computeIntLayout(monitorRect, windowW, windowH, fbW, fbH)
+            frameSnapshot = FrameSnapshot(bmp.asImageBitmap(), layout)
             frameVersion = pendingVersion
         }
         pendingBitmap = null
@@ -356,26 +374,24 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     DisposableEffect(Unit) {
         onDispose {
-            imageBitmap = null
-            displayBitmap = null
+            frameSnapshot = null
             pendingBitmap = null
         }
     }
 
     // 注册鼠标通用运动事件处理器
-    val latestIntLayout = androidx.compose.runtime.rememberUpdatedState(intLayout)
     val latestLastSentX = androidx.compose.runtime.rememberUpdatedState(lastSentX)
     val latestLastSentY = androidx.compose.runtime.rememberUpdatedState(lastSentY)
 
     DisposableEffect(Unit) {
         activeDisplayGenericMotionHandler = { event ->
-            val intLayoutVal = latestIntLayout.value
+            val layoutVal = latestLayout.value
             val lastX = latestLastSentX.value
             val lastY = latestLastSentY.value
 
             val pointMapper = object : PointMapper {
                 override fun mapToRemote(x: Float, y: Float): Pair<Int, Int>? {
-                    return mapTouchToRemote(x, y, intLayoutVal)
+                    return mapTouchToRemote(x, y, layoutVal)
                 }
             }
 
@@ -414,7 +430,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                 windowW = size.width.coerceAtLeast(1)
                 windowH = size.height.coerceAtLeast(1)
             }
-            .pointerInput(intLayout, sessionId, connected) {
+            .pointerInput(sessionId, connected) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val localX = down.position.x
@@ -482,15 +498,15 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                 }
             }
     ) {
-        val bmp = imageBitmap
-        if (bmp != null) {
+        val snap = frameSnapshot
+        if (snap != null) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawImage(
-                    image = bmp,
-                    srcOffset = androidx.compose.ui.unit.IntOffset(intLayout.srcX, intLayout.srcY),
-                    srcSize = androidx.compose.ui.unit.IntSize(intLayout.srcW, intLayout.srcH),
-                    dstOffset = androidx.compose.ui.unit.IntOffset(intLayout.dstX, intLayout.dstY),
-                    dstSize = androidx.compose.ui.unit.IntSize(intLayout.dstW, intLayout.dstH)
+                    image = snap.image,
+                    srcOffset = androidx.compose.ui.unit.IntOffset(snap.layout.srcX, snap.layout.srcY),
+                    srcSize = androidx.compose.ui.unit.IntSize(snap.layout.srcW, snap.layout.srcH),
+                    dstOffset = androidx.compose.ui.unit.IntOffset(snap.layout.dstX, snap.layout.dstY),
+                    dstSize = androidx.compose.ui.unit.IntSize(snap.layout.dstW, snap.layout.dstH)
                 )
             }
         }
@@ -533,7 +549,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
             keyboardActions = KeyboardActions()
         )
 
-        if (displayBitmap == null || statusText.isNotEmpty()) {
+        if (frameSnapshot == null || statusText.isNotEmpty()) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier

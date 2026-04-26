@@ -43,6 +43,7 @@ struct DisplayPage {
   @State private fbH: number = 0;
   @State private monitorRect: SharedViewerRect = { x: 0, y: 0, w: 1, h: 1 };
   @State private connected: boolean = false;
+  @State private cachedViewport: ViewportTarget = { source: { x: 0, y: 0, w: 1, h: 1 }, frame: { x: 0, y: 0, w: 1, h: 1 } };
 
   private sessionId: string = '';
   private monitorIndex: number = 0;
@@ -67,6 +68,7 @@ struct DisplayPage {
   private remoteChineseMode: boolean = false;
 
   private isInteracting: boolean = false;
+  private interactSkipCounter: number = 0;
   private pendingFrame: ArrayBuffer | null = null;
   private pendingFbW: number = 0;
   private pendingFbH: number = 0;
@@ -170,10 +172,29 @@ struct DisplayPage {
     if (this.isInteracting) {
       if (snapshot.frame && snapshot.fbW > 0 && snapshot.fbH > 0 &&
         snapshot.frameVersion !== this.lastFrameVersion) {
-        this.pendingFrame = snapshot.frame;
-        this.pendingFbW = snapshot.fbW;
-        this.pendingFbH = snapshot.fbH;
-        this.pendingVersion = snapshot.frameVersion;
+        this.fbW = snapshot.fbW;
+        this.fbH = snapshot.fbH;
+        const monitor = snapshot.monitors[this.monitorIndex];
+        if (monitor && monitor.w > 0 && monitor.h > 0) {
+          this.monitorRect = monitor;
+        } else {
+          this.monitorRect = {
+            x: 0,
+            y: 0,
+            w: Math.max(1, snapshot.fbW),
+            h: Math.max(1, snapshot.fbH)
+          };
+        }
+        this.interactSkipCounter++;
+        if (this.interactSkipCounter % 3 === 0) {
+          this.lastFrameVersion = snapshot.frameVersion;
+          await this.replacePixelMap(snapshot.frame, snapshot.fbW, snapshot.fbH);
+        } else {
+          this.pendingFrame = snapshot.frame;
+          this.pendingFbW = snapshot.fbW;
+          this.pendingFbH = snapshot.fbH;
+          this.pendingVersion = snapshot.frameVersion;
+        }
       }
       return;
     }
@@ -230,6 +251,7 @@ struct DisplayPage {
       this.pmW = width;
       this.pmH = height;
       this.pmVersion++;
+      this.cachedViewport = getMonitorImageMetrics(this.monitorRect, this.windowW, this.windowH, width, height);
     } catch (e) {
       console.error('DisplayPage replacePixelMap failed', e);
     } finally {
@@ -341,6 +363,7 @@ struct DisplayPage {
 
   private endInteraction(): void {
     this.isInteracting = false;
+    this.interactSkipCounter = 0;
     this.flushPendingFrame();
   }
 
@@ -516,11 +539,11 @@ struct DisplayPage {
 
       if (this.pm) {
         Image(this.pm)
-          .width(this.viewportMetrics().frame.w)
-          .height(this.viewportMetrics().frame.h)
+          .width(this.cachedViewport.frame.w)
+          .height(this.cachedViewport.frame.h)
           .position({
-            x: this.viewportMetrics().frame.x,
-            y: this.viewportMetrics().frame.y
+            x: this.cachedViewport.frame.x,
+            y: this.cachedViewport.frame.y
           })
           .interpolation(ImageInterpolation.High)
           .draggable(false);
