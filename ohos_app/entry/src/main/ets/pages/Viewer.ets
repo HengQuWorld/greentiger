@@ -3594,9 +3594,14 @@ struct Viewer {
     this.lastServerRefreshRequestTs = Date.now();
     this.bootstrapping = true;
     this.vncClient.requestUpdate?.(false);
-    const maxBootstrapAttempts = 256;
-    let bootstrapAttempts = 0;
-    while (bootstrapAttempts < maxBootstrapAttempts) {
+    const fbInfo = this.vncClient.getFramebufferInfo();
+    let accLeft = Number.MAX_SAFE_INTEGER;
+    let accTop = Number.MAX_SAFE_INTEGER;
+    let accRight = 0;
+    let accBottom = 0;
+    let receivedFirstUpdate = false;
+    let damageCoversFullFramebuffer = false;
+    for (let attempt = 0; attempt < 256; attempt++) {
       try {
         const prc = this.vncClient.process();
         if (prc !== 0) {
@@ -3611,11 +3616,19 @@ struct Viewer {
           if (this.pm) {
             await this.updatePixelMap(dmg);
           }
+          accLeft = Math.min(accLeft, dmg.x);
+          accTop = Math.min(accTop, dmg.y);
+          accRight = Math.max(accRight, dmg.x + dmg.w);
+          accBottom = Math.max(accBottom, dmg.y + dmg.h);
         }
-        if (this.vncClient.hasReceivedFirstUpdate?.()) {
+        receivedFirstUpdate = this.vncClient.hasReceivedFirstUpdate?.() ?? false;
+        damageCoversFullFramebuffer =
+          fbInfo.width > 0 && fbInfo.height > 0 &&
+          accLeft <= 0 && accTop <= 0 &&
+          accRight >= fbInfo.width && accBottom >= fbInfo.height;
+        if (receivedFirstUpdate && damageCoversFullFramebuffer) {
           break;
         }
-        bootstrapAttempts++;
         await new Promise<void>(resolve => setTimeout(resolve, 5));
       } catch (e) {
         this.lastError = (this.vncClient.getLastError() as string) ?? '';

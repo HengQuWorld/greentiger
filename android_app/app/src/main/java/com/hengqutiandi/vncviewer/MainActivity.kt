@@ -751,9 +751,15 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
                 serverName = client.getServerName().trim()
                 publishState { bootstrapping = true }
                 client.requestUpdate(incremental = false)
-                var bootstrapAttempts = 0
-                val maxBootstrapAttempts = 256
-                while (bootstrapAttempts < maxBootstrapAttempts) {
+                val fbInfo = client.getFramebufferInfo()
+                var accLeft = Int.MAX_VALUE
+                var accTop = Int.MAX_VALUE
+                var accRight = 0
+                var accBottom = 0
+                var receivedFirstUpdate = false
+                var damageCoversFullFramebuffer = false
+                var attempts = 0
+                while (attempts < 256 && !(receivedFirstUpdate && damageCoversFullFramebuffer)) {
                     val prc = client.process()
                     if (prc != 0) {
                         publishState { bootstrapping = false }
@@ -762,12 +768,20 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
                     val dmg = client.consumeDamage()
                     if (dmg != null) {
                         updateFrame(forceFull = false)
+                        accLeft = minOf(accLeft, dmg.x)
+                        accTop = minOf(accTop, dmg.y)
+                        accRight = maxOf(accRight, dmg.x + dmg.width)
+                        accBottom = maxOf(accBottom, dmg.y + dmg.height)
                     }
-                    if (client.hasReceivedFirstUpdate()) {
-                        break
+                    receivedFirstUpdate = client.hasReceivedFirstUpdate()
+                    damageCoversFullFramebuffer =
+                        fbInfo.width > 0 && fbInfo.height > 0 &&
+                        accLeft <= 0 && accTop <= 0 &&
+                        accRight >= fbInfo.width && accBottom >= fbInfo.height
+                    if (!damageCoversFullFramebuffer) {
+                        attempts++
+                        delay(5)
                     }
-                    bootstrapAttempts++
-                    delay(5)
                 }
                 updateFrame(forceFull = true)
                 publishState { bootstrapping = false }
