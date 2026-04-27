@@ -59,6 +59,7 @@ struct DisplayPage {
 
   private touchStartX: number = 0;
   private touchStartY: number = 0;
+  private touchStartTs: number = 0;
   private touchMoved: boolean = false;
   private touchDragging: boolean = false;
 
@@ -387,6 +388,7 @@ struct DisplayPage {
       this.beginInteraction();
       this.touchStartX = localX;
       this.touchStartY = localY;
+      this.touchStartTs = Date.now();
       this.touchMoved = false;
       this.touchDragging = false;
       this.safeSendPointer(p.x, p.y, 0);
@@ -407,11 +409,15 @@ struct DisplayPage {
     }
 
     if (type === TouchType.Up) {
+      const clickElapsed = Date.now() - this.touchStartTs;
       if (this.touchDragging) {
         this.touchDragging = false;
         this.safeSendPointer(p.x, p.y, 0);
-      } else if (!this.touchMoved) {
+      } else if (!this.touchMoved && clickElapsed <= 350) {
         this.safeSendPointer(p.x, p.y, 1);
+        this.safeSendPointer(p.x, p.y, 0);
+      } else if (!this.touchMoved && clickElapsed > 500) {
+        this.safeSendPointer(p.x, p.y, 4);
         this.safeSendPointer(p.x, p.y, 0);
       } else {
         this.safeSendPointer(p.x, p.y, 0);

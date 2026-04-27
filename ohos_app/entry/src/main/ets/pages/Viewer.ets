@@ -4989,6 +4989,10 @@ struct Viewer {
               this.safeSendPointer(p.x, p.y, 1);
               this.safeSendPointer(p.x, p.y, 0);
               this.requestTick();
+            } else if (!this.touchMoved && dt > 500) {
+              this.safeSendPointer(p.x, p.y, 4);
+              this.safeSendPointer(p.x, p.y, 0);
+              this.requestTick();
             } else {
               this.safeSendPointer(p.x, p.y, 0);
             }
