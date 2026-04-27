@@ -644,6 +644,15 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeGetSecurityLevel(JNIEnv*,
   return static_cast<jint>(vncclient_get_security_level(state->client));
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_hengqutiandi_vncviewer_native_VncClient_nativeHasReceivedFirstUpdate(JNIEnv*, jclass, jlong handle)
+{
+  auto* state = HandleToState(handle);
+  if (!state || !state->client)
+    return JNI_FALSE;
+  return vncclient_has_received_first_update(state->client) != 0 ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT jobjectArray JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeDetectMonitors(JNIEnv* env, jclass, jlong handle, jobjectArray fallbackArray) {
     auto* state = HandleToState(handle);

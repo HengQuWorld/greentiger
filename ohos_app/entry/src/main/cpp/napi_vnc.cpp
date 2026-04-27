@@ -1185,6 +1185,20 @@ static napi_value VncGetSecurityLevel(napi_env env, napi_callback_info info)
   return out;
 }
 
+static napi_value VncHasReceivedFirstUpdate(napi_env env, napi_callback_info info)
+{
+  napi_value jsthis = nullptr;
+  napi_get_cb_info(env, info, nullptr, nullptr, &jsthis, nullptr);
+  ClientState* st_ptr = nullptr;
+  napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
+  if (!st_ptr) return nullptr;
+  auto& st = *st_ptr;
+  bool has_received = st.client ? (vncclient_has_received_first_update(st.client) != 0) : false;
+  napi_value out;
+  napi_get_boolean(env, has_received, &out);
+  return out;
+}
+
 static napi_value VncIsSecure(napi_env env, napi_callback_info info)
 {
   napi_value jsthis = nullptr;
@@ -1319,6 +1333,7 @@ static napi_value Init(napi_env env, napi_value exports)
     { "getLastError", 0, VncGetLastError, 0, 0, 0, napi_default, 0 },
     { "isSecure", 0, VncIsSecure, 0, 0, 0, napi_default, 0 },
     { "getSecurityLevel", 0, VncGetSecurityLevel, 0, 0, 0, napi_default, 0 },
+    { "hasReceivedFirstUpdate", 0, VncHasReceivedFirstUpdate, 0, 0, 0, napi_default, 0 },
     { "detectMonitors", 0, VncDetectMonitors, 0, 0, 0, napi_default, 0 }
   };
   

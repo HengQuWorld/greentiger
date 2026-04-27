@@ -143,6 +143,8 @@ class VncClient : AutoCloseable {
 
     fun getSecurityLevel(): Int = nativeGetSecurityLevel(handle)
 
+    fun hasReceivedFirstUpdate(): Boolean = nativeHasReceivedFirstUpdate(handle)
+
     fun getServerName(): String = nativeGetServerName(handle)
 
     fun detectMonitors(fallback: Array<android.graphics.Rect>? = null): Array<android.graphics.Rect> = nativeDetectMonitors(handle, fallback)
@@ -260,6 +262,9 @@ class VncClient : AutoCloseable {
 
         @JvmStatic
         external fun nativeGetSecurityLevel(handle: Long): Int
+
+        @JvmStatic
+        external fun nativeHasReceivedFirstUpdate(handle: Long): Boolean
 
         @JvmStatic
         external fun nativeGetServerName(handle: Long): String

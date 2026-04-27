@@ -17,6 +17,7 @@ export class VncClient {
   getLastError(): string;
   isSecure(): boolean;
   getSecurityLevel(): number;
+  hasReceivedFirstUpdate(): boolean;
   setDebugOptions(enabled: boolean, level: number, byteOrder: number, pmFormat: number): void;
   getDebugInfo(): any;
   getDebugLog(clear: boolean): string;

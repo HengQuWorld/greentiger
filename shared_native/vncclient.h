@@ -66,6 +66,7 @@ int vncclient_get_fd(vncclient_handle* client);
 int vncclient_get_state(vncclient_handle* client);
 int vncclient_is_secure(vncclient_handle* client);
 int vncclient_get_security_level(vncclient_handle* client);
+int vncclient_has_received_first_update(vncclient_handle* client);
 const char* vncclient_get_name(vncclient_handle* client);
 
 int vncclient_process(vncclient_handle* client);

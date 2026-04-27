@@ -751,17 +751,26 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
                 serverName = client.getServerName().trim()
                 publishState { bootstrapping = true }
                 client.requestUpdate(incremental = false)
-                repeat(16) {
+                var bootstrapAttempts = 0
+                val maxBootstrapAttempts = 256
+                while (bootstrapAttempts < maxBootstrapAttempts) {
                     val prc = client.process()
-                    if (prc != 0) return false
+                    if (prc != 0) {
+                        publishState { bootstrapping = false }
+                        return false
+                    }
                     val dmg = client.consumeDamage()
                     if (dmg != null) {
                         updateFrame(forceFull = false)
                     }
+                    if (client.hasReceivedFirstUpdate()) {
+                        break
+                    }
+                    bootstrapAttempts++
+                    delay(5)
                 }
                 updateFrame(forceFull = true)
                 publishState { bootstrapping = false }
-                // 连接成功后启动独立 step 循环，不依赖 Compose/Activity 生命周期
                 startStepLoop()
             }
             connected

@@ -280,6 +280,10 @@ public:
     return 0;
   }
 
+  bool hasReceivedFirstUpdate() const {
+    return rfb::CConnection::hasReceivedFirstUpdate();
+  }
+
   bool showMsgBox(rfb::MsgBoxFlags flags, const char* title,
                   const char* text) override
   {
@@ -778,6 +782,11 @@ int vncclient_is_secure(vncclient_handle* client) {
 int vncclient_get_security_level(vncclient_handle* client) {
   if (!client || !client->impl.conn) return 0;
   return getEffectiveSecurityLevel(&client->impl);
+}
+
+int vncclient_has_received_first_update(vncclient_handle* client) {
+  if (!validClient(client) || !client->impl.conn) return 0;
+  return client->impl.conn->hasReceivedFirstUpdate() ? 1 : 0;
 }
 
 const char* vncclient_get_name(vncclient_handle* client) {

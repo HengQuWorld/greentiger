@@ -59,6 +59,7 @@ interface VncClientData {
   getLastError(): string;
   isSecure?(): boolean;
   getSecurityLevel?(): number;
+  hasReceivedFirstUpdate?(): boolean;
   detectMonitors?(fallbackRects?: VncRect[]): VncRect[];
   setDebugOptions(enabled: boolean, level: number, byteOrder: number, pmFormat: number): void;
   getDebugInfo(): VncDebugInfo;
@@ -3593,7 +3594,9 @@ struct Viewer {
     this.lastServerRefreshRequestTs = Date.now();
     this.bootstrapping = true;
     this.vncClient.requestUpdate?.(false);
-    for (let i = 0; i < 16; i++) {
+    const maxBootstrapAttempts = 256;
+    let bootstrapAttempts = 0;
+    while (bootstrapAttempts < maxBootstrapAttempts) {
       try {
         const prc = this.vncClient.process();
         if (prc !== 0) {
@@ -3609,6 +3612,11 @@ struct Viewer {
             await this.updatePixelMap(dmg);
           }
         }
+        if (this.vncClient.hasReceivedFirstUpdate?.()) {
+          break;
+        }
+        bootstrapAttempts++;
+        await new Promise<void>(resolve => setTimeout(resolve, 5));
       } catch (e) {
         this.lastError = (this.vncClient.getLastError() as string) ?? '';
         this.disconnect(true);
