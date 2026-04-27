@@ -195,6 +195,15 @@ private sealed interface MarkdownBlock {
     data class Bullet(val text: String) : MarkdownBlock
 }
 
+private fun Bitmap?.safeRecycle() {
+    if (this != null && !isRecycled) {
+        try {
+            recycle()
+        } catch (_: Throwable) {
+        }
+    }
+}
+
 private fun loadBundledTextAsset(context: Context, assetName: String, documentName: String): String {
     return runCatching {
         context.assets.open(assetName).bufferedReader().use { it.readText() }
@@ -654,6 +663,8 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         private set
     var frameVersion by mutableIntStateOf(0)
         private set
+    var displayTick by mutableIntStateOf(0)
+        private set
     var securityLevel by mutableIntStateOf(0)
         private set
     var serverName by mutableStateOf("")
@@ -672,6 +683,10 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         private set
     var multiWindowSessionId by mutableStateOf("")
         private set
+
+    var isInteracting by mutableStateOf(false)
+        private set
+    private val frameThrottle = InteractFrameThrottle()
 
     // 独立协程作用域，不依赖 Compose/Activity 生命周期，确保分屏时连接不中断
     private val stepScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -777,7 +792,7 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         }
     }
 
-    fun step(): Boolean {
+    suspend fun step(): Boolean {
         if (!connected) {
             return false
         }
@@ -803,7 +818,8 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
                     lastServerRefreshRequestTs = now
                 }
                 val needsFullSync = bitmap == null || (damage == null && now - lastFullFrameSyncTs >= fallbackFullFrameSyncMs)
-                if (damage != null || needsFullSync) {
+                val interactForceSync = isInteracting && now - lastFullFrameSyncTs >= 50L
+                if (damage != null || needsFullSync || interactForceSync) {
                     updateFrame(forceFull = needsFullSync)
                 }
                 true
@@ -824,6 +840,20 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         lastPointerX = x
         lastPointerY = y
         client.sendPointer(x, y, mask)
+    }
+
+    fun beginInteraction() {
+        if (!isInteracting) {
+            isInteracting = true
+            frameThrottle.begin()
+        }
+    }
+
+    fun endInteraction() {
+        if (isInteracting) {
+            isInteracting = false
+            frameThrottle.end()
+        }
     }
 
     fun sendClick(x: Int, y: Int, mask: Int) {
@@ -916,7 +946,7 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         lastFramebufferUpdateTs = 0L
         lastServerRefreshRequestTs = 0L
         publishState {
-            bitmap?.recycle()
+            bitmap?.safeRecycle()
             bitmap = null
             frameVersion += 1
         }
@@ -930,7 +960,7 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
             client.close()
         } catch (_: Throwable) {
         }
-        bitmap?.recycle()
+        bitmap?.safeRecycle()
         bitmap = null
     }
 
@@ -1005,53 +1035,59 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         }
     }
 
-    private fun updateFrame(forceFull: Boolean = false) {
+    private suspend fun updateFrame(forceFull: Boolean = false) {
         val info = client.getFramebufferInfo()
         maybeRefreshMonitors(info, forceFull, System.currentTimeMillis())
         if (info.width <= 0 || info.height <= 0) {
             return
         }
-        val target = publishState {
-            if (bitmap?.width == info.width && bitmap?.height == info.height) {
-                bitmap
-            } else {
-                bitmap?.recycle()
-                Bitmap.createBitmap(info.width, info.height, Bitmap.Config.ARGB_8888).also {
-                    bitmap = it
+        withContext(Dispatchers.Main) {
+            val target = publishState {
+                if (bitmap?.width == info.width && bitmap?.height == info.height) {
+                    bitmap
+                } else {
+                    Bitmap.createBitmap(info.width, info.height, Bitmap.Config.ARGB_8888).also {
+                        bitmap = it
+                    }
                 }
-            }
-        } ?: return
+            } ?: return@withContext
 
-        if (!client.blitFrameToBitmap(target)) {
-            return
-        }
-        val now = System.currentTimeMillis()
-        lastFullFrameSyncTs = now
-        lastFramebufferUpdateTs = now
-        publishState {
-            frameVersion += 1
-        }
-        if (multiWindowSessionId.isNotBlank()) {
-            val sharedMonitors = monitors.map { it.toSharedRect() }
-            val sourceBitmap = bitmap
-            val sharedFrame = if (sourceBitmap != null && !sourceBitmap.isRecycled) {
-                try {
-                    sourceBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                } catch (_: Throwable) {
+            if (!client.blitFrameToBitmap(target)) {
+                return@withContext
+            }
+            val now = System.currentTimeMillis()
+            lastFullFrameSyncTs = now
+            lastFramebufferUpdateTs = now
+
+            publishState {
+                frameVersion += 1
+                displayTick += 1
+            }
+            if (isInteracting && !frameThrottle.shouldRender()) {
+                return@withContext
+            }
+            if (multiWindowSessionId.isNotBlank()) {
+                val sharedMonitors = monitors.map { it.toSharedRect() }
+                val sourceBitmap = bitmap
+                val sharedFrame = if (sourceBitmap != null && !sourceBitmap.isRecycled) {
+                    try {
+                        sourceBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                    } catch (_: Throwable) {
+                        null
+                    }
+                } else {
                     null
                 }
-            } else {
-                null
+                viewerMultiWindowStore.publishFrame(
+                    sessionId = multiWindowSessionId,
+                    title = serverName,
+                    connected = true,
+                    fbW = info.width,
+                    fbH = info.height,
+                    frame = sharedFrame,
+                    monitors = sharedMonitors
+                )
             }
-            viewerMultiWindowStore.publishFrame(
-                sessionId = multiWindowSessionId,
-                title = serverName,
-                connected = true,
-                fbW = info.width,
-                fbH = info.height,
-                frame = sharedFrame,
-                monitors = sharedMonitors
-            )
         }
     }
 }
@@ -2200,6 +2236,7 @@ private fun ViewerScreen(
     var zoomOffsetY by rememberSaveable { mutableStateOf(0f) }
     val currentBitmap = session.bitmap
     val frameSize = IntSize(currentBitmap?.width ?: 0, currentBitmap?.height ?: 0)
+    val frameVersion = session.frameVersion
     val titleText = remember(connName, address) {
         normalizeConnName(connName, address).ifBlank { address.ifBlank { "Viewer" } }
     }
@@ -2561,7 +2598,7 @@ private fun ViewerScreen(
         }
     }
 
-    val imageBitmap = remember(currentBitmap, session.frameVersion) { currentBitmap?.asImageBitmap() }
+    val imageBitmap = remember(currentBitmap, frameVersion) { currentBitmap?.asImageBitmap() }
     val frameReady = imageBitmap != null
     val shouldRenderChrome = !session.connected || showControls || showDisplaySheet || !frameReady || chromeVisible
     val shouldShowChromeHandle = session.connected && !showControls && !showDisplaySheet && frameReady && !chromeVisible
@@ -2783,6 +2820,7 @@ private fun ViewerScreen(
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    val frameImageView = remember { mutableStateOf<android.widget.ImageView?>(null) }
                     AndroidView(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -2796,12 +2834,23 @@ private fun ViewerScreen(
                                 translationX = zoomState.offsetX
                                 translationY = zoomState.offsetY
                             },
-                        factory = { android.widget.ImageView(it) },
-                        update = { view ->
-                            view.setImageBitmap(currentBitmap)
-                            view.scaleType = android.widget.ImageView.ScaleType.FIT_XY
-                        }
+                        factory = {
+                            android.widget.ImageView(it).apply {
+                                scaleType = android.widget.ImageView.ScaleType.FIT_XY
+                            }.also { frameImageView.value = it }
+                        },
+                        update = { }
                     )
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        androidx.compose.runtime.snapshotFlow { session.frameVersion }
+                            .collect {
+                                val iv = frameImageView.value
+                                val bmp = session.bitmap
+                                if (iv != null && bmp != null && !bmp.isRecycled) {
+                                    iv.setImageBitmap(bmp)
+                                }
+                            }
+                    }
                     if (!isEditingMonitors) {
                         focusedMonitorBounds?.let { bounds ->
                             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -5642,12 +5691,20 @@ private fun handleViewerMotionEvent(
             MotionEvent.ACTION_UP,
             MotionEvent.ACTION_BUTTON_PRESS,
             MotionEvent.ACTION_BUTTON_RELEASE -> {
-                session.sendPointer(remote.first, remote.second, pointerMaskFromButtons(event.buttonState))
+                val mask = pointerMaskFromButtons(event.buttonState)
+                if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS) {
+                    session.beginInteraction()
+                }
+                if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_BUTTON_RELEASE) {
+                    if (mask == 0) session.endInteraction()
+                }
+                session.sendPointer(remote.first, remote.second, mask)
                 return true
             }
 
             MotionEvent.ACTION_CANCEL -> {
                 session.sendPointer(remote.first, remote.second, 0)
+                session.endInteraction()
                 return true
             }
         }
@@ -5740,6 +5797,7 @@ private fun handleViewerMotionEvent(
             inputState.touchStartTs = event.eventTime
             inputState.touchMoved = false
             inputState.touchDragging = false
+            session.beginInteraction()
             remote?.let { session.sendPointer(it.first, it.second, 0) }
             return true
         }
@@ -5776,7 +5834,6 @@ private fun handleViewerMotionEvent(
                 } else if (!inputState.touchMoved && clickElapsed <= 350L) {
                     session.sendClick(current.first, current.second, 1)
                 } else if (!inputState.touchMoved && clickElapsed > 500L) {
-                    // 长按触发鼠标右键
                     session.sendClick(current.first, current.second, 4)
                 } else {
                     session.sendPointer(current.first, current.second, 0)
@@ -5786,6 +5843,7 @@ private fun handleViewerMotionEvent(
             inputState.touchMoved = false
             inputState.touchScrollActive = false
             inputState.touchScrollResidualY = 0f
+            session.endInteraction()
             return true
         }
 
@@ -5800,6 +5858,7 @@ private fun handleViewerMotionEvent(
             inputState.touchMoved = false
             inputState.touchScrollActive = false
             inputState.touchScrollResidualY = 0f
+            session.endInteraction()
             return true
         }
     }

@@ -211,7 +211,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     var isInteracting by remember { mutableStateOf(false) }
     var pendingBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var pendingVersion by remember { mutableIntStateOf(-1) }
-    var interactSkipCounter by remember { mutableIntStateOf(0) }
+    val frameThrottle = remember { InteractFrameThrottle() }
 
     val focusRequester = remember { FocusRequester() }
     var softInputFieldValue by remember { mutableStateOf(TextFieldValue(" ")) }
@@ -240,14 +240,13 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                         fbW = curFbW
                         fbH = curFbH
                         monitorRect = curMonitor
-                        interactSkipCounter++
-                        if (interactSkipCounter % 3 == 0) {
+                        pendingBitmap = snapshot.frame
+                        pendingVersion = snapshot.frameVersion
+                        if (frameThrottle.shouldRender()) {
                             val layout = computeIntLayout(curMonitor, windowW, windowH, curFbW, curFbH)
                             frameSnapshot = FrameSnapshot(snapshot.frame.asImageBitmap(), layout)
                             frameVersion = snapshot.frameVersion
-                        } else {
-                            pendingBitmap = snapshot.frame
-                            pendingVersion = snapshot.frameVersion
+                            pendingBitmap = null
                         }
                     }
                 } else {
@@ -272,7 +271,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     }
                 }
             }
-            delay(66)
+            delay(if (isInteracting) 50L else 33L)
         }
     }
 
@@ -288,7 +287,12 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     fun safeSendPointer(x: Int, y: Int, mask: Int, force: Boolean = false) {
         if (!connected || sessionId.isBlank()) return
-        if (!force && lastSentX == x && lastSentY == y && lastSentMask == mask) return
+        if (!force) {
+            if (lastSentX == x && lastSentY == y && lastSentMask == mask) return
+            if (lastSentMask == mask && mask != 0 &&
+                abs(x - lastSentX) <= 1 && abs(y - lastSentY) <= 1
+            ) return
+        }
         val client = store.getVncClient(sessionId) ?: return
         try {
             client.sendPointer(x, y, mask)
@@ -339,11 +343,12 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     fun beginInteraction() {
         isInteracting = true
+        frameThrottle.begin()
     }
 
     fun endInteraction() {
         isInteracting = false
-        interactSkipCounter = 0
+        frameThrottle.end()
         pendingBitmap?.let { bmp ->
             val layout = computeIntLayout(monitorRect, windowW, windowH, fbW, fbH)
             frameSnapshot = FrameSnapshot(bmp.asImageBitmap(), layout)

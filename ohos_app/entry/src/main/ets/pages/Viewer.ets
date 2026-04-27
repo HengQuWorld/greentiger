@@ -19,6 +19,7 @@ import {
 } from '../utils/ConnectionUtils';
 import { keySymFromEvent } from '../utils/KeyMap';
 import { SharedViewerRect, VncClientLike, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
+import { InteractFrameThrottle } from '../utils/ViewerCommonUtils';
 import { VncClient } from 'libvncviewer.so';
 
 interface ClickEvent {
@@ -284,6 +285,9 @@ struct Viewer {
   private fbStride: number = 0;
   @State private vncState: number = -1;
   private lastMask: number = 0;
+  private isInteracting: boolean = false;
+  private frameThrottle: InteractFrameThrottle = new InteractFrameThrottle();
+  private pendingFrameCache: ArrayBuffer | null = null;
   private timerId: number = -1;
   private ticking: boolean = false;
   private tickQueued: boolean = false;
@@ -3159,6 +3163,55 @@ struct Viewer {
     }
   }
 
+  private beginInteraction(): void {
+    if (!this.isInteracting) {
+      this.isInteracting = true;
+      this.frameThrottle.begin();
+    }
+  }
+
+  private endInteraction(): void {
+    if (this.isInteracting) {
+      this.isInteracting = false;
+      this.frameThrottle.end();
+      this.flushPendingFrameCache();
+    }
+  }
+
+  private flushPendingFrameCache(): void {
+    if (!this.pendingFrameCache) return;
+    const buf = this.pendingFrameCache;
+    this.pendingFrameCache = null;
+    this.frameCache = buf;
+    void this.presentFrameCacheDirect();
+  }
+
+  private async presentFrameCacheDirect(): Promise<boolean> {
+    if (!this.connected || !this.pm || !this.frameCache) return false;
+    if (!this.pmBack || this.pmW !== this.fbW || this.pmH !== this.fbH) {
+      this.releasePixelMap(this.pmBack);
+      this.pmBack = undefined;
+      try {
+        this.pmBack = await this.createPixelMapFromBuffer(this.frameCache);
+      } catch (e) {
+        this.pmBack = undefined;
+        console.error('Failed to create back PixelMap', e);
+        return false;
+      }
+    }
+    if (!this.writeBufferToPixelMap(this.pmBack, this.frameCache, null)) {
+      return false;
+    }
+    const currentPm = this.pm;
+    this.pm = this.pmBack;
+    this.pmBack = currentPm;
+    this.pmW = this.fbW;
+    this.pmH = this.fbH;
+    this.pmVersion++;
+    this.lastFullFrameSyncTs = Date.now();
+    return true;
+  }
+
   private safeSendKey(keysym: number, down: boolean): void {
     if (!this.connected) return;
     try {
@@ -3426,6 +3479,12 @@ struct Viewer {
 
   private async presentFrameCache(): Promise<boolean> {
     if (!this.connected || !this.pm || !this.frameCache) return false;
+    if (this.isInteracting) {
+      this.pendingFrameCache = this.frameCache;
+      if (!this.frameThrottle.shouldRender()) {
+        return true;
+      }
+    }
     if (!this.pmBack || this.pmW !== this.fbW || this.pmH !== this.fbH) {
       this.releasePixelMap(this.pmBack);
       this.pmBack = undefined;
@@ -4902,6 +4961,7 @@ struct Viewer {
             this.touchStartTs = now;
             this.touchMoved = false;
             this.touchDragging = false;
+            this.beginInteraction();
             this.safeSendPointer(p.x, p.y, 0);
             return;
           }
@@ -4933,6 +4993,7 @@ struct Viewer {
               this.safeSendPointer(p.x, p.y, 0);
             }
             this.touchDragging = false;
+            this.endInteraction();
             return;
           }
 
@@ -4941,6 +5002,7 @@ struct Viewer {
             this.endTouchScroll();
             this.safeSendPointer(p.x, p.y, 0);
             this.requestTick();
+            this.endInteraction();
           }
         })
         .onMouse((ev: MouseEvent) => {
@@ -4971,8 +5033,14 @@ struct Viewer {
             return;
           }
 
-          if (action === MouseAction.Press) this.lastMask |= bit;
-          if (action === MouseAction.Release) this.lastMask &= ~bit;
+          if (action === MouseAction.Press) {
+            this.lastMask |= bit;
+            this.beginInteraction();
+          }
+          if (action === MouseAction.Release) {
+            this.lastMask &= ~bit;
+            if (this.lastMask === 0) this.endInteraction();
+          }
           if (action === MouseAction.Press) this.requestInputFocus();
 
           const p = this.mapToRemotePoint(localX, localY);
@@ -4987,7 +5055,10 @@ struct Viewer {
         })
         .onHover((isHover: boolean) => {
           if (!this.connected) return;
-          if (!isHover) this.lastMask = 0;
+          if (!isHover) {
+            this.lastMask = 0;
+            this.endInteraction();
+          }
           if (!isHover) this.scheduleChromeAutoHide();
         })
         .onAxisEvent((ev: AxisEvent) => {

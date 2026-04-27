@@ -98,3 +98,38 @@ export function mapLocalToRemote(localX: number, localY: number, monitorRect: Sh
     y: Math.max(0, Math.min(fbH - 1, Math.floor(remoteY)))
   };
 }
+
+export class InteractFrameThrottle {
+  private lastRenderTime: number = 0;
+  private frameCount: number = 0;
+  private static readonly MIN_RENDER_INTERVAL_MS: number = 80;
+  private static readonly MAX_SKIP_FRAMES: number = 6;
+
+  begin(): void {
+    this.frameCount = 0;
+    this.lastRenderTime = 0;
+  }
+
+  end(): void {
+    this.frameCount = 0;
+    this.lastRenderTime = 0;
+  }
+
+  shouldRender(): boolean {
+    const now = Date.now();
+    const elapsed = now - this.lastRenderTime;
+    const should = this.frameCount === 0 ||
+      elapsed >= InteractFrameThrottle.MIN_RENDER_INTERVAL_MS ||
+      this.frameCount > InteractFrameThrottle.MAX_SKIP_FRAMES;
+    if (should) {
+      this.lastRenderTime = now;
+      this.frameCount++;
+    }
+    return should;
+  }
+
+  reset(): void {
+    this.frameCount = 0;
+    this.lastRenderTime = 0;
+  }
+}

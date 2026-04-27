@@ -27,6 +27,7 @@ struct DamageRect {
 struct ClientState {
   vncclient_handle* client = nullptr;
   std::mutex mu;
+  std::mutex clientMu;
   std::optional<DamageRect> damage;
   std::string user;
   std::string password;
@@ -270,9 +271,12 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeDestroy(JNIEnv*, jclass, 
   if (!state)
     return;
 
-  if (state->client) {
-    vncclient_destroy(state->client);
-    state->client = nullptr;
+  {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
+    if (state->client) {
+      vncclient_destroy(state->client);
+      state->client = nullptr;
+    }
   }
   delete state;
 }
@@ -347,6 +351,7 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeDisconnect(JNIEnv*, jclas
 {
   auto* state = HandleToState(handle);
   if (state && state->client) {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
     vncclient_disconnect(state->client);
     std::lock_guard<std::mutex> lock(state->mu);
     state->keyQueue.clear();
@@ -373,24 +378,29 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeProcess(JNIEnv*, jclass, 
     std::swap(clipboards, state->clipboardQueue);
   }
 
-  for (const auto& ev : clipboards) {
-    if (ev.isRequest) {
-      vncclient_request_clipboard(state->client);
-    } else {
-      vncclient_announce_clipboard(state->client, 1);
-      vncclient_send_clipboard(state->client, ev.text.c_str());
+  {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
+    if (!state->client) return -1;
+
+    for (const auto& ev : clipboards) {
+      if (ev.isRequest) {
+        vncclient_request_clipboard(state->client);
+      } else {
+        vncclient_announce_clipboard(state->client, 1);
+        vncclient_send_clipboard(state->client, ev.text.c_str());
+      }
     }
-  }
 
-  for (const auto& ev : keys) {
-    if (ev.down)
-      vncclient_send_key_press(state->client, ev.keysym, 0, static_cast<uint32_t>(ev.keysym));
-    else
-      vncclient_send_key_release(state->client, ev.keysym);
-  }
+    for (const auto& ev : keys) {
+      if (ev.down)
+        vncclient_send_key_press(state->client, ev.keysym, 0, static_cast<uint32_t>(ev.keysym));
+      else
+        vncclient_send_key_release(state->client, ev.keysym);
+    }
 
-  for (const auto& ev : pointers) {
-    vncclient_send_pointer(state->client, ev.x, ev.y, static_cast<uint16_t>(ev.mask));
+    for (const auto& ev : pointers) {
+      vncclient_send_pointer(state->client, ev.x, ev.y, static_cast<uint16_t>(ev.mask));
+    }
   }
 
   return static_cast<jint>(vncclient_process(state->client));

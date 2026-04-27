@@ -265,3 +265,41 @@ fun handleViewerMouseEvent(
     }
     return false
 }
+
+class InteractFrameThrottle {
+    private var lastRenderTime: Long = 0L
+    private var frameCount: Int = 0
+
+    companion object {
+        private const val MIN_RENDER_INTERVAL_MS: Long = 80L
+        private const val MAX_SKIP_FRAMES: Int = 6
+    }
+
+    fun begin() {
+        frameCount = 0
+        lastRenderTime = 0L
+    }
+
+    fun end() {
+        frameCount = 0
+        lastRenderTime = 0L
+    }
+
+    fun shouldRender(): Boolean {
+        val now = System.currentTimeMillis()
+        val elapsed = now - lastRenderTime
+        val should = frameCount == 0 ||
+            elapsed >= MIN_RENDER_INTERVAL_MS ||
+            frameCount > MAX_SKIP_FRAMES
+        if (should) {
+            lastRenderTime = now
+            frameCount++
+        }
+        return should
+    }
+
+    fun reset() {
+        frameCount = 0
+        lastRenderTime = 0L
+    }
+}

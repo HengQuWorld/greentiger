@@ -4,7 +4,6 @@ import { KeyCode } from '@ohos.multimodalInput.keyCode';
 import { SharedViewerSessionSnapshot, SharedViewerRect, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
 import { keySymFromEvent } from '../utils/KeyMap';
 import {
-  cloneFrameBuffer,
   releasePixelMap,
   createPixelMapFromBuffer,
   getMonitorImageMetrics,
@@ -14,7 +13,8 @@ import {
   VNC_SCROLL_UP,
   VNC_SCROLL_DOWN,
   type ViewportTarget,
-  type RemotePoint
+  type RemotePoint,
+  InteractFrameThrottle
 } from '../utils/ViewerCommonUtils';
 
 export interface DisplayLaunchParams {
@@ -49,6 +49,7 @@ struct DisplayPage {
   private monitorIndex: number = 0;
   private lastFrameVersion: number = -1;
   private timerId: number = -1;
+  private loopStopped: boolean = false;
   private pmW: number = 0;
   private pmH: number = 0;
 
@@ -68,7 +69,7 @@ struct DisplayPage {
   private remoteChineseMode: boolean = false;
 
   private isInteracting: boolean = false;
-  private interactSkipCounter: number = 0;
+  private frameThrottle: InteractFrameThrottle = new InteractFrameThrottle();
   private pendingFrame: ArrayBuffer | null = null;
   private pendingFbW: number = 0;
   private pendingFbH: number = 0;
@@ -142,17 +143,26 @@ struct DisplayPage {
   }
 
   private startLoop(): void {
-    this.stopLoop();
-    this.timerId = setInterval(() => {
-      void this.syncOnce();
-    }, 66);
+    this.loopStopped = false;
+    this.scheduleNextSync();
   }
 
   private stopLoop(): void {
+    this.loopStopped = true;
     if (this.timerId !== -1) {
-      clearInterval(this.timerId);
+      clearTimeout(this.timerId);
       this.timerId = -1;
     }
+  }
+
+  private scheduleNextSync(): void {
+    if (this.loopStopped) return;
+    const interval = this.isInteracting ? 50 : 33;
+    this.timerId = setTimeout(() => {
+      this.timerId = -1;
+      if (this.loopStopped) return;
+      void this.syncOnce().then(() => this.scheduleNextSync());
+    }, interval) as number;
   }
 
   private async syncOnce(): Promise<void> {
@@ -185,15 +195,14 @@ struct DisplayPage {
             h: Math.max(1, snapshot.fbH)
           };
         }
-        this.interactSkipCounter++;
-        if (this.interactSkipCounter % 3 === 0) {
+        this.pendingFrame = snapshot.frame;
+        this.pendingFbW = snapshot.fbW;
+        this.pendingFbH = snapshot.fbH;
+        this.pendingVersion = snapshot.frameVersion;
+        if (this.frameThrottle.shouldRender()) {
           this.lastFrameVersion = snapshot.frameVersion;
           await this.replacePixelMap(snapshot.frame, snapshot.fbW, snapshot.fbH);
-        } else {
-          this.pendingFrame = snapshot.frame;
-          this.pendingFbW = snapshot.fbW;
-          this.pendingFbH = snapshot.fbH;
-          this.pendingVersion = snapshot.frameVersion;
+          this.pendingFrame = null;
         }
       }
       return;
@@ -243,10 +252,9 @@ struct DisplayPage {
   }
 
   private async replacePixelMap(frame: ArrayBuffer, width: number, height: number): Promise<void> {
-    const cloned = cloneFrameBuffer(frame);
     const prevPm = this.pm;
     try {
-      const nextPm = await createPixelMapFromBuffer(cloned, width, height);
+      const nextPm = await createPixelMapFromBuffer(frame, width, height);
       this.pm = nextPm;
       this.pmW = width;
       this.pmH = height;
@@ -269,11 +277,10 @@ struct DisplayPage {
 
   private safeSendPointer(x: number, y: number, mask: number, force: boolean = false): void {
     if (!this.connected || !this.sessionId) return;
-    if (!force &&
-      this.lastSentX === x &&
-      this.lastSentY === y &&
-      this.lastSentMask === mask) {
-      return;
+    if (!force) {
+      if (this.lastSentX === x && this.lastSentY === y && this.lastSentMask === mask) return;
+      if (this.lastSentMask === mask && mask !== 0 &&
+        Math.abs(x - this.lastSentX) <= 1 && Math.abs(y - this.lastSentY) <= 1) return;
     }
     const client = viewerMultiWindowStore.getVncClient(this.sessionId);
     if (!client) return;
@@ -359,11 +366,12 @@ struct DisplayPage {
 
   private beginInteraction(): void {
     this.isInteracting = true;
+    this.frameThrottle.begin();
   }
 
   private endInteraction(): void {
     this.isInteracting = false;
-    this.interactSkipCounter = 0;
+    this.frameThrottle.end();
     this.flushPendingFrame();
   }
 
