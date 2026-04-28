@@ -109,6 +109,7 @@ main() {
     cd "${OHOS_DIR}"
     env -u DEVECO_SDK_HOME -u HOS_SDK_HOME -u OHOS_SDK_HOME -u OHOS_BASE_SDK_HOME \
       DEVECO_SDK_HOME="${sdk_dir}" \
+      SIGN_ACTIVE="${SIGN_ACTIVE:-}" \
       "${hvigor_bin}" "$@"
   )
 }

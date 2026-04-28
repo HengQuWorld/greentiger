@@ -52,12 +52,22 @@ function getSigningConfig() {
       }
     });
   }
-  
-  // 优先从环境变量读取激活的签名环境，其次从配置读取，默认使用 debug
-  const activeMode = process.env.SIGN_ACTIVE || props['sign.active'] || 'debug';
+
+  const signActiveFromEnv = process.env.SIGN_ACTIVE;
+  const defaultSignActive = props['sign.active'] || 'debug';
+
+  let activeMode: string;
+  if (signActiveFromEnv) {
+    activeMode = signActiveFromEnv;
+  } else if (props['sign.release.storeFile']) {
+    activeMode = 'release';
+  } else {
+    activeMode = defaultSignActive;
+  }
+
   const prefix = `sign.${activeMode}.`;
-  
-  // 如果没有找到对应的 storeFile，则不注入签名（系统会回退使用默认或不签名）
+  console.log(`[Build] Signing config - activeMode: ${activeMode}`);
+
   if (!props[`${prefix}storeFile`]) {
     return undefined;
   }
