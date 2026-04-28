@@ -56,6 +56,5 @@ android_app/build/
 android_app/app/build/
 android_app/app/.cxx/
 android_app/captures/
-certs/green/
-certs/android/
-certs.zip
+certs/
+log/
