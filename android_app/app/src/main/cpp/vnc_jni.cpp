@@ -98,14 +98,17 @@ static bool NormalizeCopyRect(int fbWidth, int fbHeight, int x, int y, int w, in
 
 static jbyteArray CopyFramebuffer(JNIEnv* env, ClientState* state, std::optional<DamageRect> rect)
 {
-  if (!state || !state->client)
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
     return nullptr;
 
   int width = 0;
   int height = 0;
   int stride = 0;
   const uint8_t* rgba = nullptr;
-  if (vncclient_get_framebuffer(state->client, &width, &height, &stride, &rgba) != 0)
+  int fbResult = vncclient_get_framebuffer(state->client, &width, &height, &stride, &rgba);
+
+  if (fbResult != 0)
     return nullptr;
   if (width <= 0 || height <= 0 || !rgba || stride < width * 4)
     return nullptr;
@@ -137,14 +140,20 @@ static jbyteArray CopyFramebuffer(JNIEnv* env, ClientState* state, std::optional
 static jint BlitFramebufferToBitmap(
   JNIEnv* env, ClientState* state, jobject bitmap, std::optional<DamageRect> rect)
 {
-  if (!env || !state || !state->client || !bitmap)
+  if (!env || !bitmap)
+    return -1;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
     return -1;
 
   int width = 0;
   int height = 0;
   int stride = 0;
   const uint8_t* rgba = nullptr;
-  if (vncclient_get_framebuffer(state->client, &width, &height, &stride, &rgba) != 0)
+  int fbResult = vncclient_get_framebuffer(state->client, &width, &height, &stride, &rgba);
+
+  if (fbResult != 0)
     return -1;
   if (width <= 0 || height <= 0 || !rgba || stride < width * 4)
     return -1;
@@ -286,7 +295,11 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeConnect(
   JNIEnv* env, jclass, jlong handle, jstring host, jint port, jstring user, jstring password)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
+    return -1;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
     return -1;
 
   {
@@ -296,7 +309,8 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeConnect(
   }
 
   const std::string hostValue = JStringToUtf8(env, host);
-  return static_cast<jint>(vncclient_connect(state->client, hostValue.c_str(), static_cast<int>(port)));
+  jint result = static_cast<jint>(vncclient_connect(state->client, hostValue.c_str(), static_cast<int>(port)));
+  return result;
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -308,7 +322,11 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeSetSshTunnel(
   jboolean strictHostKeyCheck, jstring remoteHost, jint remotePort)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
+    return -1;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
     return -1;
 
   const std::string sshHostValue = JStringToUtf8(env, sshHost);
@@ -334,7 +352,8 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeSetSshTunnel(
   config.strict_host_key_check = strictHostKeyCheck == JNI_TRUE ? 1 : 0;
   config.remote_host = remoteHostValue.c_str();
   config.remote_port = static_cast<int>(remotePort);
-  return static_cast<jint>(vncclient_set_ssh_tunnel(state->client, &config));
+  jint result = static_cast<jint>(vncclient_set_ssh_tunnel(state->client, &config));
+  return result;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -342,17 +361,29 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeClearSshTunnel(
   JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (state && state->client)
+  if (!state)
+    return;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (state->client) {
     vncclient_clear_ssh_tunnel(state->client);
+  }
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeDisconnect(JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (state && state->client) {
-    std::lock_guard<std::mutex> clientLock(state->clientMu);
-    vncclient_disconnect(state->client);
+  if (!state)
+    return;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return;
+
+  vncclient_disconnect(state->client);
+
+  {
     std::lock_guard<std::mutex> lock(state->mu);
     state->keyQueue.clear();
     state->pointerQueue.clear();
@@ -364,7 +395,7 @@ extern "C" JNIEXPORT jint JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeProcess(JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return -1;
 
   std::vector<ClientState::KeyEvent> keys;
@@ -378,29 +409,28 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeProcess(JNIEnv*, jclass, 
     std::swap(clipboards, state->clipboardQueue);
   }
 
-  {
-    std::lock_guard<std::mutex> clientLock(state->clientMu);
-    if (!state->client) return -1;
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return -1;
 
-    for (const auto& ev : clipboards) {
-      if (ev.isRequest) {
-        vncclient_request_clipboard(state->client);
-      } else {
-        vncclient_announce_clipboard(state->client, 1);
-        vncclient_send_clipboard(state->client, ev.text.c_str());
-      }
+  for (const auto& ev : clipboards) {
+    if (ev.isRequest) {
+      vncclient_request_clipboard(state->client);
+    } else {
+      vncclient_announce_clipboard(state->client, 1);
+      vncclient_send_clipboard(state->client, ev.text.c_str());
     }
+  }
 
-    for (const auto& ev : keys) {
-      if (ev.down)
-        vncclient_send_key_press(state->client, ev.keysym, 0, static_cast<uint32_t>(ev.keysym));
-      else
-        vncclient_send_key_release(state->client, ev.keysym);
-    }
+  for (const auto& ev : keys) {
+    if (ev.down)
+      vncclient_send_key_press(state->client, ev.keysym, 0, static_cast<uint32_t>(ev.keysym));
+    else
+      vncclient_send_key_release(state->client, ev.keysym);
+  }
 
-    for (const auto& ev : pointers) {
-      vncclient_send_pointer(state->client, ev.x, ev.y, static_cast<uint16_t>(ev.mask));
-    }
+  for (const auto& ev : pointers) {
+    vncclient_send_pointer(state->client, ev.x, ev.y, static_cast<uint16_t>(ev.mask));
   }
 
   return static_cast<jint>(vncclient_process(state->client));
@@ -410,10 +440,15 @@ extern "C" JNIEXPORT jint JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeRefresh(JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return -1;
 
-  return static_cast<jint>(vncclient_refresh(state->client));
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return -1;
+
+  jint result = static_cast<jint>(vncclient_refresh(state->client));
+  return result;
 }
 
 extern "C" JNIEXPORT jint JNICALL
@@ -421,23 +456,31 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeRequestUpdate(
   JNIEnv*, jclass, jlong handle, jboolean incremental)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return -1;
 
-  return static_cast<jint>(vncclient_request_update(
-    state->client,
-    incremental == JNI_TRUE ? 1 : 0));
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return -1;
+
+  jint result = static_cast<jint>(vncclient_request_update(state->client, incremental == JNI_TRUE ? 1 : 0));
+  return result;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeGetServerName(JNIEnv* env, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  const char* name = "";
-  if (state && state->client) {
-    name = vncclient_get_name(state->client);
-  }
-  return Utf8ToJString(env, name ? std::string(name) : std::string());
+  if (!state)
+    return Utf8ToJString(env, "");
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return Utf8ToJString(env, "");
+
+  const char* name = vncclient_get_name(state->client);
+  std::string nameStr(name ? name : "");
+  return Utf8ToJString(env, nameStr);
 }
 
 extern "C" JNIEXPORT jintArray JNICALL
@@ -446,16 +489,19 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeGetFramebufferInfo(JNIEnv
   jint values[4] = {0, 0, 0, -1};
   auto* state = HandleToState(handle);
 
-  if (state && state->client) {
-    int width = 0;
-    int height = 0;
-    int stride = 0;
-    const uint8_t* rgba = nullptr;
-    if (vncclient_get_framebuffer(state->client, &width, &height, &stride, &rgba) == 0) {
-      values[0] = width;
-      values[1] = height;
-      values[2] = stride;
-      values[3] = vncclient_get_state(state->client);
+  if (state) {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
+    if (state->client) {
+      int width = 0;
+      int height = 0;
+      int stride = 0;
+      const uint8_t* rgba = nullptr;
+      if (vncclient_get_framebuffer(state->client, &width, &height, &stride, &rgba) == 0) {
+        values[0] = width;
+        values[1] = height;
+        values[2] = stride;
+        values[3] = vncclient_get_state(state->client);
+      }
     }
   }
 
@@ -518,14 +564,20 @@ extern "C" JNIEXPORT jintArray JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeConsumeDamage(JNIEnv* env, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
+    return nullptr;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
     return nullptr;
 
   int x = 0;
   int y = 0;
   int width = 0;
   int height = 0;
-  if (vncclient_consume_damage(state->client, &x, &y, &width, &height) != 0 || width <= 0 || height <= 0)
+  int dmgResult = vncclient_consume_damage(state->client, &x, &y, &width, &height);
+
+  if (dmgResult != 0 || width <= 0 || height <= 0)
     return nullptr;
 
   const jint values[4] = {
@@ -546,8 +598,14 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeSendPointer(
   JNIEnv*, jclass, jlong handle, jint x, jint y, jint mask)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return;
+
+  {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
+    if (!state->client)
+      return;
+  }
 
   std::lock_guard<std::mutex> lock(state->mu);
   state->pointerQueue.push_back({static_cast<int>(x), static_cast<int>(y), static_cast<int>(mask)});
@@ -558,8 +616,14 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeSendKey(
   JNIEnv*, jclass, jlong handle, jint keysym, jboolean down)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return;
+
+  {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
+    if (!state->client)
+      return;
+  }
 
   std::lock_guard<std::mutex> lock(state->mu);
   state->keyQueue.push_back({static_cast<int>(keysym), down != 0});
@@ -570,8 +634,14 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeSetClipboardText(
   JNIEnv* env, jclass, jlong handle, jstring text)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return;
+
+  {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
+    if (!state->client)
+      return;
+  }
 
   const std::string value = JStringToUtf8(env, text);
   std::lock_guard<std::mutex> lock(state->mu);
@@ -582,8 +652,14 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeRequestClipboard(JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return;
+
+  {
+    std::lock_guard<std::mutex> clientLock(state->clientMu);
+    if (!state->client)
+      return;
+  }
 
   std::lock_guard<std::mutex> lock(state->mu);
   state->clipboardQueue.push_back({"", true});
@@ -621,36 +697,60 @@ extern "C" JNIEXPORT jstring JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeGetLastError(JNIEnv* env, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return Utf8ToJString(env, "native client unavailable");
-  return Utf8ToJString(env, vncclient_last_error(state->client));
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return Utf8ToJString(env, "native client unavailable");
+
+  std::string err(vncclient_last_error(state->client));
+  return Utf8ToJString(env, err);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeIsSecure(JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return JNI_FALSE;
-  return vncclient_is_secure(state->client) != 0 ? JNI_TRUE : JNI_FALSE;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return JNI_FALSE;
+
+  jboolean result = vncclient_is_secure(state->client) != 0 ? JNI_TRUE : JNI_FALSE;
+  return result;
 }
 
 extern "C" JNIEXPORT jint JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeGetSecurityLevel(JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return 0;
-  return static_cast<jint>(vncclient_get_security_level(state->client));
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return 0;
+
+  jint result = static_cast<jint>(vncclient_get_security_level(state->client));
+  return result;
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeHasReceivedFirstUpdate(JNIEnv*, jclass, jlong handle)
 {
   auto* state = HandleToState(handle);
-  if (!state || !state->client)
+  if (!state)
     return JNI_FALSE;
-  return vncclient_has_received_first_update(state->client) != 0 ? JNI_TRUE : JNI_FALSE;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return JNI_FALSE;
+
+  jboolean result = vncclient_has_received_first_update(state->client) != 0 ? JNI_TRUE : JNI_FALSE;
+  return result;
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL
@@ -681,24 +781,29 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeDetectMonitors(JNIEnv* en
         env->DeleteLocalRef(rectClass);
     }
 
-    int w = 0, h = 0, stride = 0;
-    const uint8_t* buf = nullptr;
-    if (state->client) {
-        vncclient_get_framebuffer(state->client, &w, &h, &stride, &buf);
+    std::vector<uint8_t> fbCopy;
+    int fbW = 0, fbH = 0;
+    {
+        std::lock_guard<std::mutex> clientLock(state->clientMu);
+        if (state->client) {
+            int w = 0, h = 0, stride = 0;
+            const uint8_t* buf = nullptr;
+            if (vncclient_get_framebuffer(state->client, &w, &h, &stride, &buf) == 0 && buf && w > 0 && h > 0) {
+                fbW = w;
+                fbH = h;
+                fbCopy.resize(static_cast<size_t>(w) * static_cast<size_t>(h) * 4u);
+                for (int row = 0; row < h; row++) {
+                    std::memcpy(fbCopy.data() + static_cast<size_t>(row) * static_cast<size_t>(w) * 4u,
+                                buf + static_cast<size_t>(row) * static_cast<size_t>(stride),
+                                static_cast<size_t>(w) * 4u);
+                }
+            }
+        }
     }
 
     std::vector<MonitorRect> rects;
-    if (buf && w > 0 && h > 0) {
-        std::vector<uint8_t> rgba;
-        if (stride == w * 4) {
-            rects = MonitorSegmentation::detectMonitorRectsFromRgbaFrame(w, h, buf, fallback);
-        } else {
-            rgba.resize(w * h * 4);
-            for (int y = 0; y < h; y++) {
-                std::memcpy(rgba.data() + y * w * 4, buf + y * stride, w * 4);
-            }
-            rects = MonitorSegmentation::detectMonitorRectsFromRgbaFrame(w, h, rgba.data(), fallback);
-        }
+    if (!fbCopy.empty() && fbW > 0 && fbH > 0) {
+        rects = MonitorSegmentation::detectMonitorRectsFromRgbaFrame(fbW, fbH, fbCopy.data(), fallback);
     }
 
     jclass rectClass = env->FindClass("android/graphics/Rect");

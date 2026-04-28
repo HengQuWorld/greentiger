@@ -37,13 +37,14 @@ struct DisplayPage {
   @State private statusText: string = '正在初始化...';
   @State private pm: image.PixelMap | undefined = undefined;
   @State private pmVersion: number = 0;
-  @State private windowW: number = 1;
-  @State private windowH: number = 1;
-  @State private fbW: number = 0;
-  @State private fbH: number = 0;
-  @State private monitorRect: SharedViewerRect = { x: 0, y: 0, w: 1, h: 1 };
   @State private connected: boolean = false;
   @State private cachedViewport: ViewportTarget = { source: { x: 0, y: 0, w: 1, h: 1 }, frame: { x: 0, y: 0, w: 1, h: 1 } };
+
+  private windowW: number = 1;
+  private windowH: number = 1;
+  private fbW: number = 0;
+  private fbH: number = 0;
+  private monitorRect: SharedViewerRect = { x: 0, y: 0, w: 1, h: 1 };
 
   private sessionId: string = '';
   private monitorIndex: number = 0;
@@ -605,6 +606,9 @@ struct DisplayPage {
     .onAreaChange((_oldValue: Area, newValue: Area) => {
       this.windowW = (newValue.width as number) ?? 1;
       this.windowH = (newValue.height as number) ?? 1;
+      if (this.fbW > 0 && this.fbH > 0) {
+        this.cachedViewport = getMonitorImageMetrics(this.monitorRect, this.windowW, this.windowH, this.fbW, this.fbH);
+      }
     });
   }
 }

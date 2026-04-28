@@ -237,9 +237,9 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     if (snapshot.frame != null && curFbW > 0 && curFbH > 0 &&
                         snapshot.frameVersion != frameVersion
                     ) {
-                        fbW = curFbW
-                        fbH = curFbH
-                        monitorRect = curMonitor
+                        if (fbW != curFbW) fbW = curFbW
+                        if (fbH != curFbH) fbH = curFbH
+                        if (monitorRect != curMonitor) monitorRect = curMonitor
                         pendingBitmap = snapshot.frame
                         pendingVersion = snapshot.frameVersion
                         if (frameThrottle.shouldRender()) {
@@ -251,9 +251,9 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     }
                 } else {
                     connected = snapshot.connected
-                    fbW = curFbW
-                    fbH = curFbH
-                    monitorRect = curMonitor
+                    if (fbW != curFbW) fbW = curFbW
+                    if (fbH != curFbH) fbH = curFbH
+                    if (monitorRect != curMonitor) monitorRect = curMonitor
                     if (!snapshot.connected) {
                         statusText = "会话未连接"
                     } else if (snapshot.frame == null || curFbW <= 0 || curFbH <= 0) {
@@ -432,8 +432,15 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
             .focusable()
             .onPreviewKeyEvent(handleKeyEvent)
             .onSizeChanged { size ->
-                windowW = size.width.coerceAtLeast(1)
-                windowH = size.height.coerceAtLeast(1)
+                val newW = size.width.coerceAtLeast(1)
+                val newH = size.height.coerceAtLeast(1)
+                windowW = newW
+                windowH = newH
+                val snap = frameSnapshot
+                if (snap != null && fbW > 0 && fbH > 0) {
+                    val newLayout = computeIntLayout(monitorRect, newW, newH, fbW, fbH)
+                    frameSnapshot = snap.copy(layout = newLayout)
+                }
             }
             .pointerInput(sessionId, connected) {
                 awaitEachGesture {

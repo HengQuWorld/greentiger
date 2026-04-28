@@ -106,13 +106,11 @@ export class InteractFrameThrottle {
   private static readonly MAX_SKIP_FRAMES: number = 6;
 
   begin(): void {
-    this.frameCount = 0;
-    this.lastRenderTime = 0;
+    this.reset();
   }
 
   end(): void {
-    this.frameCount = 0;
-    this.lastRenderTime = 0;
+    this.reset();
   }
 
   shouldRender(): boolean {

@@ -3175,16 +3175,16 @@ struct Viewer {
     if (this.isInteracting) {
       this.isInteracting = false;
       this.frameThrottle.end();
-      this.flushPendingFrameCache();
+      void this.flushPendingFrameCache();
     }
   }
 
-  private flushPendingFrameCache(): void {
+  private async flushPendingFrameCache(): Promise<void> {
     if (!this.pendingFrameCache) return;
     const buf = this.pendingFrameCache;
     this.pendingFrameCache = null;
     this.frameCache = buf;
-    void this.presentFrameCacheDirect();
+    await this.presentFrameCacheDirect();
   }
 
   private async presentFrameCacheDirect(): Promise<boolean> {
