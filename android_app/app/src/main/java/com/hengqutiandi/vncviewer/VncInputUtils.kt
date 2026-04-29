@@ -5,6 +5,9 @@ import android.app.ActivityManager
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
@@ -301,5 +304,16 @@ class InteractFrameThrottle {
     fun reset() {
         frameCount = 0
         lastRenderTime = 0L
+    }
+}
+
+fun Modifier.consumeScroll(): Modifier = this.pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) {
+            val event = awaitPointerEvent()
+            if (event.type == PointerEventType.Scroll) {
+                event.changes.forEach { it.consume() }
+            }
+        }
     }
 }

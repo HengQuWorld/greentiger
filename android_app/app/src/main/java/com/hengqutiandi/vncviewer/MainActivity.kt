@@ -7,11 +7,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
-import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
@@ -47,6 +45,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -1118,19 +1117,23 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
 // 全局鼠标通用运动事件回调，由 ViewerScreen 注册，MainActivity 转发
 private var activeGenericMotionHandler: ((MotionEvent) -> Boolean)? = null
 
-class MainActivity : ComponentActivity() {
+class MainActivity : MouseSafeActivity() {
     private var launchIntent by mutableStateOf<Intent?>(null)
+
+    override fun mouseHandler() = activeGenericMotionHandler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         launchIntent = intent
         setContent {
             GreenTigerTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    GreenTigerApp(launchIntent = launchIntent)
+                DisableSelection {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.surface
+                    ) {
+                        GreenTigerApp(launchIntent = launchIntent)
+                    }
                 }
             }
         }
@@ -1140,14 +1143,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         launchIntent = intent
-    }
-
-    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
-        val handler = activeGenericMotionHandler
-        if (handler != null && isMouseEvent(ev)) {
-            if (handler(ev)) return true
-        }
-        return super.dispatchGenericMotionEvent(ev)
     }
 }
 
@@ -2806,6 +2801,7 @@ private fun ViewerScreen(
                 .align(Alignment.TopStart)
                 .size(1.dp)
                 .alpha(0f)
+                .consumeScroll()
                 .focusRequester(softInputFocusRequester)
                 .onPreviewKeyEvent(handleRemoteKeyEvent),
             enabled = session.connected,
@@ -2820,6 +2816,7 @@ private fun ViewerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { viewerSize = it }
+                .consumeScroll()
                 .pointerInteropFilter { event ->
                     handleViewerMotionEvent(
                         event = event,

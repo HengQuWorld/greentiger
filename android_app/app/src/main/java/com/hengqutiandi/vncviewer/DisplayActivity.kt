@@ -4,10 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
-import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -17,7 +15,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -98,7 +96,9 @@ internal fun Intent.toDisplayLaunchParams(): DisplayLaunchParams? {
 // 全局鼠标通用运动事件回调，由 DisplayScreen 注册，DisplayActivity 转发
 private var activeDisplayGenericMotionHandler: ((MotionEvent) -> Boolean)? = null
 
-class DisplayActivity : ComponentActivity() {
+class DisplayActivity : MouseSafeActivity() {
+    override fun mouseHandler() = activeDisplayGenericMotionHandler
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, true)
@@ -113,14 +113,6 @@ class DisplayActivity : ComponentActivity() {
                 DisplayScreen(launchParams = launchParams)
             }
         }
-    }
-
-    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
-        val handler = activeDisplayGenericMotionHandler
-        if (handler != null && isMouseEvent(ev)) {
-            if (handler(ev)) return true
-        }
-        return super.dispatchGenericMotionEvent(ev)
     }
 }
 
@@ -420,95 +412,96 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         }
     }
 
-    val monitorLabel = "屏幕 ${monitorIndex + 1}"
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .focusRequester(focusRequester)
-            .focusable()
-            .onPreviewKeyEvent(handleKeyEvent)
-            .onSizeChanged { size ->
-                val newW = size.width.coerceAtLeast(1)
-                val newH = size.height.coerceAtLeast(1)
-                windowW = newW
-                windowH = newH
-                val snap = frameSnapshot
-                if (snap != null && fbW > 0 && fbH > 0) {
-                    val newLayout = computeIntLayout(monitorRect, newW, newH, fbW, fbH)
-                    frameSnapshot = snap.copy(layout = newLayout)
+    DisableSelection {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .focusRequester(focusRequester)
+                .focusable()
+                .onPreviewKeyEvent(handleKeyEvent)
+                .onSizeChanged { size ->
+                    val newW = size.width.coerceAtLeast(1)
+                    val newH = size.height.coerceAtLeast(1)
+                    windowW = newW
+                    windowH = newH
+                    val snap = frameSnapshot
+                    if (snap != null && fbW > 0 && fbH > 0) {
+                        val newLayout = computeIntLayout(monitorRect, newW, newH, fbW, fbH)
+                        frameSnapshot = snap.copy(layout = newLayout)
+                    }
                 }
-            }
-            .pointerInput(sessionId, connected) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val localX = down.position.x
-                    val localY = down.position.y
-                    val remote = toRemote(localX, localY)
+                .pointerInput(sessionId, connected) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val localX = down.position.x
+                        val localY = down.position.y
+                        val remote = toRemote(localX, localY)
 
-                    beginInteraction()
-                    touchStartX = localX
-                    touchStartY = localY
-                    touchStartTs = System.currentTimeMillis()
-                    touchMoved = false
-                    touchDragging = false
-                    safeSendPointer(remote.first, remote.second, 0)
+                        beginInteraction()
+                        touchStartX = localX
+                        touchStartY = localY
+                        touchStartTs = System.currentTimeMillis()
+                        touchMoved = false
+                        touchDragging = false
+                        safeSendPointer(remote.first, remote.second, 0)
 
-                    do {
-                        val event = awaitPointerEvent()
-                        val changed = event.changes.firstOrNull() ?: break
-                        when (event.type) {
-                            PointerEventType.Move -> {
-                                val cx = changed.position.x
-                                val cy = changed.position.y
-                                val dist = abs(cx - touchStartX) + abs(cy - touchStartY)
-                                if (dist >= 6f) touchMoved = true
-                                if (touchMoved && !touchDragging) {
-                                    touchDragging = true
-                                    val startRemote = toRemote(touchStartX, touchStartY)
-                                    safeSendPointer(startRemote.first, startRemote.second, 1)
+                        do {
+                            val event = awaitPointerEvent()
+                            val changed = event.changes.firstOrNull() ?: break
+                            when (event.type) {
+                                PointerEventType.Move -> {
+                                    val cx = changed.position.x
+                                    val cy = changed.position.y
+                                    val dist = abs(cx - touchStartX) + abs(cy - touchStartY)
+                                    if (dist >= 6f) touchMoved = true
+                                    if (touchMoved && !touchDragging) {
+                                        touchDragging = true
+                                        val startRemote = toRemote(touchStartX, touchStartY)
+                                        safeSendPointer(startRemote.first, startRemote.second, 1)
+                                    }
+                                    val currentRemote = toRemote(cx, cy)
+                                    safeSendPointer(currentRemote.first, currentRemote.second, if (touchDragging) 1 else 0)
                                 }
-                                val currentRemote = toRemote(cx, cy)
-                                safeSendPointer(currentRemote.first, currentRemote.second, if (touchDragging) 1 else 0)
-                            }
-                            PointerEventType.Release -> {
-                                val cx = changed.position.x
-                                val cy = changed.position.y
-                                val currentRemote = toRemote(cx, cy)
-                                val clickElapsed = (System.currentTimeMillis() as Long) - touchStartTs
-                                if (touchDragging) {
+                                PointerEventType.Release -> {
+                                    val cx = changed.position.x
+                                    val cy = changed.position.y
+                                    val currentRemote = toRemote(cx, cy)
+                                    val clickElapsed = (System.currentTimeMillis() as Long) - touchStartTs
+                                    if (touchDragging) {
+                                        touchDragging = false
+                                        safeSendPointer(currentRemote.first, currentRemote.second, 0)
+                                    } else if (!touchMoved && clickElapsed <= 350L) {
+                                        safeSendClick(currentRemote.first, currentRemote.second, 1)
+                                    } else if (!touchMoved && clickElapsed > 500L) {
+                                        safeSendClick(currentRemote.first, currentRemote.second, 4)
+                                    } else {
+                                        safeSendPointer(currentRemote.first, currentRemote.second, 0)
+                                    }
                                     touchDragging = false
-                                    safeSendPointer(currentRemote.first, currentRemote.second, 0)
-                                } else if (!touchMoved && clickElapsed <= 350L) {
-                                    safeSendClick(currentRemote.first, currentRemote.second, 1)
-                                } else if (!touchMoved && clickElapsed > 500L) {
-                                    // 长按触发鼠标右键
-                                    safeSendClick(currentRemote.first, currentRemote.second, 4)
-                                } else {
-                                    safeSendPointer(currentRemote.first, currentRemote.second, 0)
+                                    touchMoved = false
+                                    endInteraction()
+                                    return@awaitEachGesture
                                 }
-                                touchDragging = false
-                                touchMoved = false
-                                endInteraction()
-                                return@awaitEachGesture
-                            }
-                            PointerEventType.Exit -> {
-                                if (touchDragging) {
-                                    val lastRemote = toRemote(
-                                        changed.position.x,
-                                        changed.position.y
-                                    )
-                                    safeSendPointer(lastRemote.first, lastRemote.second, 1)
+                                PointerEventType.Exit -> {
+                                    if (touchDragging) {
+                                        val lastRemote = toRemote(
+                                            changed.position.x,
+                                            changed.position.y
+                                        )
+                                        safeSendPointer(lastRemote.first, lastRemote.second, 1)
+                                    }
                                 }
+                                PointerEventType.Scroll -> {
+                                    changed.consume()
+                                }
+                                else -> {}
                             }
-                            else -> {}
-                        }
-                    } while (true)
+                        } while (true)
+                    }
                 }
-            }
     ) {
         val snap = frameSnapshot
         if (snap != null) {
@@ -552,6 +545,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                 .align(Alignment.TopStart)
                 .size(1.dp)
                 .alpha(0f)
+                .consumeScroll()
                 .onPreviewKeyEvent(handleKeyEvent),
             enabled = connected,
             singleLine = false,
@@ -584,20 +578,6 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
             }
         }
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = monitorLabel,
-                fontSize = 14.sp,
-                color = Color.White,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.align(Alignment.Center)
-            )
-        }
+    }
     }
 }
