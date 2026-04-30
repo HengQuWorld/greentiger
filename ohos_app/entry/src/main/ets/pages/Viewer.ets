@@ -604,7 +604,11 @@ struct Viewer {
   private getWindowTitleText(): string {
     const addr = (this.address ?? '').trim();
     const name = (this.connName ?? '').trim();
-    return (name ? name : (addr || 'Viewer')) + (addr ? `  ${addr}` : '');
+    const user = (this.user ?? '').trim();
+    let base = name ? name : (addr || 'Viewer');
+    if (addr) base += `  ${addr}`;
+    if (user) base += `  (${user})`;
+    return base;
   }
 
   private getActiveMonitorRectsForWindows(): VncRect[] {

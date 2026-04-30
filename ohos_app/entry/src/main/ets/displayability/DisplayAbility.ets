@@ -52,44 +52,42 @@ export default class DisplayAbility extends UIAbility {
     }
   }
 
-  private applyWindowTitle(windowStage: window.WindowStage, title: string): void {
-    const doSetTitle = (winObj: Object): void => {
+  private applyWindowTitle(windowStage: window.WindowStage, _title: string): void {
+    const showDecor = (win: window.Window): void => {
       try {
-        const win = winObj as window.Window;
-        win.setWindowTitle(title);
         win.setWindowDecorVisible(true);
-        console.info(`DisplayAbility setWindowTitle success: ${title}`);
+        console.info('DisplayAbility setWindowDecorVisible true');
       } catch (e) {
-        console.warn(`DisplayAbility setWindowTitle failed:`, e);
+        console.warn('DisplayAbility setWindowDecorVisible failed:', e);
       }
     };
     try {
       const mainWin = windowStage.getMainWindowSync();
       if (mainWin) {
-        doSetTitle(mainWin);
+        showDecor(mainWin);
         return;
       }
     } catch (e) {
     }
     windowStage.getMainWindow()
       .then((win: window.Window): void => {
-        doSetTitle(win);
+        showDecor(win);
       })
       .catch((): void => {});
     setTimeout((): void => {
       try {
         const mainWin = windowStage.getMainWindowSync();
-        if (mainWin) doSetTitle(mainWin);
+        if (mainWin) showDecor(mainWin);
       } catch (e) {
       }
-    }, 300);
+    }, 200);
     setTimeout((): void => {
       try {
         const mainWin = windowStage.getMainWindowSync();
-        if (mainWin) doSetTitle(mainWin);
+        if (mainWin) showDecor(mainWin);
       } catch (e) {
       }
-    }, 1000);
+    }, 600);
   }
 
   onDestroy(): void {

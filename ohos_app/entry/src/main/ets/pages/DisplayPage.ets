@@ -1,6 +1,8 @@
 import image from '@ohos.multimedia.image';
 import { router } from '@kit.ArkUI';
 import { KeyCode } from '@ohos.multimodalInput.keyCode';
+import common from '@ohos.app.ability.common';
+import window from '@ohos.window';
 import { SharedViewerSessionSnapshot, SharedViewerRect, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
 import { keySymFromEvent } from '../utils/KeyMap';
 import {
@@ -89,6 +91,33 @@ struct DisplayPage {
     AppStorage.setOrCreate<DisplayLaunchParams>('__display_launch_bridge__', DEFAULT_PARAMS);
   }
 
+  private getHostContext(): common.UIAbilityContext | undefined {
+    try {
+      return this.getUIContext()?.getHostContext?.() as common.UIAbilityContext;
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  private updateWindowTitle(): void {
+    try {
+      const ctx = this.getHostContext();
+      if (!ctx) return;
+      window.getLastWindow(ctx)
+        .then((win: Object) => {
+          try {
+            const w = win as window.Window;
+            w.setWindowTitle(this.title);
+            console.info(`DisplayPage setWindowTitle via getLastWindow: ${this.title}`);
+          } catch (e) {
+          }
+        })
+        .catch(() => {
+        });
+    } catch (e) {
+    }
+  }
+
   private async initialize(): Promise<void> {
     const params = this.getLaunchParams();
     this.sessionId = params.sessionId;
@@ -99,6 +128,7 @@ struct DisplayPage {
       return;
     }
     console.info(`DisplayPage initialized: sessionId=${this.sessionId}, monitorIndex=${this.monitorIndex}, title=${this.title}`);
+    this.updateWindowTitle();
     this.startLoop();
     await this.syncOnce();
   }
@@ -563,14 +593,6 @@ struct DisplayPage {
           .interpolation(ImageInterpolation.High)
           .draggable(false);
       }
-
-      Text(this.title)
-        .fontSize(11)
-        .fontColor('#ffffff99')
-        .backgroundColor('#00000088')
-        .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-        .borderRadius(6)
-        .position({ x: 8, y: 8 });
 
       if (!this.pm || this.statusText) {
         Column({ space: 8 }) {
