@@ -10,7 +10,21 @@
         "runtimeOS": "HarmonyOS"
       }
     ],
-    "signingConfigs": []
+    "signingConfigs": [],
+    "buildModeSet": [
+      {
+        "name": "debug",
+        "buildOption": {
+          "debuggable": true
+        }
+      },
+      {
+        "name": "release",
+        "buildOption": {
+          "debuggable": false
+        }
+      }
+    ]
   },
   "modules": [
     {

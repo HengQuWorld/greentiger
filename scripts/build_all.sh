@@ -7,8 +7,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ANDROID_DIR="${REPO_ROOT}/android_app"
 OHOS_DIR="${REPO_ROOT}/ohos_app"
 ANDROID_APK_RELATIVE_DIR="app/build/outputs/apk"
-OHOS_HAP_PATH="${OHOS_DIR}/entry/build/default/outputs/default/entry-default-signed.hap"
-OHOS_APP_PATH="${OHOS_DIR}/build/outputs/default/ohos_app-default-signed.app"
+OHOS_HAP_SRC="${OHOS_DIR}/entry/build/default/outputs/default/entry-default-signed.hap"
+OHOS_HAP_SRC_UNSIGNED="${OHOS_DIR}/entry/build/default/outputs/default/entry-default-unsigned.hap"
+OHOS_APP_SRC="${OHOS_DIR}/build/outputs/default/ohos_app-default-signed.app"
+OHOS_APP_SRC_UNSIGNED="${OHOS_DIR}/build/outputs/default/ohos_app-default-unsigned.app"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$1"
@@ -23,6 +25,8 @@ print_selected_mode() {
 print_artifact_summary() {
   local mode="$1"
   local android_apk="${ANDROID_DIR}/${ANDROID_APK_RELATIVE_DIR}/${mode}/app-${mode}.apk"
+  local ohos_hap="${OHOS_DIR}/build/outputs/default/${mode}/entry-default-signed.hap"
+  local ohos_app="${OHOS_DIR}/build/outputs/default/${mode}/ohos_app-default-signed.app"
 
   log "Build outputs"
   printf '  Android APK: %s\n' "${android_apk}"
@@ -32,15 +36,15 @@ print_artifact_summary() {
     printf '    Status: missing\n'
   fi
 
-  printf '  HarmonyOS HAP: %s\n' "${OHOS_HAP_PATH}"
-  if [[ -f "${OHOS_HAP_PATH}" ]]; then
+  printf '  HarmonyOS HAP: %s\n' "${ohos_hap}"
+  if [[ -f "${ohos_hap}" ]]; then
     printf '    Status: present\n'
   else
     printf '    Status: missing\n'
   fi
 
-  printf '  HarmonyOS APP: %s\n' "${OHOS_APP_PATH}"
-  if [[ -f "${OHOS_APP_PATH}" ]]; then
+  printf '  HarmonyOS APP: %s\n' "${ohos_app}"
+  if [[ -f "${ohos_app}" ]]; then
     printf '    Status: present\n'
   else
     printf '    Status: missing\n'
@@ -131,9 +135,28 @@ run_ohos_build() {
         "${SCRIPT_DIR}/hvigorw-ohos.sh" assembleApp -p product=default -p buildMode=release
     else
       SIGN_ACTIVE="${mode}" \
-        "${SCRIPT_DIR}/hvigorw-ohos.sh" assembleApp
+        "${SCRIPT_DIR}/hvigorw-ohos.sh" assembleApp -p product=default -p buildMode=debug
     fi
   )
+
+  local out_dir="${OHOS_DIR}/build/outputs/default/${mode}"
+  mkdir -p "${out_dir}"
+
+  if [[ -f "${OHOS_HAP_SRC}" ]]; then
+    cp "${OHOS_HAP_SRC}" "${out_dir}/entry-default-signed.hap"
+  fi
+  if [[ -f "${OHOS_HAP_SRC_UNSIGNED}" ]]; then
+    cp "${OHOS_HAP_SRC_UNSIGNED}" "${out_dir}/entry-default-unsigned.hap"
+  fi
+  if [[ -f "${OHOS_APP_SRC}" ]]; then
+    cp "${OHOS_APP_SRC}" "${out_dir}/ohos_app-default-signed.app"
+  fi
+  if [[ -f "${OHOS_APP_SRC_UNSIGNED}" ]]; then
+    cp "${OHOS_APP_SRC_UNSIGNED}" "${out_dir}/ohos_app-default-unsigned.app"
+  fi
+
+  log "HarmonyOS artifacts saved to: ${out_dir}"
+  ls -la "${out_dir}/"
 }
 
 main() {
