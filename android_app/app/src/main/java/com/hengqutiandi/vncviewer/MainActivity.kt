@@ -1751,11 +1751,15 @@ private fun HomeScreen(
             .fillMaxSize()
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 16.dp)
             .background(MaterialTheme.colorScheme.surface)
     ) {
         val wide = maxWidth >= 920.dp
-        Column(modifier = Modifier.fillMaxSize()) {
+        val isCompact = !wide
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = if (isCompact) 8.dp else 16.dp, vertical = if (isCompact) 8.dp else 16.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1763,12 +1767,12 @@ private fun HomeScreen(
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Text("连接管理", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("连接管理", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("v${BuildConfig.BUILD_VERSION}", color = MaterialTheme.colorScheme.secondary)
@@ -1813,7 +1817,7 @@ private fun HomeScreen(
             } else {
                 ConnectionListPane(
                     modifier = Modifier
-                        .padding(top = 16.dp)
+                        .padding(top = 8.dp)
                         .fillMaxSize(),
                     scrollable = true,
                     connections = connections,
@@ -1848,10 +1852,10 @@ private fun SelectedConnectionPane(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("当前选中", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("当前选中", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             when {
                 !hasConnections -> {
                     EmptyStateCard("暂无连接配置", "先新增一个连接，之后就可以在这里查看详情和快捷操作。")
@@ -1932,12 +1936,12 @@ private fun ConnectionListPane(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
@@ -1985,7 +1989,7 @@ private fun ConnectionListPane(
                     } else {
                         Modifier.fillMaxWidth()
                     },
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     filteredConnections.forEach { item ->
                         val selected = item.id == selectedConnectionId
@@ -2013,18 +2017,18 @@ private fun ConnectionListPane(
                             )
                         ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = normalizeConnName(item.name, item.address),
                                         modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     ConnectionRouteBadge(presentation.routeLabel)
@@ -2047,8 +2051,8 @@ private fun ConnectionListPane(
                                     color = MaterialTheme.colorScheme.secondary
                                 )
                                 FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Button(
                                         enabled = !connecting,
@@ -2074,9 +2078,9 @@ private fun ConnectionListPane(
 
 @Composable
 private fun ConnectionDetailLine(label: String, value: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-        Text(value, style = MaterialTheme.typography.bodyLarge)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+        Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -2129,31 +2133,42 @@ private fun ConnectionFormPane(
                     Text("关于")
                 }
             }
+            val focusConnName = remember { FocusRequester() }
+            val focusAddress = remember { FocusRequester() }
+            val focusUser = remember { FocusRequester() }
+            val focusPassword = remember { FocusRequester() }
             OutlinedTextField(
                 value = connName,
                 onValueChange = onConnNameChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("连接名称（可选）") }
+                modifier = Modifier.fillMaxWidth().focusRequester(focusConnName),
+                label = { Text("连接名称（可选）") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { focusAddress.requestFocus() })
             )
             OutlinedTextField(
                 value = address,
                 onValueChange = onAddressChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusAddress),
                 label = { Text("地址") },
                 placeholder = { Text("192.168.1.2:5900") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next)
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { focusUser.requestFocus() })
             )
             OutlinedTextField(
                 value = user,
                 onValueChange = onUserChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusUser),
                 label = { Text("用户名（可选）") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { focusPassword.requestFocus() })
             )
             PasswordField(
                 value = password,
                 onValueChange = onPasswordChange,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusPassword),
                 imeAction = ImeAction.Done,
                 onDone = onConnect
             )
@@ -4020,10 +4035,10 @@ private fun EmptyStateCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Text(message, color = MaterialTheme.colorScheme.secondary)
             if (!actionLabel.isNullOrBlank() && onAction != null) {
                 Button(onClick = onAction) {
@@ -4802,20 +4817,28 @@ private fun BasicEditConnectionContent(
     state: EditConnectionState,
     onStateChange: (EditConnectionState) -> Unit
 ) {
+    val focusName = remember { FocusRequester() }
+    val focusAddress = remember { FocusRequester() }
+    val focusUser = remember { FocusRequester() }
+    val focusPassword = remember { FocusRequester() }
+
     ConnectionSectionCard(
         title = "远程桌面"
     ) {
         OutlinedTextField(
             value = state.name,
             onValueChange = { onStateChange(state.copy(name = it)) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focusName),
             label = { Text("连接名称") },
-            placeholder = { Text("例如 办公室电脑") }
+            placeholder = { Text("例如 办公室电脑") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusAddress.requestFocus() })
         )
         OutlinedTextField(
             value = state.address,
             onValueChange = { onStateChange(state.copy(address = it)) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focusAddress),
             label = { Text("桌面地址") },
             placeholder = {
                 Text(
@@ -4825,18 +4848,24 @@ private fun BasicEditConnectionContent(
                         "例如 192.168.1.2:5900"
                     }
                 )
-            }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusUser.requestFocus() })
         )
         OutlinedTextField(
             value = state.user,
             onValueChange = { onStateChange(state.withDesktopUser(it)) },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("桌面用户名") }
+            modifier = Modifier.fillMaxWidth().focusRequester(focusUser),
+            label = { Text("桌面用户名") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { focusPassword.requestFocus() })
         )
         PasswordField(
             value = state.password,
             onValueChange = { onStateChange(state.withDesktopPassword(it)) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().focusRequester(focusPassword),
             label = "桌面密码",
             imeAction = ImeAction.Done
         )
@@ -4878,6 +4907,18 @@ private fun AdvancedEditConnectionContent(
         val parsedAddress = parseAddress(state.address.trim())
         val forwardHost = state.ssh.remoteHost.ifBlank { "127.0.0.1" }
         val forwardPort = state.ssh.remotePort.takeIf { it in 1..65535 } ?: parsedAddress?.port ?: DEFAULT_VNC_PORT
+
+        val focusSshHost = remember { FocusRequester() }
+        val focusSshUser = remember { FocusRequester() }
+        val focusSshKeyPath = remember { FocusRequester() }
+        val focusSshKeyPassphrase = remember { FocusRequester() }
+        val focusSshPassword = remember { FocusRequester() }
+        val focusSshPort = remember { FocusRequester() }
+        val focusSshPublicKeyPath = remember { FocusRequester() }
+        val focusSshKnownHosts = remember { FocusRequester() }
+        val focusSshRemoteHost = remember { FocusRequester() }
+        val focusSshRemotePort = remember { FocusRequester() }
+
         SettingSwitchRow(
             title = "通过 SSH 隧道连接",
             supportingText = if (state.ssh.enabled) {
@@ -4901,9 +4942,21 @@ private fun AdvancedEditConnectionContent(
                 onValueChange = {
                     onStateChange(state.copy(ssh = state.ssh.copy(sshHost = it)))
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusSshHost),
                 label = { Text("SSH 服务器") },
-                placeholder = { Text("例如 bastion.example.com") }
+                placeholder = { Text("例如 bastion.example.com") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(
+                    onNext = {
+                        if (reuseDesktopCredentials) {
+                            if (state.ssh.authType == SSH_AUTH_PUBLIC_KEY) focusSshKeyPath.requestFocus()
+                            else focusSshPort.requestFocus()
+                        } else {
+                            focusSshUser.requestFocus()
+                        }
+                    }
+                )
             )
             SettingSwitchRow(
                 title = "重用桌面账号密码",
@@ -4935,8 +4988,16 @@ private fun AdvancedEditConnectionContent(
                     onValueChange = {
                         onStateChange(state.copy(ssh = state.ssh.copy(sshUser = it)))
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("SSH 用户名") }
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusSshUser),
+                    label = { Text("SSH 用户名") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(
+                        onNext = {
+                            if (state.ssh.authType == SSH_AUTH_PUBLIC_KEY) focusSshKeyPath.requestFocus()
+                            else focusSshPort.requestFocus()
+                        }
+                    )
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -4969,16 +5030,21 @@ private fun AdvancedEditConnectionContent(
                             state.copy(ssh = state.ssh.copy(privateKeyPath = it))
                         )
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("私钥路径") }
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusSshKeyPath),
+                    label = { Text("私钥路径") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusSshKeyPassphrase.requestFocus() })
                 )
                 PasswordField(
                     value = state.ssh.privateKeyPassphrase,
                     onValueChange = {
                         onStateChange(state.copy(ssh = state.ssh.copy(privateKeyPassphrase = it)))
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = "私钥口令"
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusSshKeyPassphrase),
+                    label = "私钥口令",
+                    imeAction = ImeAction.Next,
+                    onDone = { focusSshPort.requestFocus() }
                 )
             } else {
                 if (reuseDesktopCredentials) {
@@ -4997,9 +5063,10 @@ private fun AdvancedEditConnectionContent(
                         onValueChange = {
                             onStateChange(state.copy(ssh = state.ssh.copy(sshPassword = it)))
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusSshPassword),
                         label = "SSH 密码",
-                        imeAction = ImeAction.Done
+                        imeAction = ImeAction.Next,
+                        onDone = { focusSshPort.requestFocus() }
                     )
                 }
             }
@@ -5010,9 +5077,15 @@ private fun AdvancedEditConnectionContent(
                         state.copy(ssh = state.ssh.copy(sshPort = it.toIntOrNull() ?: 0))
                     )
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusSshPort),
                 label = { Text("SSH 端口") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = {
+                    if (state.ssh.authType == SSH_AUTH_PUBLIC_KEY) focusSshPublicKeyPath.requestFocus()
+                    else if (state.ssh.strictHostKeyCheck || state.ssh.knownHostsPath.isNotBlank()) focusSshKnownHosts.requestFocus()
+                    else focusSshRemoteHost.requestFocus()
+                })
             )
             if (state.ssh.authType == SSH_AUTH_PUBLIC_KEY) {
                 OutlinedTextField(
@@ -5020,8 +5093,14 @@ private fun AdvancedEditConnectionContent(
                     onValueChange = {
                         onStateChange(state.copy(ssh = state.ssh.copy(publicKeyPath = it)))
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("公钥路径（可选）") }
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusSshPublicKeyPath),
+                    label = { Text("公钥路径（可选）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = {
+                        if (state.ssh.strictHostKeyCheck || state.ssh.knownHostsPath.isNotBlank()) focusSshKnownHosts.requestFocus()
+                        else focusSshRemoteHost.requestFocus()
+                    })
                 )
             }
             SettingSwitchRow(
@@ -5037,8 +5116,11 @@ private fun AdvancedEditConnectionContent(
                     onValueChange = {
                         onStateChange(state.copy(ssh = state.ssh.copy(knownHostsPath = it)))
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("known_hosts 路径") }
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusSshKnownHosts),
+                    label = { Text("known_hosts 路径") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { focusSshRemoteHost.requestFocus() })
                 )
             }
             OutlinedTextField(
@@ -5046,19 +5128,23 @@ private fun AdvancedEditConnectionContent(
                 onValueChange = {
                     onStateChange(state.copy(ssh = state.ssh.copy(remoteHost = it)))
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusSshRemoteHost),
                 label = { Text("转发目标主机") },
-                placeholder = { Text("默认预填 127.0.0.1；需要其他内网主机时再修改") }
+                placeholder = { Text("默认预填 127.0.0.1；需要其他内网主机时再修改") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                keyboardActions = KeyboardActions(onNext = { focusSshRemotePort.requestFocus() })
             )
             OutlinedTextField(
                 value = if (state.ssh.remotePort > 0) state.ssh.remotePort.toString() else "",
                 onValueChange = {
                     onStateChange(state.copy(ssh = state.ssh.copy(remotePort = it.toIntOrNull() ?: 0)))
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRequester(focusSshRemotePort),
                 label = { Text("转发目标端口") },
                 placeholder = { Text("默认使用桌面地址中的端口") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
             )
         }
     }
