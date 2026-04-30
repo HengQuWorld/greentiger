@@ -3287,7 +3287,7 @@ private fun ViewerScreen(
                     extendChromeInteractionIfVisible()
                     updateZoomState(stepViewerZoom(zoomState, -VIEWER_ZOOM_STEP_SCALE, placement, session.currentMonitorRect))
                 },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 32.dp, end = 32.dp)
+                modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 56.dp, end = 32.dp)
             )
         }
     }
@@ -5812,10 +5812,13 @@ private fun handleViewerMotionEvent(
             val current = if (remote != null) {
                 remote
             } else {
-                if (inputState.touchDragging && session.lastPointerX >= 0 && session.lastPointerY >= 0) {
-                    session.sendPointer(session.lastPointerX, session.lastPointerY, 1)
+                if (inputState.touchDragging) {
+                    session.sendPointer(session.lastPointerX, session.lastPointerY, 0)
                 }
-                return true
+                inputState.touchDragging = false
+                inputState.touchMoved = false
+                session.endInteraction()
+                return false
             }
             val distance = abs(event.x - inputState.touchStartX) + abs(event.y - inputState.touchStartY)
             if (distance >= 6f) {
