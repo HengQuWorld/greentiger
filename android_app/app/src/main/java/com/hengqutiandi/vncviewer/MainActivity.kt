@@ -1933,33 +1933,11 @@ private fun ConnectionListPane(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text("已保存连接", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("按最近使用排序，支持搜索、打开、编辑和删除。", color = MaterialTheme.colorScheme.secondary)
-                }
-                Button(
-                    onClick = onCreateConnection,
-                    modifier = Modifier
-                        .semantics { contentDescription = "新增连接" },
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text("新增连接")
-                }
-            }
-            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
@@ -1978,6 +1956,14 @@ private fun ConnectionListPane(
                     OutlinedButton(onClick = onClearKeyword) {
                         Text("清除")
                     }
+                }
+                Button(
+                    onClick = onCreateConnection,
+                    modifier = Modifier
+                        .semantics { contentDescription = "新增连接" },
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text("新增")
                 }
             }
             if (connections.isEmpty()) {
