@@ -2942,7 +2942,7 @@ struct Index {
         .alignItems(VerticalAlign.Center);
       }
       .alignItems(VerticalAlign.Bottom)
-      .padding({ left: 16, right: 16, top: 16, bottom: 10 });
+      .padding({ left: 16, right: 16, top: 12, bottom: 8 });
 
       Row() {
         TextInput({ text: this.keyword, placeholder: '搜索：名称 / 地址 / 账号' })
@@ -3107,7 +3107,7 @@ struct Index {
                 }
               }
               .alignItems(VerticalAlign.Center)
-              .padding(14)
+              .padding(12)
               .backgroundColor(c.id === this.selectedConnId ? this.cPrimarySoft : this.cSurfaceAlt)
               .border(c.id === this.selectedConnId ? { width: 1.5, color: this.cPrimaryOutline } : { width: 1, color: this.cBorder })
               .borderRadius(14)
@@ -3156,7 +3156,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .padding(16)
+    .padding(12)
     .backgroundColor(this.cSurface);
   }
 
@@ -3167,12 +3167,12 @@ struct Index {
         Text('当前选中')
           .fontSize(14)
           .fontColor(this.cTextSecondary)
-          .margin({ bottom: 12 });
+          .margin({ bottom: 8 });
         Text(normalizeConnName(this.getSelectedConnection()?.name ?? '', this.getSelectedConnection()?.address ?? '', this.getSelectedConnection()?.sshTunnel))
-          .fontSize(22)
+          .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .fontColor(this.cTextPrimary)
-          .margin({ bottom: 20 });
+          .margin({ bottom: 16 });
 
         this.buildDetailLine({
           label: '地址',
@@ -3206,7 +3206,7 @@ struct Index {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding(24)
+    .padding(20)
     .backgroundColor(this.cPrimarySoft)
     .borderRadius(20);
   }
@@ -3217,7 +3217,7 @@ struct Index {
       Text(line.label)
         .fontSize(12)
         .fontColor(this.cTextSecondary)
-        .margin({ bottom: 4 });
+        .margin({ bottom: 2 });
       Text(line.value)
         .fontSize(14)
         .fontColor(this.cTextPrimary)
@@ -3226,7 +3226,7 @@ struct Index {
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .margin({ bottom: 16 });
+    .margin({ bottom: 12 });
   }
 
   @Builder
