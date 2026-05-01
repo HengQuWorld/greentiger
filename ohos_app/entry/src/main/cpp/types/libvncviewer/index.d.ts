@@ -18,6 +18,7 @@ export class VncClient {
   isSecure(): boolean;
   getSecurityLevel(): number;
   hasReceivedFirstUpdate(): boolean;
+  isServerLikelyMac(): boolean;
   setDebugOptions(enabled: boolean, level: number, byteOrder: number, pmFormat: number): void;
   getDebugInfo(): any;
   getDebugLog(clear: boolean): string;

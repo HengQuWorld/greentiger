@@ -61,6 +61,7 @@ interface VncClientData {
   getSecurityLevel?(): number;
   hasReceivedFirstUpdate?(): boolean;
   detectMonitors?(fallbackRects?: VncRect[]): VncRect[];
+  isServerLikelyMac?(): boolean;
   setDebugOptions(enabled: boolean, level: number, byteOrder: number, pmFormat: number): void;
   getDebugInfo(): VncDebugInfo;
   getDebugLog(clear: boolean): string;
@@ -230,6 +231,8 @@ struct Viewer {
   @State private selectedConnId: string = '';
   private runtimeSshConfig: SshTunnelConfig | null = null;
   private runtimeTouchScrollStep: number = 0;
+  private runtimeMacMode: boolean = false;
+  private macAutoChecked: boolean = false;
   @State private showPassword: boolean = false;
   @State private editOpen: boolean = false;
   @State private editId: string = '';
@@ -239,6 +242,7 @@ struct Viewer {
   @State private editPassword: string = '';
   @State private editStorePassword: boolean = true;
   @State private editTouchScrollStep: number = 0;
+  @State private editMacMode: boolean = false;
   @State private editShowPassword: boolean = false;
   @State private connectPromptOpen: boolean = false;
   @State private connectPromptConnId: string = '';
@@ -505,6 +509,8 @@ struct Viewer {
       this.runtimeTouchScrollStep = typeof touchScrollStepValue === 'number'
         ? this.normalizeTouchScrollStep(touchScrollStepValue)
         : this.normalizeTouchScrollStep(Number.parseInt(String(touchScrollStepValue ?? ''), 10));
+      const macModeValue = params['macMode'];
+      this.runtimeMacMode = typeof macModeValue === 'boolean' ? macModeValue : (String(macModeValue ?? '') === 'true');
       this.didAdoptServerName = false;
       this.showPassword = false;
       return true;
@@ -563,6 +569,7 @@ struct Viewer {
             password: it.password,
             storePassword: it.storePassword,
             touchScrollStep: it.touchScrollStep,
+            macMode: it.macMode,
             sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
             lastUsedAt: it.lastUsedAt
           });
@@ -693,6 +700,7 @@ struct Viewer {
         sessionId: string;
         monitorIndex: number;
         title: string;
+        macMode: boolean;
       }
       interface StartWant {
         deviceId: string;
@@ -704,7 +712,8 @@ struct Viewer {
       const wantParams: WantParameters = {
         sessionId: this.sharedSessionId,
         monitorIndex: index,
-        title: title
+        title: title,
+        macMode: this.runtimeMacMode
       };
       const want: StartWant = {
         deviceId: '',
@@ -2117,6 +2126,7 @@ struct Viewer {
             password: (oldPassword ?? ''),
             storePassword: (oldPassword ?? '').length > 0,
             touchScrollStep: 0,
+            macMode: false,
             sshTunnel: normalizeSshTunnelConfigForAddress(undefined, addr),
             lastUsedAt: Date.now()
           };
@@ -2161,6 +2171,7 @@ struct Viewer {
     this.password = c.password ?? '';
     this.runtimeSshConfig = normalizeSshTunnelConfigForAddress(c.sshTunnel, c.address);
     this.runtimeTouchScrollStep = this.normalizeTouchScrollStep(c.touchScrollStep);
+    this.runtimeMacMode = !!c.macMode;
     this.showPassword = false;
   }
 
@@ -2182,6 +2193,7 @@ struct Viewer {
           password: it.password,
           storePassword: it.storePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
           lastUsedAt: it.lastUsedAt
         });
@@ -2266,6 +2278,7 @@ struct Viewer {
           password: this.connectPromptStorePassword ? runtimePassword : '',
           storePassword: this.connectPromptStorePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
           lastUsedAt: now
         };
@@ -2288,6 +2301,7 @@ struct Viewer {
     this.password = runtimePassword;
     this.runtimeSshConfig = normalizeSshTunnelConfigForAddress(target.sshTunnel, target.address);
     this.runtimeTouchScrollStep = this.normalizeTouchScrollStep(target.touchScrollStep);
+    this.runtimeMacMode = !!target.macMode;
     this.showPassword = false;
     await this.saveConnections();
     this.closeConnectPasswordPrompt();
@@ -2323,6 +2337,7 @@ struct Viewer {
           password: enable ? nowPass : '',
           storePassword: enable,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
           lastUsedAt: it.lastUsedAt
         };
@@ -2365,6 +2380,7 @@ struct Viewer {
           password: it.storePassword ? pass : '',
           storePassword: it.storePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel,
           lastUsedAt: it.lastUsedAt
         };
@@ -2386,6 +2402,7 @@ struct Viewer {
     this.editPassword = '';
     this.editStorePassword = true;
     this.editTouchScrollStep = 0;
+    this.editMacMode = false;
     this.editShowPassword = false;
     this.editOpen = true;
   }
@@ -2400,6 +2417,7 @@ struct Viewer {
     this.editPassword = c.password ?? '';
     this.editStorePassword = !!c.storePassword;
     this.editTouchScrollStep = this.normalizeTouchScrollStep(c.touchScrollStep);
+    this.editMacMode = !!c.macMode;
     this.editShowPassword = false;
     this.editOpen = true;
   }
@@ -2596,6 +2614,7 @@ struct Viewer {
       password: this.editStorePassword ? (this.editPassword ?? '') : '',
       storePassword: this.editStorePassword,
       touchScrollStep: this.normalizeTouchScrollStep(this.editTouchScrollStep),
+      macMode: this.editMacMode,
       sshTunnel,
       lastUsedAt: this.editId ? ((this.connections ?? []).find(it => it.id === id)?.lastUsedAt ?? 0) : now
     };
@@ -2614,6 +2633,7 @@ struct Viewer {
     this.password = this.editStorePassword ? (next.password ?? '') : (this.editPassword ?? '');
     this.runtimeSshConfig = normalizeSshTunnelConfigForAddress(next.sshTunnel, next.address);
     this.runtimeTouchScrollStep = this.normalizeTouchScrollStep(next.touchScrollStep);
+    this.runtimeMacMode = !!next.macMode;
     this.showPassword = false;
     await this.saveConnections();
     this.closeEditDialog();
@@ -2664,6 +2684,7 @@ struct Viewer {
           password: it.storePassword ? (this.password ?? '') : '',
           storePassword: it.storePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, this.address ?? ''),
           lastUsedAt: now
         };
@@ -2688,6 +2709,13 @@ struct Viewer {
       this.vncState = info.state;
       if (info?.name) {
         this.serverName = info.name;
+        if (!this.macAutoChecked) {
+          this.macAutoChecked = true;
+          if (this.vncClient.isServerLikelyMac?.()) {
+            this.runtimeMacMode = true;
+            console.info(`Viewer auto-detected macOS server: ${info.name}`);
+          }
+        }
       }
       if (this.connected) {
         this.securityLevel = this.vncClient.getSecurityLevel?.() ?? 0;
@@ -3231,8 +3259,16 @@ struct Viewer {
   private remoteMetaDown: boolean = false;
   private remoteChineseMode: boolean = false;
 
-  private isMacServerTarget(): boolean {
-    return this.serverName.toLowerCase().indexOf('mac') !== -1 || this.serverName.indexOf('Apple') !== -1;
+
+  private remapKeyForMac(keysym: number): number {
+    if (!this.runtimeMacMode) return keysym;
+    switch (keysym) {
+      case 0xffe3: return 0xffeb; // Ctrl_L → Super_L (Command)
+      case 0xffe4: return 0xffec; // Ctrl_R → Super_R
+      case 0xffe7: return 0xffe3; // Meta_L → Ctrl_L
+      case 0xffe8: return 0xffe4; // Meta_R → Ctrl_R
+      default: return keysym;
+    }
   }
 
   private getModifierDown(ev: KeyEvent, key: string): boolean {
@@ -3252,22 +3288,26 @@ struct Viewer {
 
     let changed = false;
     if (shiftDown !== this.remoteShiftDown) {
-      this.safeSendKey(0xffe1, shiftDown);
+      const keysym = this.remapKeyForMac(0xffe1);
+      this.safeSendKey(keysym, shiftDown);
       this.remoteShiftDown = shiftDown;
       changed = true;
     }
     if (ctrlDown !== this.remoteCtrlDown) {
-      this.safeSendKey(0xffe3, ctrlDown);
+      const keysym = this.remapKeyForMac(0xffe3);
+      this.safeSendKey(keysym, ctrlDown);
       this.remoteCtrlDown = ctrlDown;
       changed = true;
     }
     if (altDown !== this.remoteAltDown) {
-      this.safeSendKey(0xffe9, altDown);
+      const keysym = this.remapKeyForMac(0xffe9);
+      this.safeSendKey(keysym, altDown);
       this.remoteAltDown = altDown;
       changed = true;
     }
     if (metaDown !== this.remoteMetaDown) {
-      this.safeSendKey(0xffe7, metaDown);
+      const keysym = this.remapKeyForMac(0xffe7);
+      this.safeSendKey(keysym, metaDown);
       this.remoteMetaDown = metaDown;
       changed = true;
     }
@@ -3293,8 +3333,7 @@ struct Viewer {
       
       await new Promise<void>(resolve => setTimeout(resolve, 50));
       
-      const isMac = this.isMacServerTarget();
-      const modKey = isMac ? 0xffe7 : 0xffe3; // Meta(Cmd) for Mac, Ctrl for others
+      const modKey = this.runtimeMacMode ? 0xffeb : 0xffe3; // Cmd(Super) for Mac, Ctrl for others
       const vKey = 0x76; // 'v'
       
       this.safeSendKey(modKey, true);
@@ -4064,6 +4103,7 @@ struct Viewer {
     this.softInputDraft = '';
     this.ticking = false;
     this.didAdoptServerName = false;
+    this.macAutoChecked = false;
     this.releaseViewerPixelMaps();
     this.frameCache = null;
     this.lastMask = 0;
@@ -5110,8 +5150,7 @@ struct Viewer {
           if (dy === 0) return;
 
           let clicks = 1;
-          const isMac = this.isMacServerTarget();
-          if (isMac) {
+          if (this.runtimeMacMode) {
             clicks = 10;
           }
 
@@ -6233,13 +6272,12 @@ struct Viewer {
       }
       
       if (code === KeyCode.KEYCODE_CAPS_LOCK && isDown) {
-        const isMac = this.isMacServerTarget();
-        if (isMac) {
+        if (this.runtimeMacMode) {
           this.remoteChineseMode = !this.remoteChineseMode;
         }
       }
 
-      const keysym = keySymFromEvent(ev, this.remoteChineseMode);
+      const keysym = this.remapKeyForMac(keySymFromEvent(ev, this.remoteChineseMode));
       if (!keysym) return false;
 
       if (keysym >= 0x01000000 && keysym <= 0x0100ffff) {
@@ -6263,10 +6301,10 @@ struct Viewer {
         this.noteLocalInputActivity();
         this.requestTick();
       }
-      if (keysym === 0xffe1 || keysym === 0xffe2) this.remoteShiftDown = isDown ? true : (isUp ? false : this.remoteShiftDown);
-      if (keysym === 0xffe3 || keysym === 0xffe4) this.remoteCtrlDown = isDown ? true : (isUp ? false : this.remoteCtrlDown);
-      if (keysym === 0xffe9 || keysym === 0xffea) this.remoteAltDown = isDown ? true : (isUp ? false : this.remoteAltDown);
-      if (keysym === 0xffe7 || keysym === 0xffe8) this.remoteMetaDown = isDown ? true : (isUp ? false : this.remoteMetaDown);
+      if (code === KeyCode.KEYCODE_SHIFT_LEFT || code === KeyCode.KEYCODE_SHIFT_RIGHT) this.remoteShiftDown = isDown ? true : (isUp ? false : this.remoteShiftDown);
+      if (code === KeyCode.KEYCODE_CTRL_LEFT || code === KeyCode.KEYCODE_CTRL_RIGHT) this.remoteCtrlDown = isDown ? true : (isUp ? false : this.remoteCtrlDown);
+      if (code === KeyCode.KEYCODE_ALT_LEFT || code === KeyCode.KEYCODE_ALT_RIGHT) this.remoteAltDown = isDown ? true : (isUp ? false : this.remoteAltDown);
+      if (code === KeyCode.KEYCODE_META_LEFT || code === KeyCode.KEYCODE_META_RIGHT) this.remoteMetaDown = isDown ? true : (isUp ? false : this.remoteMetaDown);
       return true;
     })
     .onAreaChange((oldValue: Area, newValue: Area) => {

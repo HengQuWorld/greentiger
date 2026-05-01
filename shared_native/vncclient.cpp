@@ -2,6 +2,7 @@
 #include "ssh_tunnel.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <memory>
@@ -1024,4 +1025,28 @@ const char* vncclient_last_error(vncclient_handle* client)
   if (!validClient(client))
     return "";
   return client->impl.lastError.c_str();
+}
+
+int vncclient_is_server_likely_mac(vncclient_handle* client)
+{
+  if (!validClient(client) || !client->impl.conn)
+    return 0;
+
+  // Apple's built-in VNC server (ARD / Screen Sharing) identifies itself
+  // with RFB protocol version 3.889 and is detected by
+  // CConnection::processVersionMsg() for shared-mode handling.
+  // The macOS desktop name typically contains "Mac" or "Apple".
+  const char* name = client->impl.conn->server.name();
+  if (!name || name[0] == '\0')
+    return 0;
+
+  std::string s(name);
+  for (char& c : s)
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+  if (s.find("mac") != std::string::npos ||
+      s.find("apple") != std::string::npos)
+    return 1;
+
+  return 0;
 }

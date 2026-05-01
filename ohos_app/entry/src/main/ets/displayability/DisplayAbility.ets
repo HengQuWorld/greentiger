@@ -22,6 +22,12 @@ function paramNum(params: Record<string, Object>, key: string, fallback: number 
   return (v !== undefined && v !== null) ? Number(v) : fallback;
 }
 
+function paramBool(params: Record<string, Object>, key: string, fallback: boolean = false): boolean {
+  const v = params[key];
+  if (typeof v === 'boolean') return v;
+  return (v !== undefined && v !== null) ? String(v) === 'true' : fallback;
+}
+
 export default class DisplayAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
@@ -32,8 +38,9 @@ export default class DisplayAbility extends UIAbility {
       const sessionId = paramStr(params, 'sessionId');
       const monitorIndex = paramNum(params, 'monitorIndex');
       const title = paramStr(params, 'title', '显示窗口');
-      const launchParams: DisplayLaunchParams = { sessionId, monitorIndex, title };
-      console.info(`DisplayAbility onWindowStageCreate: sessionId=${sessionId}, monitorIndex=${monitorIndex}, title=${title}`);
+      const macMode = paramBool(params, 'macMode');
+      const launchParams: DisplayLaunchParams = { sessionId, monitorIndex, title, macMode };
+      console.info(`DisplayAbility onWindowStageCreate: sessionId=${sessionId}, monitorIndex=${monitorIndex}, title=${title}, macMode=${macMode}`);
       if (sessionId) {
         viewerMultiWindowStore.registerWindow({
           windowName: `viewer-display:${sessionId}:${monitorIndex}`,

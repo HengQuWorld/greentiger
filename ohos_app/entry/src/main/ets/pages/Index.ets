@@ -43,6 +43,7 @@ interface ViewerAbilityParams extends Record<string, WantParamValue> {
   name: string;
   sshConfig?: string;
   touchScrollStep?: number;
+  macMode?: boolean;
 }
 
 interface StartWant {
@@ -84,6 +85,7 @@ interface VncClient {
   setDebugOptions(enabled: boolean, level: number, byteOrder: number, pmFormat: number): void;
   getDebugInfo(): VncDebugInfo;
   getDebugLog(clear: boolean): string;
+  isServerLikelyMac?(): boolean;
 }
 
 interface BorderSpec {
@@ -226,6 +228,7 @@ struct Index {
   @State private editSshStrictHostKeyCheck: boolean = false;
   @State private editSshRemoteHost: string = '';
   @State private editSshRemotePortText: string = `${DEFAULT_VNC_PORT}`;
+  @State private editMacMode: boolean = false;
   @State connected: boolean = false;
   @State connecting: boolean = false;
   @State lastError: string = '';
@@ -398,6 +401,7 @@ struct Index {
             password: (oldPassword ?? ''),
             storePassword: (oldPassword ?? '').length > 0,
             touchScrollStep: 0,
+            macMode: false,
             sshTunnel: normalizeSshTunnelConfigForAddress(undefined, addr),
             lastUsedAt: Date.now()
           };
@@ -462,6 +466,7 @@ struct Index {
           password: it.password,
           storePassword: it.storePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
           lastUsedAt: it.lastUsedAt
         });
@@ -517,6 +522,7 @@ struct Index {
           password: enable ? nowPass : '',
           storePassword: enable,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
           lastUsedAt: it.lastUsedAt
         };
@@ -559,6 +565,7 @@ struct Index {
           password: it.storePassword ? pass : '',
           storePassword: it.storePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel,
           lastUsedAt: it.lastUsedAt
         };
@@ -580,6 +587,7 @@ struct Index {
     this.editPassword = '';
     this.editStorePassword = true;
     this.editTouchScrollStep = 0;
+    this.editMacMode = false;
     this.loadEditSshConfig(undefined, '');
     this.editTabIndex = EDIT_TAB_BASIC;
     this.editMoreOptionsOpen = this.shouldOpenEditMoreOptions();
@@ -598,6 +606,7 @@ struct Index {
     this.editPassword = c.password ?? '';
     this.editStorePassword = !!c.storePassword;
     this.editTouchScrollStep = this.normalizeTouchScrollStep(c.touchScrollStep);
+    this.editMacMode = !!c.macMode;
     this.loadEditSshConfig(c.sshTunnel, c.address);
     this.editTabIndex = EDIT_TAB_BASIC;
     this.editMoreOptionsOpen = this.shouldOpenEditMoreOptions();
@@ -1073,7 +1082,7 @@ struct Index {
   }
 
   private shouldOpenEditMoreOptions(): boolean {
-    return this.normalizeTouchScrollStep(this.editTouchScrollStep) > 0;
+    return this.normalizeTouchScrollStep(this.editTouchScrollStep) > 0 || this.editMacMode;
   }
 
   private hasEditAdvancedSshOptions(): boolean {
@@ -1181,6 +1190,7 @@ struct Index {
       password: this.editStorePassword ? (this.editPassword ?? '') : '',
       storePassword: this.editStorePassword,
       touchScrollStep: this.normalizeTouchScrollStep(this.editTouchScrollStep),
+      macMode: this.editMacMode,
       sshTunnel,
       lastUsedAt: this.editId ? ((this.connections ?? []).find(it => it.id === id)?.lastUsedAt ?? 0) : now
     };
@@ -1249,6 +1259,7 @@ struct Index {
           password: it.storePassword ? (this.password ?? '') : '',
           storePassword: it.storePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, this.address ?? ''),
           lastUsedAt: now
         };
@@ -1303,6 +1314,7 @@ struct Index {
             password: it.password,
             storePassword: it.storePassword,
             touchScrollStep: it.touchScrollStep,
+            macMode: it.macMode,
             sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
             lastUsedAt: it.lastUsedAt
           });
@@ -2093,6 +2105,41 @@ struct Index {
       .margin({ bottom: 12 });
 
       Column() {
+        Text('Mac 键盘模式')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.cTextPrimary)
+          .width('100%')
+          .padding({ bottom: 4 });
+        Text('连接 Mac 时自动将 Ctrl 映射为 ⌘ 键，修复剪贴板快捷键。连接后会自动识别，仅需在识别结果不对时手动开启。')
+          .fontSize(11)
+          .lineHeight(16)
+          .fontColor(this.cTextSecondary)
+          .width('100%')
+          .padding({ bottom: 10 });
+        Row() {
+          Column() {
+            Text('Mac 键盘模式')
+              .fontSize(12)
+              .fontColor(this.cTextSecondary);
+          }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start);
+          BrandSwitch({
+            isOn: this.editMacMode,
+            isEnabled: true,
+            onChange: (next: boolean) => this.editMacMode = next
+          });
+        }
+      }
+      .width('100%')
+      .padding(12)
+      .backgroundColor(this.cSurfaceAlt)
+      .border({ width: 1, color: this.cBorder })
+      .borderRadius(16)
+      .margin({ bottom: 12 });
+
+      Column() {
         Text('SSH 隧道')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
@@ -2828,6 +2875,7 @@ struct Index {
           password: it.password,
           storePassword: it.storePassword,
           touchScrollStep: it.touchScrollStep,
+          macMode: it.macMode,
           sshTunnel: normalizeSshTunnelConfigForAddress(it.sshTunnel, it.address),
           lastUsedAt: now
         });
@@ -2857,7 +2905,8 @@ struct Index {
         password: String(c.password ?? ''),
         name: String((c.name ?? '').trim()),
         sshConfig: JSON.stringify(this.getNormalizedConnectionSsh(c)),
-        touchScrollStep: this.normalizeTouchScrollStep(c.touchScrollStep)
+        touchScrollStep: this.normalizeTouchScrollStep(c.touchScrollStep),
+        macMode: !!c.macMode
       };
       const want: StartWant = {
         bundleName,

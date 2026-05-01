@@ -8,6 +8,7 @@ export interface SharedViewerRect {
 export interface VncClientLike {
   sendPointer(x: number, y: number, mask: number): void;
   sendKey(keysym: number, down: boolean): void;
+  isServerLikelyMac?(): boolean;
 }
 
 export interface SharedViewerSessionSnapshot {

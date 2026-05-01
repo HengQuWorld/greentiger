@@ -6,6 +6,7 @@ export interface ConnectionItem {
   password: string;
   storePassword: boolean;
   touchScrollStep: number;
+  macMode: boolean;
   sshTunnel: SshTunnelConfig;
   lastUsedAt: number;
 }
@@ -18,6 +19,7 @@ export interface ConnectionJson {
   password?: string;
   storePassword?: boolean;
   touchScrollStep?: number;
+  macMode?: boolean;
   sshTunnel?: SshTunnelConfig;
   lastUsedAt?: number;
 }
@@ -243,6 +245,7 @@ export function parseConnectionsJson(text: string): ConnectionItem[] {
       const touchScrollStep = typeof c?.touchScrollStep === 'number' && Number.isFinite(c.touchScrollStep)
         ? Math.max(0, Math.min(48, Math.floor(c.touchScrollStep)))
         : 0;
+      const macMode = typeof c?.macMode === 'boolean' ? c.macMode : false;
       const lastUsedAt = typeof c?.lastUsedAt === 'number' && Number.isFinite(c.lastUsedAt) ? c.lastUsedAt : 0;
 
       out.push({
@@ -253,6 +256,7 @@ export function parseConnectionsJson(text: string): ConnectionItem[] {
         password: storePassword ? password : '',
         storePassword,
         touchScrollStep,
+        macMode,
         sshTunnel,
         lastUsedAt
       });

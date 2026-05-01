@@ -1286,6 +1286,24 @@ static napi_value VncDetectMonitors(napi_env env, napi_callback_info info)
   return arr;
 }
 
+static napi_value VncIsServerLikelyMac(napi_env env, napi_callback_info info)
+{
+  napi_value jsthis = nullptr;
+  napi_get_cb_info(env, info, nullptr, nullptr, &jsthis, nullptr);
+  ClientState* st_ptr = nullptr;
+  napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
+  if (!st_ptr || !st_ptr->client) {
+    napi_value out;
+    napi_get_boolean(env, false, &out);
+    return out;
+  }
+
+  int result = vncclient_is_server_likely_mac(st_ptr->client);
+  napi_value out;
+  napi_get_boolean(env, result != 0, &out);
+  return out;
+}
+
 static napi_value VncClient_New(napi_env env, napi_callback_info info) {
   napi_value target;
   napi_get_new_target(env, info, &target);
@@ -1334,7 +1352,8 @@ static napi_value Init(napi_env env, napi_value exports)
     { "isSecure", 0, VncIsSecure, 0, 0, 0, napi_default, 0 },
     { "getSecurityLevel", 0, VncGetSecurityLevel, 0, 0, 0, napi_default, 0 },
     { "hasReceivedFirstUpdate", 0, VncHasReceivedFirstUpdate, 0, 0, 0, napi_default, 0 },
-    { "detectMonitors", 0, VncDetectMonitors, 0, 0, 0, napi_default, 0 }
+    { "detectMonitors", 0, VncDetectMonitors, 0, 0, 0, napi_default, 0 },
+    { "isServerLikelyMac", 0, VncIsServerLikelyMac, 0, 0, 0, napi_default, 0 }
   };
   
   napi_value cons;

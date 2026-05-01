@@ -23,6 +23,7 @@ export interface DisplayLaunchParams {
   sessionId: string;
   monitorIndex: number;
   title: string;
+  macMode?: boolean;
 }
 
 const DEFAULT_PARAMS: DisplayLaunchParams = {
@@ -71,6 +72,8 @@ struct DisplayPage {
   private remoteAltDown: boolean = false;
   private remoteMetaDown: boolean = false;
   private remoteChineseMode: boolean = false;
+  private macMode: boolean = false;
+  private macAutoChecked: boolean = false;
 
   private isInteracting: boolean = false;
   private frameThrottle: InteractFrameThrottle = new InteractFrameThrottle();
@@ -123,6 +126,7 @@ struct DisplayPage {
     this.sessionId = params.sessionId;
     this.monitorIndex = Math.max(0, Math.floor(params.monitorIndex));
     this.title = params.title || `屏幕 ${this.monitorIndex + 1}`;
+    this.macMode = !!params.macMode;
     if (!this.sessionId) {
       this.statusText = '缺少会话标识，请在主窗口重新打开';
       return;
@@ -242,6 +246,15 @@ struct DisplayPage {
     this.connected = snapshot.connected;
     this.fbW = snapshot.fbW;
     this.fbH = snapshot.fbH;
+
+    if (snapshot.connected && !this.macAutoChecked) {
+      this.macAutoChecked = true;
+      const client = viewerMultiWindowStore.getVncClient(this.sessionId);
+      if (client?.isServerLikelyMac?.()) {
+        this.macMode = true;
+        console.info(`DisplayPage auto-detected macOS server`);
+      }
+    }
     const monitor = snapshot.monitors[this.monitorIndex];
     if (monitor && monitor.w > 0 && monitor.h > 0) {
       this.monitorRect = monitor;
@@ -344,6 +357,17 @@ struct DisplayPage {
     }
   }
 
+  private remapKeyForMac(keysym: number): number {
+    if (!this.macMode) return keysym;
+    switch (keysym) {
+      case 0xffe3: return 0xffeb; // Ctrl_L → Super_L (Command)
+      case 0xffe4: return 0xffec; // Ctrl_R → Super_R
+      case 0xffe7: return 0xffe3; // Meta_L → Ctrl_L
+      case 0xffe8: return 0xffe4; // Meta_R → Ctrl_R
+      default: return keysym;
+    }
+  }
+
   private syncRemoteModifiers(ev: KeyEvent): void {
     const shiftDown = this.getModifierDown(ev, 'Shift');
     const ctrlDown = this.getModifierDown(ev, 'Ctrl');
@@ -351,19 +375,23 @@ struct DisplayPage {
     const metaDown = this.getModifierDown(ev, 'Meta');
 
     if (shiftDown !== this.remoteShiftDown) {
-      this.safeSendKey(0xffe1, shiftDown);
+      const keysym = this.remapKeyForMac(0xffe1);
+      this.safeSendKey(keysym, shiftDown);
       this.remoteShiftDown = shiftDown;
     }
     if (ctrlDown !== this.remoteCtrlDown) {
-      this.safeSendKey(0xffe3, ctrlDown);
+      const keysym = this.remapKeyForMac(0xffe3);
+      this.safeSendKey(keysym, ctrlDown);
       this.remoteCtrlDown = ctrlDown;
     }
     if (altDown !== this.remoteAltDown) {
-      this.safeSendKey(0xffe9, altDown);
+      const keysym = this.remapKeyForMac(0xffe9);
+      this.safeSendKey(keysym, altDown);
       this.remoteAltDown = altDown;
     }
     if (metaDown !== this.remoteMetaDown) {
-      this.safeSendKey(0xffe7, metaDown);
+      const keysym = this.remapKeyForMac(0xffe7);
+      this.safeSendKey(keysym, metaDown);
       this.remoteMetaDown = metaDown;
     }
   }
@@ -550,7 +578,7 @@ struct DisplayPage {
       this.remoteChineseMode = !this.remoteChineseMode;
     }
 
-    const keysym = keySymFromEvent(ev, this.remoteChineseMode);
+    const keysym = this.remapKeyForMac(keySymFromEvent(ev, this.remoteChineseMode));
     if (!keysym) return false;
 
     if (keysym >= 0x01000000 && keysym <= 0x0100ffff) {
@@ -568,10 +596,10 @@ struct DisplayPage {
     if (isDown) this.safeSendKey(keysym, true);
     if (isUp) this.safeSendKey(keysym, false);
 
-    if (keysym === 0xffe1 || keysym === 0xffe2) this.remoteShiftDown = isDown ? true : (isUp ? false : this.remoteShiftDown);
-    if (keysym === 0xffe3 || keysym === 0xffe4) this.remoteCtrlDown = isDown ? true : (isUp ? false : this.remoteCtrlDown);
-    if (keysym === 0xffe9 || keysym === 0xffea) this.remoteAltDown = isDown ? true : (isUp ? false : this.remoteAltDown);
-    if (keysym === 0xffe7 || keysym === 0xffe8) this.remoteMetaDown = isDown ? true : (isUp ? false : this.remoteMetaDown);
+    if (code === KeyCode.KEYCODE_SHIFT_LEFT || code === KeyCode.KEYCODE_SHIFT_RIGHT) this.remoteShiftDown = isDown ? true : (isUp ? false : this.remoteShiftDown);
+    if (code === KeyCode.KEYCODE_CTRL_LEFT || code === KeyCode.KEYCODE_CTRL_RIGHT) this.remoteCtrlDown = isDown ? true : (isUp ? false : this.remoteCtrlDown);
+    if (code === KeyCode.KEYCODE_ALT_LEFT || code === KeyCode.KEYCODE_ALT_RIGHT) this.remoteAltDown = isDown ? true : (isUp ? false : this.remoteAltDown);
+    if (code === KeyCode.KEYCODE_META_LEFT || code === KeyCode.KEYCODE_META_RIGHT) this.remoteMetaDown = isDown ? true : (isUp ? false : this.remoteMetaDown);
     return true;
   }
 

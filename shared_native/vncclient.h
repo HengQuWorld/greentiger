@@ -94,6 +94,8 @@ int vncclient_request_clipboard(vncclient_handle* client);
 int vncclient_announce_clipboard(vncclient_handle* client, int available);
 int vncclient_send_clipboard(vncclient_handle* client, const char* utf8);
 
+int vncclient_is_server_likely_mac(vncclient_handle* client);
+
 const char* vncclient_last_error(vncclient_handle* client);
 
 #ifdef __cplusplus
