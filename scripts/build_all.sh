@@ -19,7 +19,7 @@ log() {
 print_selected_mode() {
   local mode="$1"
   log "Selected build mode: ${mode}"
-  log "HarmonyOS signing mode: ${mode} (passed via SIGN_ACTIVE)"
+  log "HarmonyOS signing mode: ${mode} (via .build-signing-mode file)"
 }
 
 print_artifact_summary() {
@@ -118,6 +118,10 @@ run_ohos_build() {
   local native_changes="$1"
   local mode="$2"
 
+  local mode_file="${OHOS_DIR}/.build-signing-mode"
+  echo "${mode}" > "${mode_file}"
+  trap "rm -f '${mode_file}'" RETURN
+
   if [[ -n "${native_changes}" ]]; then
     log "Native or CMake changes detected, running HarmonyOS clean first"
     printf '%s\n' "${native_changes}"
@@ -131,11 +135,9 @@ run_ohos_build() {
   (
     cd "${OHOS_DIR}"
     if [[ "${mode}" == "release" ]]; then
-      SIGN_ACTIVE="${mode}" \
-        "${SCRIPT_DIR}/hvigorw-ohos.sh" assembleApp -p product=default -p buildMode=release
+      "${SCRIPT_DIR}/hvigorw-ohos.sh" assembleApp -p product=default -p buildMode=release
     else
-      SIGN_ACTIVE="${mode}" \
-        "${SCRIPT_DIR}/hvigorw-ohos.sh" assembleApp -p product=default -p buildMode=debug
+      "${SCRIPT_DIR}/hvigorw-ohos.sh" assembleApp -p product=default -p buildMode=debug
     fi
   )
 

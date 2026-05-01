@@ -22,6 +22,7 @@ install_manifest.txt
 build-ohos-client/
 
 # OHOS App Build and IDE
+ohos_app/.build-signing-mode
 .hvigor/
 ohos_app/.appanalyzer/
 ohos_app/.hvigor/

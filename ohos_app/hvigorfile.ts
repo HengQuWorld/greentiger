@@ -53,20 +53,30 @@ function getSigningConfig() {
     });
   }
 
+  const buildAllModeFile = path.resolve(__dirname, '.build-signing-mode');
+  let buildAllMode: string | undefined;
+  if (fs.existsSync(buildAllModeFile)) {
+    buildAllMode = fs.readFileSync(buildAllModeFile, 'utf8').trim();
+  }
+
   const signActiveFromEnv = process.env.SIGN_ACTIVE;
   const defaultSignActive = props['sign.active'] || 'debug';
 
   let activeMode: string;
-  if (signActiveFromEnv) {
+  let modeSource: string;
+  if (buildAllMode) {
+    activeMode = buildAllMode;
+    modeSource = 'build-all script';
+  } else if (signActiveFromEnv) {
     activeMode = signActiveFromEnv;
-  } else if (props['sign.release.storeFile']) {
-    activeMode = 'release';
+    modeSource = 'SIGN_ACTIVE env';
   } else {
     activeMode = defaultSignActive;
+    modeSource = 'sign.active in local.properties';
   }
 
   const prefix = `sign.${activeMode}.`;
-  console.log(`[Build] Signing config - activeMode: ${activeMode}`);
+  console.log(`[Build] Signing config - activeMode: ${activeMode} (source: ${modeSource})`);
 
   if (!props[`${prefix}storeFile`]) {
     return undefined;
