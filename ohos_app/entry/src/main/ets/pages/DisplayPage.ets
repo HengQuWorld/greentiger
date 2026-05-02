@@ -268,6 +268,7 @@ struct DisplayPage {
     }
     if (!snapshot.connected) {
       this.statusText = '会话未连接';
+      this.macAutoChecked = false;
       return;
     }
     if (!snapshot.frame || snapshot.fbW <= 0 || snapshot.fbH <= 0) {
