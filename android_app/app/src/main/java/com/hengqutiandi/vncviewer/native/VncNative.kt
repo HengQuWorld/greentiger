@@ -149,6 +149,8 @@ class VncClient : AutoCloseable {
 
     fun detectMonitors(fallback: Array<android.graphics.Rect>? = null): Array<android.graphics.Rect> = nativeDetectMonitors(handle, fallback)
 
+    fun isServerLikelyMac(): Boolean = nativeIsServerLikelyMac(handle)
+
     override fun close() {
         if (handle != 0L) {
             nativeDestroy(handle)
@@ -271,5 +273,8 @@ class VncClient : AutoCloseable {
 
         @JvmStatic
         external fun nativeDetectMonitors(handle: Long, fallback: Array<android.graphics.Rect>?): Array<android.graphics.Rect>
+
+        @JvmStatic
+        external fun nativeIsServerLikelyMac(handle: Long): Boolean
     }
 }

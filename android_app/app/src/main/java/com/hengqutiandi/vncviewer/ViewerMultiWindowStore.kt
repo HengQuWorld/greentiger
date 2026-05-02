@@ -13,6 +13,7 @@ data class SharedViewerRect(
 interface VncClientLike {
     fun sendPointer(x: Int, y: Int, mask: Int)
     fun sendKey(keysym: Int, down: Boolean)
+    fun isServerLikelyMac(): Boolean
 }
 
 data class SharedViewerSessionSnapshot(

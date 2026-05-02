@@ -753,6 +753,21 @@ Java_com_hengqutiandi_vncviewer_native_VncClient_nativeHasReceivedFirstUpdate(JN
   return result;
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_hengqutiandi_vncviewer_native_VncClient_nativeIsServerLikelyMac(JNIEnv*, jclass, jlong handle)
+{
+  auto* state = HandleToState(handle);
+  if (!state)
+    return JNI_FALSE;
+
+  std::lock_guard<std::mutex> clientLock(state->clientMu);
+  if (!state->client)
+    return JNI_FALSE;
+
+  jboolean result = vncclient_is_server_likely_mac(state->client) != 0 ? JNI_TRUE : JNI_FALSE;
+  return result;
+}
+
 extern "C" JNIEXPORT jobjectArray JNICALL
 Java_com_hengqutiandi_vncviewer_native_VncClient_nativeDetectMonitors(JNIEnv* env, jclass, jlong handle, jobjectArray fallbackArray) {
     auto* state = HandleToState(handle);

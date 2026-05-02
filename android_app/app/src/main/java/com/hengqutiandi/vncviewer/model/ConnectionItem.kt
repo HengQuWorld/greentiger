@@ -29,6 +29,7 @@ data class ConnectionItem(
     val password: String,
     val storePassword: Boolean,
     val touchScrollStep: Int,
+    val macMode: Boolean = false,
     val lastUsedAt: Long,
     val ssh: SshConnectionConfig = SshConnectionConfig()
 )
@@ -185,6 +186,7 @@ fun ConnectionItem.toJson(includePassword: Boolean = true): JSONObject = JSONObj
     .put("password", if (includePassword) password else "")
     .put("storePassword", storePassword)
     .put("touchScrollStep", touchScrollStep)
+    .put("macMode", macMode)
     .put("lastUsedAt", lastUsedAt)
     .put("ssh", JSONObject()
         .put("enabled", ssh.enabled)
@@ -219,6 +221,7 @@ fun connectionFromJson(json: JSONObject): ConnectionItem? {
         password = json.optString("password"),
         storePassword = json.optBoolean("storePassword", json.optString("password").isNotEmpty()),
         touchScrollStep = json.optInt("touchScrollStep").coerceIn(0, 48),
+        macMode = json.optBoolean("macMode", false),
         lastUsedAt = json.optLong("lastUsedAt", 0L),
         ssh = normalizeSshConfigForAddress(
             config = SshConnectionConfig(

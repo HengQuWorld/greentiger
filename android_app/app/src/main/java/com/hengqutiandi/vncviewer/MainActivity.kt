@@ -407,6 +407,7 @@ private data class EditConnectionState(
     val password: String = "",
     val storePassword: Boolean = true,
     val touchScrollStep: Int = 0,
+    val macMode: Boolean = false,
     val ssh: SshConnectionConfig = SshConnectionConfig()
 )
 
@@ -424,6 +425,7 @@ private fun createConnectionItem(
     password: String,
     storePassword: Boolean,
     touchScrollStep: Int,
+    macMode: Boolean = false,
     ssh: SshConnectionConfig,
     lastUsedAt: Long
 ): ConnectionItem {
@@ -436,6 +438,7 @@ private fun createConnectionItem(
         password = if (storePassword) password else "",
         storePassword = storePassword,
         touchScrollStep = normalizeTouchScrollStep(touchScrollStep),
+        macMode = macMode,
         ssh = normalizeSshConfigForAddress(ssh, normalizedAddress),
         lastUsedAt = lastUsedAt
     )
@@ -450,6 +453,7 @@ private fun ConnectionItem.normalized(lastUsedAt: Long = this.lastUsedAt): Conne
         password = password,
         storePassword = storePassword,
         touchScrollStep = touchScrollStep,
+        macMode = macMode,
         ssh = ssh,
         lastUsedAt = lastUsedAt
     )
@@ -901,6 +905,8 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         }
     }
 
+    fun isServerLikelyMac(): Boolean = client.isServerLikelyMac()
+
     fun sendText(text: String) {
         text.forEach { ch ->
             val keysym = ch.code
@@ -937,6 +943,8 @@ private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
             override fun sendKey(keysym: Int, down: Boolean) {
                 this@ViewerSession.sendKey(keysym, down)
             }
+            override fun isServerLikelyMac(): Boolean =
+                this@ViewerSession.isServerLikelyMac()
         }
     }
 
@@ -1235,6 +1243,9 @@ private fun GreenTigerApp(launchIntent: Intent?) {
     var touchScrollStep by rememberSaveable {
         mutableIntStateOf(viewerLaunchArgs?.touchScrollStep ?: connections.firstOrNull { it.id == initialSelectedId }?.touchScrollStep ?: 0)
     }
+    var macMode by rememberSaveable {
+        mutableStateOf(viewerLaunchArgs?.macMode ?: connections.firstOrNull { it.id == initialSelectedId }?.macMode ?: false)
+    }
     var sshConfig by remember {
         mutableStateOf(viewerLaunchArgs?.ssh ?: connections.firstOrNull { it.id == initialSelectedId }?.ssh ?: SshConnectionConfig())
     }
@@ -1268,6 +1279,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
         password = item.password
         storePassword = item.storePassword
         touchScrollStep = normalizeTouchScrollStep(item.touchScrollStep)
+        macMode = item.macMode
         sshConfig = normalizeSshConfigForAddress(item.ssh, item.address)
     }
 
@@ -1294,6 +1306,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
             password = password,
             storePassword = storePassword,
             touchScrollStep = touchScrollStep,
+            macMode = macMode,
             ssh = sshConfig,
             lastUsedAt = if (markUsed) now else connections.firstOrNull { it.id == id }?.lastUsedAt ?: now
         )
@@ -1319,6 +1332,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
             password = runtimePassword,
             storePassword = shouldStorePassword,
             touchScrollStep = item.touchScrollStep,
+            macMode = item.macMode,
             ssh = item.ssh,
             lastUsedAt = System.currentTimeMillis()
         )
@@ -1342,6 +1356,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
                     user = updated.user,
                     password = runtimePassword,
                     touchScrollStep = updated.touchScrollStep,
+                    macMode = updated.macMode,
                     ssh = effectiveSsh
                 )
             )
@@ -1425,6 +1440,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
                     password = it.password,
                     storePassword = it.storePassword,
                     touchScrollStep = it.touchScrollStep,
+                    macMode = it.macMode,
                     ssh = persistedSsh,
                     lastUsedAt = connections.firstOrNull { existing -> existing.id == it.id }?.lastUsedAt ?: now
                 )
@@ -1558,6 +1574,13 @@ private fun GreenTigerApp(launchIntent: Intent?) {
         }
         if (!viewerSession.connected && !viewerSession.connecting) {
             val success = viewerSession.connect(parsed, args.user.trim(), args.password, args.ssh)
+            if (success && !args.macMode) {
+                try {
+                    if (viewerSession.isServerLikelyMac()) {
+                        macMode = true
+                    }
+                } catch (_: Throwable) {}
+            }
             if (!success && isActive) {
                 withContext(Dispatchers.Main) {
                     showToast(viewerSession.lastError.ifBlank { "连接失败" })
@@ -1643,6 +1666,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
                     password = item.password,
                     storePassword = item.storePassword,
                     touchScrollStep = normalizeTouchScrollStep(item.touchScrollStep),
+                    macMode = item.macMode,
                     ssh = normalizeEditSshConfig(item.ssh, item.address)
                 )
             },
@@ -1659,6 +1683,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
             address = address,
             ssh = sshConfig,
             touchScrollStep = touchScrollStep,
+            macMode = macMode,
             onBack = {
                 viewerSession.disconnect()
                 if (isViewerWindow) {
@@ -2215,6 +2240,7 @@ private fun ViewerScreen(
     address: String,
     ssh: SshConnectionConfig,
     touchScrollStep: Int,
+    macMode: Boolean,
     onBack: () -> Unit,
     onShowToast: (String) -> Unit,
     onOpenSendText: () -> Unit,
@@ -2389,7 +2415,7 @@ private fun ViewerScreen(
                         title = windowTitle
                     )
                 )
-                val intent = createDisplayIntent(context, DisplayLaunchParams(sessionId = sid, monitorIndex = index, title = windowTitle))
+                val intent = createDisplayIntent(context, DisplayLaunchParams(sessionId = sid, monitorIndex = index, title = windowTitle, macMode = macMode))
                 context.startActivity(intent)
             }
         }
@@ -2464,6 +2490,9 @@ private fun ViewerScreen(
             pulseChromeInteraction()
         }
     }
+    val remapKey: (Int) -> Int = remember(macMode) {
+        { keysym -> remapKeyForMac(macMode, keysym) }
+    }
     val handleRemoteKeyEvent: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
         val nativeEvent = event.nativeKeyEvent
         if (nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_F11) {
@@ -2475,7 +2504,7 @@ private fun ViewerScreen(
             }
             true
         } else {
-            val keysym = keySymFromAndroidKey(nativeEvent.keyCode, nativeEvent.isShiftPressed, nativeEvent.metaState and android.view.KeyEvent.META_CAPS_LOCK_ON != 0)
+            val keysym = remapKey(keySymFromAndroidKey(nativeEvent.keyCode, nativeEvent.isShiftPressed, nativeEvent.metaState and android.view.KeyEvent.META_CAPS_LOCK_ON != 0))
             if (keysym == 0) {
                 false
             } else {
@@ -4525,7 +4554,7 @@ private fun ConnectionItem.presentation(): ConnectionPresentation =
     buildConnectionPresentation(address, ssh, user, password)
 
 private fun hasConnectionMoreOptions(state: EditConnectionState): Boolean =
-    normalizeTouchScrollStep(state.touchScrollStep) > 0
+    normalizeTouchScrollStep(state.touchScrollStep) > 0 || state.macMode
 
 private fun normalizeEditSshConfig(config: SshConnectionConfig?, address: String): SshConnectionConfig {
     val normalized = normalizeSshConfigForAddress(config, address)
@@ -4894,6 +4923,17 @@ private fun AdvancedEditConnectionContent(
             text = "当前：${touchScrollLabel(state.touchScrollStep)}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.secondary
+        )
+    }
+    ConnectionSectionCard(
+        title = "Mac 键盘模式",
+        description = "连接 Mac 时自动将 Ctrl 映射为 ⌘ 键，修复剪贴板快捷键。连接后会自动识别，仅需在识别结果不对时手动开启。"
+    ) {
+        SettingSwitchRow(
+            title = "Mac 键盘模式",
+            supportingText = if (state.macMode) "已开启：Ctrl 键将映射为 Command 键" else null,
+            checked = state.macMode,
+            onCheckedChange = { onStateChange(state.copy(macMode = it)) }
         )
     }
     ConnectionSectionCard(

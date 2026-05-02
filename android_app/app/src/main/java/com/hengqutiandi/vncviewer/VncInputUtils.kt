@@ -107,6 +107,17 @@ fun keySymFromAndroidKey(code: Int, shiftDown: Boolean, capsOn: Boolean): Int {
     }
 }
 
+fun remapKeyForMac(macMode: Boolean, keysym: Int): Int {
+    if (!macMode) return keysym
+    return when (keysym) {
+        0xffe3 -> 0xffeb // Ctrl_L → Super_L (Command)
+        0xffe4 -> 0xffec // Ctrl_R → Super_R
+        0xffe7 -> 0xffe3 // Meta_L → Ctrl_L
+        0xffe8 -> 0xffe4 // Meta_R → Ctrl_R
+        else -> keysym
+    }
+}
+
 data class TextDelta(val deletedCount: Int, val insertedText: String)
 
 private fun String.toCodePointList(): List<Int> {

@@ -65,11 +65,13 @@ import kotlin.math.roundToInt
 private const val EXTRA_DISPLAY_SESSION_ID = "display_session_id"
 private const val EXTRA_DISPLAY_MONITOR_INDEX = "display_monitor_index"
 private const val EXTRA_DISPLAY_TITLE = "display_title"
+private const val EXTRA_DISPLAY_MAC_MODE = "display_mac_mode"
 
 data class DisplayLaunchParams(
     val sessionId: String,
     val monitorIndex: Int,
-    val title: String
+    val title: String,
+    val macMode: Boolean = false
 )
 
 internal fun createDisplayIntent(
@@ -80,6 +82,7 @@ internal fun createDisplayIntent(
         .putExtra(EXTRA_DISPLAY_SESSION_ID, params.sessionId)
         .putExtra(EXTRA_DISPLAY_MONITOR_INDEX, params.monitorIndex)
         .putExtra(EXTRA_DISPLAY_TITLE, params.title)
+        .putExtra(EXTRA_DISPLAY_MAC_MODE, params.macMode)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
 }
 
@@ -89,7 +92,8 @@ internal fun Intent.toDisplayLaunchParams(): DisplayLaunchParams? {
     return DisplayLaunchParams(
         sessionId = sessionId,
         monitorIndex = getIntExtra(EXTRA_DISPLAY_MONITOR_INDEX, 0),
-        title = getStringExtra(EXTRA_DISPLAY_TITLE).orEmpty().ifBlank { "显示窗口" }
+        title = getStringExtra(EXTRA_DISPLAY_TITLE).orEmpty().ifBlank { "显示窗口" },
+        macMode = getBooleanExtra(EXTRA_DISPLAY_MAC_MODE, false)
     )
 }
 
@@ -186,6 +190,8 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     var fbH by remember { mutableIntStateOf(0) }
     var monitorRect by remember { mutableStateOf(SharedViewerRect(0, 0, 1, 1)) }
     var connected by remember { mutableStateOf(false) }
+    var macMode by remember { mutableStateOf(launchParams.macMode) }
+    var macAutoChecked by remember { mutableStateOf(false) }
 
     val sessionId = launchParams.sessionId
     val monitorIndex = maxOf(0, launchParams.monitorIndex)
@@ -243,11 +249,19 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                     }
                 } else {
                     connected = snapshot.connected
+                    if (snapshot.connected && !macAutoChecked) {
+                        macAutoChecked = true
+                        val client = store.getVncClient(sessionId)
+                        if (client?.isServerLikelyMac() == true) {
+                            macMode = true
+                        }
+                    }
                     if (fbW != curFbW) fbW = curFbW
                     if (fbH != curFbH) fbH = curFbH
                     if (monitorRect != curMonitor) monitorRect = curMonitor
                     if (!snapshot.connected) {
                         statusText = "会话未连接"
+                        macAutoChecked = false
                     } else if (snapshot.frame == null || curFbW <= 0 || curFbH <= 0) {
                         statusText = "正在等待画面..."
                     } else if (snapshot.frameVersion == frameVersion && frameSnapshot != null) {
@@ -351,11 +365,11 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     val handleKeyEvent: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
         val nativeEvent = event.nativeKeyEvent
-        val keysym = keySymFromAndroidKey(
+        val keysym = remapKeyForMac(macMode, keySymFromAndroidKey(
             nativeEvent.keyCode,
             nativeEvent.isShiftPressed,
             nativeEvent.metaState and KeyEvent.META_CAPS_LOCK_ON != 0
-        )
+        ))
         if (keysym == 0) {
             false
         } else {

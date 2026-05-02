@@ -14,6 +14,7 @@ internal data class ViewerLaunchArgs(
     val user: String,
     val password: String,
     val touchScrollStep: Int,
+    val macMode: Boolean = false,
     val ssh: SshConnectionConfig = SshConnectionConfig()
 ) {
     val hostPort: HostPort? get() = parseAddress(address)
@@ -25,6 +26,7 @@ private const val EXTRA_VIEWER_ADDRESS = "viewer_address"
 private const val EXTRA_VIEWER_USER = "viewer_user"
 private const val EXTRA_VIEWER_PASSWORD = "viewer_password"
 private const val EXTRA_VIEWER_TOUCH_SCROLL_STEP = "viewer_touch_scroll_step"
+private const val EXTRA_VIEWER_MAC_MODE = "viewer_mac_mode"
 private const val EXTRA_VIEWER_SSH_ENABLED = "viewer_ssh_enabled"
 private const val EXTRA_VIEWER_SSH_HOST = "viewer_ssh_host"
 private const val EXTRA_VIEWER_SSH_PORT = "viewer_ssh_port"
@@ -55,6 +57,7 @@ internal fun Intent.toViewerLaunchArgs(): ViewerLaunchArgs? {
         user = getStringExtra(EXTRA_VIEWER_USER).orEmpty(),
         password = getStringExtra(EXTRA_VIEWER_PASSWORD).orEmpty(),
         touchScrollStep = normalizeTouchScrollStep(getIntExtra(EXTRA_VIEWER_TOUCH_SCROLL_STEP, 0)),
+        macMode = getBooleanExtra(EXTRA_VIEWER_MAC_MODE, false),
         ssh = normalizeSshConfigForAddress(
             SshConnectionConfig(
                 enabled = getBooleanExtra(EXTRA_VIEWER_SSH_ENABLED, false),
@@ -86,6 +89,7 @@ internal fun createViewerIntent(context: Context, args: ViewerLaunchArgs): Inten
         .putExtra(EXTRA_VIEWER_USER, args.user)
         .putExtra(EXTRA_VIEWER_PASSWORD, args.password)
         .putExtra(EXTRA_VIEWER_TOUCH_SCROLL_STEP, args.touchScrollStep)
+        .putExtra(EXTRA_VIEWER_MAC_MODE, args.macMode)
         .putExtra(EXTRA_VIEWER_SSH_ENABLED, args.ssh.enabled)
         .putExtra(EXTRA_VIEWER_SSH_HOST, args.ssh.sshHost)
         .putExtra(EXTRA_VIEWER_SSH_PORT, args.ssh.sshPort)
