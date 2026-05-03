@@ -371,13 +371,23 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     val handleKeyEvent: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
         val nativeEvent = event.nativeKeyEvent
-        val keysym = remapKeyForMac(macMode, keySymFromAndroidKey(
+        val keysym = keySymFromAndroidKey(
             nativeEvent.keyCode,
             nativeEvent.isShiftPressed,
             nativeEvent.metaState and KeyEvent.META_CAPS_LOCK_ON != 0
-        ))
+        )
         if (keysym == 0) {
             false
+        } else if (macMode && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
+            if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
+                safeSendKey(0xffe3, false)
+                safeSendKey(0xffeb, true)
+                safeSendKey(keysym, true)
+                safeSendKey(keysym, false)
+                safeSendKey(0xffeb, false)
+                safeSendKey(0xffe3, true)
+            }
+            true
         } else {
             safeSendKey(keysym, nativeEvent.action == KeyEvent.ACTION_DOWN)
             true

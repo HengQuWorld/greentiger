@@ -3287,16 +3287,23 @@ struct Viewer {
   private remoteMetaDown: boolean = false;
   private remoteChineseMode: boolean = false;
 
+  private macClipboardKeys = new Set<string>(['a', 'c', 'v', 'x', 'z']);
 
-  private remapKeyForMac(keysym: number): number {
-    if (!this.runtimeMacMode) return keysym;
-    switch (keysym) {
-      case 0xffe3: return 0xffeb; // Ctrl_L → Super_L (Command)
-      case 0xffe4: return 0xffec; // Ctrl_R → Super_R
-      case 0xffe7: return 0xffe3; // Meta_L → Ctrl_L
-      case 0xffe8: return 0xffe4; // Meta_R → Ctrl_R
-      default: return keysym;
+  private trySwapCtrlForCmd(ev: KeyEvent, keysym: number, isDown: boolean, ctrlDown: boolean, metaDown: boolean): boolean {
+    if (!this.runtimeMacMode || !ctrlDown || metaDown) return false;
+    const lower = String.fromCharCode(keysym & 0xff);
+    if (!this.macClipboardKeys.has(lower)) return false;
+    if (isDown) {
+      this.remoteCtrlDown = false;
+      this.safeSendKey(0xffe3, false);
+      this.safeSendKey(0xffeb, true);
+      this.safeSendKey(keysym, true);
+      this.safeSendKey(keysym, false);
+      this.safeSendKey(0xffeb, false);
+      this.safeSendKey(0xffe3, true);
+      this.remoteCtrlDown = true;
     }
+    return true;
   }
 
   private getModifierDown(ev: KeyEvent, key: string): boolean {
@@ -3316,26 +3323,22 @@ struct Viewer {
 
     let changed = false;
     if (shiftDown !== this.remoteShiftDown) {
-      const keysym = this.remapKeyForMac(0xffe1);
-      this.safeSendKey(keysym, shiftDown);
+      this.safeSendKey(0xffe1, shiftDown);
       this.remoteShiftDown = shiftDown;
       changed = true;
     }
     if (ctrlDown !== this.remoteCtrlDown) {
-      const keysym = this.remapKeyForMac(0xffe3);
-      this.safeSendKey(keysym, ctrlDown);
+      this.safeSendKey(0xffe3, ctrlDown);
       this.remoteCtrlDown = ctrlDown;
       changed = true;
     }
     if (altDown !== this.remoteAltDown) {
-      const keysym = this.remapKeyForMac(0xffe9);
-      this.safeSendKey(keysym, altDown);
+      this.safeSendKey(0xffe9, altDown);
       this.remoteAltDown = altDown;
       changed = true;
     }
     if (metaDown !== this.remoteMetaDown) {
-      const keysym = this.remapKeyForMac(0xffe7);
-      this.safeSendKey(keysym, metaDown);
+      this.safeSendKey(0xffe7, metaDown);
       this.remoteMetaDown = metaDown;
       changed = true;
     }
@@ -6334,8 +6337,12 @@ struct Viewer {
         }
       }
 
-      const keysym = this.remapKeyForMac(keySymFromEvent(ev, this.remoteChineseMode));
+      const keysym = keySymFromEvent(ev, this.remoteChineseMode);
       if (!keysym) return false;
+
+      if (this.trySwapCtrlForCmd(ev, keysym, isDown, this.getModifierDown(ev, 'Ctrl'), this.getModifierDown(ev, 'Meta'))) {
+        return true;
+      }
 
       if (keysym >= 0x01000000 && keysym <= 0x0100ffff) {
         if (isDown) {

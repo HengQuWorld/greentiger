@@ -2576,9 +2576,6 @@ private fun ViewerScreen(
             pulseChromeInteraction()
         }
     }
-    val remapKey: (Int) -> Int = remember(macMode) {
-        { keysym -> remapKeyForMac(macMode, keysym) }
-    }
     val handleRemoteKeyEvent: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
         val nativeEvent = event.nativeKeyEvent
         if (nativeEvent.keyCode == android.view.KeyEvent.KEYCODE_F11) {
@@ -2590,9 +2587,19 @@ private fun ViewerScreen(
             }
             true
         } else {
-            val keysym = remapKey(keySymFromAndroidKey(nativeEvent.keyCode, nativeEvent.isShiftPressed, nativeEvent.metaState and android.view.KeyEvent.META_CAPS_LOCK_ON != 0))
+            val keysym = keySymFromAndroidKey(nativeEvent.keyCode, nativeEvent.isShiftPressed, nativeEvent.metaState and android.view.KeyEvent.META_CAPS_LOCK_ON != 0)
             if (keysym == 0) {
                 false
+            } else if (macMode && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
+                if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN) {
+                    session.sendKey(0xffe3, false)
+                    session.sendKey(0xffeb, true)
+                    session.sendKey(keysym, true)
+                    session.sendKey(keysym, false)
+                    session.sendKey(0xffeb, false)
+                    session.sendKey(0xffe3, true)
+                }
+                true
             } else {
                 session.sendKey(keysym, nativeEvent.action == android.view.KeyEvent.ACTION_DOWN)
                 true
