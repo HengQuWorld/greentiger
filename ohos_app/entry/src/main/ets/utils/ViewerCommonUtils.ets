@@ -99,6 +99,14 @@ export function mapLocalToRemote(localX: number, localY: number, monitorRect: Sh
   };
 }
 
+export function isLocalOutsideContent(localX: number, localY: number, monitorRect: SharedViewerRect, windowW: number, windowH: number, fbW: number, fbH: number): boolean {
+  if (fbW <= 0 || fbH <= 0) return false;
+  const metrics = getMonitorImageMetrics(monitorRect, windowW, windowH, fbW, fbH);
+  const imgFrame = metrics.frame;
+  return localX < imgFrame.x || localY < imgFrame.y ||
+    localX >= imgFrame.x + imgFrame.w || localY >= imgFrame.y + imgFrame.h;
+}
+
 export class InteractFrameThrottle {
   private lastRenderTime: number = 0;
   private frameCount: number = 0;

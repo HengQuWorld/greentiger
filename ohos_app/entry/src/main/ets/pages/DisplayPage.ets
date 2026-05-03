@@ -3,6 +3,7 @@ import { router } from '@kit.ArkUI';
 import { KeyCode } from '@ohos.multimodalInput.keyCode';
 import common from '@ohos.app.ability.common';
 import window from '@ohos.window';
+import dataPreferences from '@ohos.data.preferences';
 import { SharedViewerSessionSnapshot, SharedViewerRect, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
 import { keySymFromEvent } from '../utils/KeyMap';
 import {
@@ -10,6 +11,7 @@ import {
   createPixelMapFromBuffer,
   getMonitorImageMetrics,
   mapLocalToRemote,
+  isLocalOutsideContent,
   getVncMouseButton,
   getScrollClicksForServer,
   VNC_SCROLL_UP,
@@ -66,6 +68,8 @@ struct DisplayPage {
   private touchStartTs: number = 0;
   private touchMoved: boolean = false;
   private touchDragging: boolean = false;
+  private touchStartedOutside: boolean = false;
+  private edgeClampEnabled: boolean = true;
 
   private remoteShiftDown: boolean = false;
   private remoteCtrlDown: boolean = false;
@@ -130,6 +134,15 @@ struct DisplayPage {
     if (!this.sessionId) {
       this.statusText = '缺少会话标识，请在主窗口重新打开';
       return;
+    }
+    try {
+      const ctx = this.getHostContext();
+      if (ctx) {
+        const pref = await dataPreferences.getPreferences(ctx, { name: 'vnc_store' });
+        this.edgeClampEnabled = !!(await pref.get('edge_clamp_enabled_v1', true)) as boolean;
+      }
+    } catch (_e) {
+      // use default
     }
     console.info(`DisplayPage initialized: sessionId=${this.sessionId}, monitorIndex=${this.monitorIndex}, title=${this.title}`);
     this.updateWindowTitle();
@@ -445,17 +458,24 @@ struct DisplayPage {
     const p = this.toRemote(localX, localY);
 
     if (type === TouchType.Down) {
-      this.beginInteraction();
       this.touchStartX = localX;
       this.touchStartY = localY;
       this.touchStartTs = Date.now();
       this.touchMoved = false;
       this.touchDragging = false;
+      this.touchStartedOutside = this.edgeClampEnabled && isLocalOutsideContent(
+        localX, localY, this.monitorRect, this.windowW, this.windowH, this.fbW, this.fbH
+      );
+      this.beginInteraction();
       this.safeSendPointer(p.x, p.y, 0);
       return;
     }
 
     if (type === TouchType.Move) {
+      if (this.touchStartedOutside) {
+        this.safeSendPointer(p.x, p.y, 0);
+        return;
+      }
       const dx = Math.abs(localX - this.touchStartX);
       const dy = Math.abs(localY - this.touchStartY);
       if (dx + dy >= 6) this.touchMoved = true;
@@ -470,7 +490,9 @@ struct DisplayPage {
 
     if (type === TouchType.Up) {
       const clickElapsed = Date.now() - this.touchStartTs;
-      if (this.touchDragging) {
+      if (this.touchStartedOutside) {
+        this.safeSendPointer(p.x, p.y, 0);
+      } else if (this.touchDragging) {
         this.touchDragging = false;
         this.safeSendPointer(p.x, p.y, 0);
       } else if (!this.touchMoved && clickElapsed <= 350) {
@@ -483,12 +505,14 @@ struct DisplayPage {
         this.safeSendPointer(p.x, p.y, 0);
       }
       this.touchDragging = false;
+      this.touchStartedOutside = false;
       this.endInteraction();
       return;
     }
 
     if (type === TouchType.Cancel) {
       this.touchDragging = false;
+      this.touchStartedOutside = false;
       this.safeSendPointer(p.x, p.y, 0);
       this.endInteraction();
       return;

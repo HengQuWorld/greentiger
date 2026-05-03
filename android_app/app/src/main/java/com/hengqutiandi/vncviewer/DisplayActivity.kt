@@ -48,6 +48,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
@@ -166,14 +167,14 @@ private fun computeIntLayout(
     )
 }
 
-private fun mapTouchToRemote(touchX: Float, touchY: Float, layout: IntLayout): Pair<Int, Int> {
+private fun mapTouchToRemote(touchX: Float, touchY: Float, layout: IntLayout, edgeClampEnabled: Boolean = true): Pair<Int, Int> {
     val dx = touchX - layout.dstX
     val dy = touchY - layout.dstY
     if (layout.dstW <= 0 || layout.dstH <= 0) return 0 to 0
-    val fracX = dx / layout.dstW
-    val fracY = dy / layout.dstH
-    val rx = (layout.srcX + fracX * layout.srcW).toInt()
-    val ry = (layout.srcY + fracY * layout.srcH).toInt()
+    val fracX = if (edgeClampEnabled) (dx / layout.dstW).coerceIn(0f, 1f) else (dx / layout.dstW)
+    val fracY = if (edgeClampEnabled) (dy / layout.dstH).coerceIn(0f, 1f) else (dy / layout.dstH)
+    val rx = (layout.srcX + fracX * (layout.srcW - 1)).toInt()
+    val ry = (layout.srcY + fracY * (layout.srcH - 1)).toInt()
     return rx to ry
 }
 
@@ -192,6 +193,11 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     var connected by remember { mutableStateOf(false) }
     var macMode by remember { mutableStateOf(launchParams.macMode) }
     var macAutoChecked by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val edgeClampEnabled = remember(context) {
+        context.getSharedPreferences("vnc_store", Context.MODE_PRIVATE)
+            .getBoolean("edge_clamp_enabled_v1", true)
+    }
 
     val sessionId = launchParams.sessionId
     val monitorIndex = maxOf(0, launchParams.monitorIndex)
@@ -288,7 +294,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     val latestLayout = androidx.compose.runtime.rememberUpdatedState(frameSnapshot?.layout ?: intLayout)
 
     fun toRemote(localX: Float, localY: Float): Pair<Int, Int> {
-        return mapTouchToRemote(localX, localY, latestLayout.value)
+        return mapTouchToRemote(localX, localY, latestLayout.value, edgeClampEnabled)
     }
 
     fun safeSendPointer(x: Int, y: Int, mask: Int, force: Boolean = false) {
@@ -393,6 +399,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
     // 注册鼠标通用运动事件处理器
     val latestLastSentX = androidx.compose.runtime.rememberUpdatedState(lastSentX)
     val latestLastSentY = androidx.compose.runtime.rememberUpdatedState(lastSentY)
+    val latestEdgeClampEnabled = androidx.compose.runtime.rememberUpdatedState(edgeClampEnabled)
 
     DisposableEffect(Unit) {
         activeDisplayGenericMotionHandler = { event ->
@@ -402,7 +409,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
             val pointMapper = object : PointMapper {
                 override fun mapToRemote(x: Float, y: Float): Pair<Int, Int>? {
-                    return mapTouchToRemote(x, y, layoutVal)
+                    return mapTouchToRemote(x, y, layoutVal, latestEdgeClampEnabled.value)
                 }
             }
 
@@ -453,6 +460,11 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                         val localX = down.position.x
                         val localY = down.position.y
                         val remote = toRemote(localX, localY)
+                        val layout = latestLayout.value
+                        val touchStartedOutside = edgeClampEnabled && (
+                            localX < layout.dstX || localY < layout.dstY ||
+                            localX >= layout.dstX + layout.dstW || localY >= layout.dstY + layout.dstH
+                        )
 
                         beginInteraction()
                         touchStartX = localX
@@ -469,6 +481,11 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                                 PointerEventType.Move -> {
                                     val cx = changed.position.x
                                     val cy = changed.position.y
+                                    if (touchStartedOutside) {
+                                        val currentRemote = toRemote(cx, cy)
+                                        safeSendPointer(currentRemote.first, currentRemote.second, 0)
+                                        continue
+                                    }
                                     val dist = abs(cx - touchStartX) + abs(cy - touchStartY)
                                     if (dist >= 6f) touchMoved = true
                                     if (touchMoved && !touchDragging) {
@@ -483,6 +500,11 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                                     val cx = changed.position.x
                                     val cy = changed.position.y
                                     val currentRemote = toRemote(cx, cy)
+                                    if (touchStartedOutside) {
+                                        safeSendPointer(currentRemote.first, currentRemote.second, 0)
+                                        endInteraction()
+                                        return@awaitEachGesture
+                                    }
                                     val clickElapsed = (System.currentTimeMillis() as Long) - touchStartTs
                                     if (touchDragging) {
                                         touchDragging = false
@@ -500,7 +522,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                                     return@awaitEachGesture
                                 }
                                 PointerEventType.Exit -> {
-                                    if (touchDragging) {
+                                    if (touchDragging && !touchStartedOutside) {
                                         val lastRemote = toRemote(
                                             changed.position.x,
                                             changed.position.y

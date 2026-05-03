@@ -333,6 +333,8 @@ struct Viewer {
   private touchStartTs: number = 0;
   private touchMoved: boolean = false;
   private touchDragging: boolean = false;
+  private touchStartedOutside: boolean = false;
+  private edgeClampEnabled: boolean = true;
   private touchScrollActive: boolean = false;
   private touchScrollLastX: number = 0;
   private touchScrollLastY: number = 0;
@@ -445,9 +447,21 @@ struct Viewer {
     }
   }
 
+  private async loadEdgeClampSetting(): Promise<void> {
+    try {
+      const ctx = this.getHostContext();
+      if (!ctx) return;
+      const pref = await dataPreferences.getPreferences(ctx, { name: 'vnc_store' });
+      this.edgeClampEnabled = !!(await pref.get('edge_clamp_enabled_v1', true)) as boolean;
+    } catch (_e) {
+      // use default
+    }
+  }
+
   aboutToAppear() {
     viewerMultiWindowStore.ensureSession(this.sharedSessionId);
     this.refreshMonitorWindowsState();
+    void this.loadEdgeClampSetting();
     const booted = this.applyWantParams();
     if (booted) {
       this.updateWindowTitle();
@@ -1828,8 +1842,16 @@ struct Viewer {
   }
 
   private getTransformedRect(rect: VncRect): VncRect {
-    if (!this.canUseZoomViewer() || this.zoomScale <= this.zoomMinScale) {
+    if (!this.canUseZoomViewer()) {
       return rect;
+    }
+    if (this.zoomScale <= this.zoomMinScale) {
+      return {
+        x: rect.x + this.zoomOffsetX,
+        y: rect.y + this.zoomOffsetY,
+        w: rect.w,
+        h: rect.h
+      };
     }
     const center = this.getViewerCenter();
     return {
@@ -1881,8 +1903,14 @@ struct Viewer {
   }
 
   private toBaseViewerPoint(x: number, y: number): LocalPoint {
-    if (!this.canUseZoomViewer() || this.zoomScale <= this.zoomMinScale) {
+    if (!this.canUseZoomViewer()) {
       return { x, y };
+    }
+    if (this.zoomScale <= this.zoomMinScale) {
+      return {
+        x: x - this.zoomOffsetX,
+        y: y - this.zoomOffsetY
+      };
     }
     const center = this.getViewerCenter();
     return {
@@ -4297,6 +4325,25 @@ struct Viewer {
     return new RemotePoint(source.x + rx, source.y + ry);
   }
 
+  private isLocalWithinContent(localX: number, localY: number): boolean {
+    if (this.fbW <= 0 || this.fbH <= 0) return true;
+    if (this.viewerW <= 0 || this.viewerH <= 0) return true;
+    const basePoint = this.toBaseViewerPoint(localX, localY);
+    const x = basePoint.x;
+    const y = basePoint.y;
+    const target = this.getViewportTargetAt(x, y);
+    const source = target.source;
+    const frame = target.frame;
+    const scale = this.getViewportScale(source, frame);
+    const contentW = source.w * scale;
+    const contentH = source.h * scale;
+    const offsetX = frame.x + (frame.w - contentW) / 2;
+    const offsetY = frame.y + (frame.h - contentH) / 2;
+    const rawLocalX = (x - offsetX) / scale;
+    const rawLocalY = (y - offsetY) / scale;
+    return rawLocalX >= 0 && rawLocalX < source.w && rawLocalY >= 0 && rawLocalY < source.h;
+  }
+
   private getTouchCenter(ev: TouchEvent): LocalPoint | null {
     const touches = ev?.touches;
     if (!touches || touches.length < 2) return null;
@@ -4980,14 +5027,15 @@ struct Viewer {
           if (this.chromeVisible && this.shouldAutoHideChrome()) {
             this.scheduleChromeAutoHide();
           }
-          const withinFocusedMonitor = this.isPointWithinFocusedMonitor(localX, localY);
-          if (!withinFocusedMonitor) {
+          const withinContent = this.isLocalWithinContent(localX, localY);
+          if (!withinContent && !this.edgeClampEnabled) {
             if (this.touchDragging && this.lastPointerSentX >= 0 && this.lastPointerSentY >= 0) {
               this.safeSendPointer(this.lastPointerSentX, this.lastPointerSentY, 0, true);
               this.requestTick();
             }
             this.touchDragging = false;
             this.touchMoved = false;
+            this.touchStartedOutside = false;
             this.endTouchScroll();
             return;
           }
@@ -5026,12 +5074,17 @@ struct Viewer {
             this.touchStartTs = now;
             this.touchMoved = false;
             this.touchDragging = false;
+            this.touchStartedOutside = !withinContent;
             this.beginInteraction();
             this.safeSendPointer(p.x, p.y, 0);
             return;
           }
 
           if (type === TouchType.Move) {
+            if (this.touchStartedOutside) {
+              this.safeSendPointer(p.x, p.y, 0);
+              return;
+            }
             const dx = Math.abs(localX - this.touchStartX);
             const dy = Math.abs(localY - this.touchStartY);
             if (dx + dy >= 6) this.touchMoved = true;
@@ -5046,7 +5099,9 @@ struct Viewer {
 
           if (type === TouchType.Up) {
             const dt = now - this.touchStartTs;
-            if (this.touchDragging) {
+            if (this.touchStartedOutside) {
+              this.safeSendPointer(p.x, p.y, 0);
+            } else if (this.touchDragging) {
               this.touchDragging = false;
               this.safeSendPointer(p.x, p.y, 0);
               this.requestTick();
@@ -5062,12 +5117,14 @@ struct Viewer {
               this.safeSendPointer(p.x, p.y, 0);
             }
             this.touchDragging = false;
+            this.touchStartedOutside = false;
             this.endInteraction();
             return;
           }
 
           if (type === TouchType.Cancel) {
             this.touchDragging = false;
+            this.touchStartedOutside = false;
             this.endTouchScroll();
             this.safeSendPointer(p.x, p.y, 0);
             this.requestTick();
@@ -5093,7 +5150,7 @@ struct Viewer {
           else if (button === MouseButton.Middle) bit = middle;
           else if (button === MouseButton.Right) bit = right;
 
-          if (!this.isPointWithinFocusedMonitor(localX, localY)) {
+          if (!this.isPointWithinFocusedMonitor(localX, localY) && !this.edgeClampEnabled) {
             if (this.lastMask !== 0 && this.lastPointerSentX >= 0 && this.lastPointerSentY >= 0) {
               this.lastMask = 0;
               this.safeSendPointer(this.lastPointerSentX, this.lastPointerSentY, 0, true);
@@ -5135,7 +5192,7 @@ struct Viewer {
           this.handleMouseChromeBehavior();
           const axisX = ev?.x ?? this.lastX;
           const axisY = ev?.y ?? this.lastY;
-          if (!this.isPointWithinFocusedMonitor(axisX, axisY)) {
+          if (!this.isPointWithinFocusedMonitor(axisX, axisY) && !this.edgeClampEnabled) {
             return;
           }
           const p = this.mapToRemotePoint(axisX, axisY);

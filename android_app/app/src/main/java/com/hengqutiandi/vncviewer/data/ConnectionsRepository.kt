@@ -187,6 +187,12 @@ class ConnectionsRepository(context: Context) {
         prefs.edit().putBoolean(KEY_LAUNCH_AGREEMENTS_ACCEPTED, accepted).apply()
     }
 
+    fun isEdgeClampEnabled(): Boolean = prefs.getBoolean(KEY_EDGE_CLAMP_ENABLED, true)
+
+    fun setEdgeClampEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_EDGE_CLAMP_ENABLED, enabled).apply()
+    }
+
     private companion object {
         const val KEY_CONNECTIONS = "connections_v1"
         const val KEY_SELECTED_CONNECTION_ID = "selected_conn_id"
@@ -196,5 +202,6 @@ class ConnectionsRepository(context: Context) {
         const val KEY_LEGACY_PASSWORD = "legacy_password"
         const val PASSWORD_PREFIX = "connection_password_"
         const val KEY_LAUNCH_AGREEMENTS_ACCEPTED = "launch_agreements_accepted_v1"
+        const val KEY_EDGE_CLAMP_ENABLED = "edge_clamp_enabled_v1"
     }
 }

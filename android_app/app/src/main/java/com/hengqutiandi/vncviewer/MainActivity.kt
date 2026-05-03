@@ -167,7 +167,8 @@ import kotlin.math.sqrt
 
 private enum class AppScreen {
     Home,
-    Viewer
+    Viewer,
+    SystemSettings
 }
 
 private const val PROJECT_CONTACT_EMAIL = "contact@hengqu.world"
@@ -532,26 +533,31 @@ private data class RemoteFramePlacement(
     val viewerSize: IntSize = IntSize.Zero
 ) {
     fun toBaseViewerPoint(x: Float, y: Float, zoomState: ViewerZoomState): Pair<Float, Float> {
-        if (!canUseZoomViewer(this) || zoomState.scale <= VIEWER_ZOOM_MIN_SCALE) {
+        if (!canUseZoomViewer(this)) {
             return x to y
+        }
+        if (zoomState.scale <= VIEWER_ZOOM_MIN_SCALE) {
+            return (x - zoomState.offsetX) to (y - zoomState.offsetY)
         }
         val (centerX, centerY) = getViewerCenter(this)
         return (centerX + (x - centerX - zoomState.offsetX) / zoomState.scale) to
             (centerY + (y - centerY - zoomState.offsetY) / zoomState.scale)
     }
 
-    fun mapToRemote(x: Float, y: Float, zoomState: ViewerZoomState): Pair<Int, Int>? {
+    fun mapToRemote(x: Float, y: Float, zoomState: ViewerZoomState, edgeClampEnabled: Boolean = true): Pair<Int, Int>? {
         if (drawSize.width <= 0 || drawSize.height <= 0 || frameSize.width <= 0 || frameSize.height <= 0) {
             return null
         }
         val basePoint = toBaseViewerPoint(x, y, zoomState)
         val localX = basePoint.first - offset.x
         val localY = basePoint.second - offset.y
-        if (localX < 0f || localY < 0f || localX > drawSize.width || localY > drawSize.height) {
+        if (!edgeClampEnabled && (localX < 0f || localY < 0f || localX > drawSize.width || localY > drawSize.height)) {
             return null
         }
-        val remoteX = ((localX / drawSize.width) * frameSize.width).toInt().coerceIn(0, frameSize.width - 1)
-        val remoteY = ((localY / drawSize.height) * frameSize.height).toInt().coerceIn(0, frameSize.height - 1)
+        val clampedX = localX.coerceIn(0f, drawSize.width.toFloat())
+        val clampedY = localY.coerceIn(0f, drawSize.height.toFloat())
+        val remoteX = ((clampedX / drawSize.width) * frameSize.width).toInt().coerceIn(0, frameSize.width - 1)
+        val remoteY = ((clampedY / drawSize.height) * frameSize.height).toInt().coerceIn(0, frameSize.height - 1)
         return remoteX to remoteY
     }
 }
@@ -562,6 +568,7 @@ private class ViewerInputState {
     var touchStartTs: Long = 0L
     var touchMoved: Boolean = false
     var touchDragging: Boolean = false
+    var touchStartedOutside: Boolean = false
     var touchScrollActive: Boolean = false
     var touchScrollLastX: Float = 0f
     var touchScrollLastY: Float = 0f
@@ -1672,6 +1679,7 @@ private fun GreenTigerApp(launchIntent: Intent?) {
             },
             onRequestDeleteConnection = { pendingDeleteConnection = it },
             onAbout = { showAboutDialog = true },
+            onSystemSettings = { currentScreen = AppScreen.SystemSettings },
             onConnectConnection = ::openConnection
         )
 
@@ -1711,6 +1719,11 @@ private fun GreenTigerApp(launchIntent: Intent?) {
                 clipboardManager.setText(AnnotatedString(text))
                 showToast("已同步远端剪贴板")
             }
+        )
+
+        AppScreen.SystemSettings -> SystemSettingsScreen(
+            repository = repository,
+            onBack = { currentScreen = AppScreen.Home }
         )
     }
 
@@ -1768,6 +1781,7 @@ private fun HomeScreen(
     onEditConnection: (ConnectionItem) -> Unit,
     onRequestDeleteConnection: (ConnectionItem) -> Unit,
     onAbout: () -> Unit,
+    onSystemSettings: () -> Unit,
     onConnectConnection: (ConnectionItem) -> Unit
 ) {
     val selectedConnection = connections.firstOrNull { it.id == selectedConnectionId }
@@ -1801,6 +1815,9 @@ private fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("v${BuildConfig.BUILD_VERSION}", color = MaterialTheme.colorScheme.secondary)
+                    TextButton(onClick = onSystemSettings) {
+                        Text("设置")
+                    }
                     TextButton(onClick = onAbout) {
                         Text("关于")
                     }
@@ -1857,6 +1874,75 @@ private fun HomeScreen(
                     onEditConnection = onEditConnection,
                     onDeleteConnection = onRequestDeleteConnection
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SystemSettingsScreen(
+    repository: ConnectionsRepository,
+    onBack: () -> Unit
+) {
+    var edgeClampEnabled by remember(repository) { mutableStateOf(repository.isEdgeClampEnabled()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("系统设置", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            TextButton(onClick = onBack) {
+                Text("返回")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "触摸边缘吸附",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "触摸屏幕黑边区域时，将鼠标定位到远程桌面边缘，便于触发系统工具栏或菜单栏",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (edgeClampEnabled) "已开启" else "已关闭",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Switch(
+                        checked = edgeClampEnabled,
+                        onCheckedChange = { enabled ->
+                            edgeClampEnabled = enabled
+                            repository.setEdgeClampEnabled(enabled)
+                        }
+                    )
+                }
             }
         }
     }
@@ -2610,6 +2696,7 @@ private fun ViewerScreen(
     val latestInputState = androidx.compose.runtime.rememberUpdatedState(inputState)
     val latestInteractionMode = androidx.compose.runtime.rememberUpdatedState(interactionMode)
     val latestUpdateZoomState = androidx.compose.runtime.rememberUpdatedState(updateZoomState)
+    val edgeClampEnabled = remember(repository) { repository.isEdgeClampEnabled() }
 
     DisposableEffect(session) {
         activeGenericMotionHandler = { event ->
@@ -2621,7 +2708,8 @@ private fun ViewerScreen(
                 inputState = latestInputState.value,
                 interactionMode = latestInteractionMode.value,
                 zoomState = latestZoomState.value,
-                onZoomStateChange = latestUpdateZoomState.value
+                onZoomStateChange = latestUpdateZoomState.value,
+                edgeClampEnabled = edgeClampEnabled
             )
         }
         onDispose {
@@ -2856,7 +2944,8 @@ private fun ViewerScreen(
                         inputState = inputState,
                         interactionMode = interactionMode,
                         zoomState = zoomState,
-                        onZoomStateChange = updateZoomState
+                        onZoomStateChange = updateZoomState,
+                        edgeClampEnabled = edgeClampEnabled
                     )
                 },
             contentAlignment = Alignment.Center
@@ -5419,8 +5508,11 @@ private fun mapViewerPoint(
     placement: RemoteFramePlacement,
     zoomState: ViewerZoomState
 ): Pair<Float, Float> {
-    if (!canUseZoomViewer(placement) || zoomState.scale <= VIEWER_ZOOM_MIN_SCALE) {
+    if (!canUseZoomViewer(placement)) {
         return x to y
+    }
+    if (zoomState.scale <= VIEWER_ZOOM_MIN_SCALE) {
+        return (x + zoomState.offsetX) to (y + zoomState.offsetY)
     }
     val (centerX, centerY) = getViewerCenter(placement)
     return Pair(
@@ -5776,7 +5868,8 @@ private fun handleViewerMotionEvent(
     inputState: ViewerInputState,
     interactionMode: ViewerInteractionMode,
     zoomState: ViewerZoomState,
-    onZoomStateChange: (ViewerZoomState) -> Unit
+    onZoomStateChange: (ViewerZoomState) -> Unit,
+    edgeClampEnabled: Boolean = true
 ): Boolean {
     if (!session.connected) {
         return false
@@ -5784,7 +5877,7 @@ private fun handleViewerMotionEvent(
 
     val allowedRect = session.currentMonitorRect
     val mapAllowedRemote: (Float, Float) -> Pair<Int, Int>? = { x, y ->
-        placement.mapToRemote(x, y, zoomState)?.takeIf { isRemotePointAllowed(it, allowedRect) }
+        placement.mapToRemote(x, y, zoomState, edgeClampEnabled)?.takeIf { isRemotePointAllowed(it, allowedRect) }
     }
 
     if (isMouseEvent(event)) {
@@ -5929,7 +6022,16 @@ private fun handleViewerMotionEvent(
             inputState.touchStartTs = event.eventTime
             inputState.touchMoved = false
             inputState.touchDragging = false
+            inputState.touchStartedOutside = false
             session.beginInteraction()
+            if (edgeClampEnabled && remote != null) {
+                val basePoint = placement.toBaseViewerPoint(event.x, event.y, zoomState)
+                val checkX = basePoint.first - placement.offset.x
+                val checkY = basePoint.second - placement.offset.y
+                if (checkX < 0f || checkY < 0f || checkX > placement.drawSize.width || checkY > placement.drawSize.height) {
+                    inputState.touchStartedOutside = true
+                }
+            }
             remote?.let { session.sendPointer(it.first, it.second, 0) }
             return true
         }
@@ -5950,7 +6052,7 @@ private fun handleViewerMotionEvent(
             if (distance >= 6f) {
                 inputState.touchMoved = true
             }
-            if (inputState.touchMoved && !inputState.touchDragging) {
+            if (inputState.touchMoved && !inputState.touchDragging && !inputState.touchStartedOutside) {
                 inputState.touchDragging = true
                 mapAllowedRemote(inputState.touchStartX, inputState.touchStartY)?.let { start ->
                     session.sendPointer(start.first, start.second, 1)
@@ -5964,7 +6066,9 @@ private fun handleViewerMotionEvent(
             val current = remote ?: mapAllowedRemote(inputState.touchStartX, inputState.touchStartY)
             if (current != null) {
                 val clickElapsed = event.eventTime - inputState.touchStartTs
-                if (inputState.touchDragging) {
+                if (inputState.touchStartedOutside) {
+                    session.sendPointer(current.first, current.second, 0)
+                } else if (inputState.touchDragging) {
                     session.sendPointer(current.first, current.second, 0)
                 } else if (!inputState.touchMoved && clickElapsed <= 350L) {
                     session.sendClick(current.first, current.second, 1)
@@ -5976,6 +6080,7 @@ private fun handleViewerMotionEvent(
             }
             inputState.touchDragging = false
             inputState.touchMoved = false
+            inputState.touchStartedOutside = false
             inputState.touchScrollActive = false
             inputState.touchScrollResidualY = 0f
             session.endInteraction()
@@ -5991,6 +6096,7 @@ private fun handleViewerMotionEvent(
             }
             inputState.touchDragging = false
             inputState.touchMoved = false
+            inputState.touchStartedOutside = false
             inputState.touchScrollActive = false
             inputState.touchScrollResidualY = 0f
             session.endInteraction()
