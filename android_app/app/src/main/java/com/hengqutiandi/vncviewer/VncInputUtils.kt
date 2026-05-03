@@ -224,7 +224,8 @@ interface PointMapper {
 fun handleViewerMouseEvent(
     event: MotionEvent,
     pointMapper: PointMapper,
-    sender: ViewerMouseEventSender
+    sender: ViewerMouseEventSender,
+    suppressButtons: Boolean = false
 ): Boolean {
     if (!isMouseEvent(event)) {
         return false
@@ -252,7 +253,7 @@ fun handleViewerMouseEvent(
                 x = remote.first,
                 y = remote.second,
                 mask = scrollMask,
-                baseMask = pointerMaskFromButtons(event.buttonState),
+                baseMask = if (suppressButtons) 0 else pointerMaskFromButtons(event.buttonState),
                 repeatCount = repeatCount
             )
             return true
@@ -263,7 +264,8 @@ fun handleViewerMouseEvent(
         MotionEvent.ACTION_UP,
         MotionEvent.ACTION_BUTTON_PRESS,
         MotionEvent.ACTION_BUTTON_RELEASE -> {
-            sender.sendPointer(remote.first, remote.second, pointerMaskFromButtons(event.buttonState))
+            val mask = if (suppressButtons) 0 else pointerMaskFromButtons(event.buttonState)
+            sender.sendPointer(remote.first, remote.second, mask)
             return true
         }
         MotionEvent.ACTION_CANCEL -> {

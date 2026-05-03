@@ -5899,6 +5899,12 @@ private fun handleViewerMotionEvent(
             }
             return true
         }
+        val mouseOutside = edgeClampEnabled && run {
+            val bp = placement.toBaseViewerPoint(event.x, event.y, zoomState)
+            val cx = bp.first - placement.offset.x
+            val cy = bp.second - placement.offset.y
+            cx < 0f || cy < 0f || cx > placement.drawSize.width || cy > placement.drawSize.height
+        }
         when (event.actionMasked) {
             MotionEvent.ACTION_SCROLL -> {
                 val delta = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
@@ -5911,7 +5917,7 @@ private fun handleViewerMotionEvent(
                     x = remote.first,
                     y = remote.second,
                     mask = scrollMask,
-                    baseMask = pointerMaskFromButtons(event.buttonState),
+                    baseMask = if (mouseOutside) 0 else pointerMaskFromButtons(event.buttonState),
                     repeatCount = repeatCount
                 )
                 return true
@@ -5923,7 +5929,7 @@ private fun handleViewerMotionEvent(
             MotionEvent.ACTION_UP,
             MotionEvent.ACTION_BUTTON_PRESS,
             MotionEvent.ACTION_BUTTON_RELEASE -> {
-                val mask = pointerMaskFromButtons(event.buttonState)
+                val mask = if (mouseOutside) 0 else pointerMaskFromButtons(event.buttonState)
                 if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS) {
                     session.beginInteraction()
                 }

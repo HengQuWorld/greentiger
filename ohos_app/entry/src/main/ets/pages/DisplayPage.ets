@@ -529,19 +529,24 @@ struct DisplayPage {
     const action = ev?.action;
     const button = ev?.button;
 
-    const bit = getVncMouseButton(button);
+    const mouseOutside = this.edgeClampEnabled && isLocalOutsideContent(
+      localX, localY, this.monitorRect, this.windowW, this.windowH, this.fbW, this.fbH
+    );
 
-    if (action === MouseAction.Press) {
-      this.beginInteraction();
-      this.lastSentMask |= bit;
-    }
-    if (action === MouseAction.Release) {
-      this.lastSentMask &= ~bit;
-      if (this.lastSentMask === 0) this.endInteraction();
+    if (!mouseOutside) {
+      const bit = getVncMouseButton(button);
+      if (action === MouseAction.Press) {
+        this.beginInteraction();
+        this.lastSentMask |= bit;
+      }
+      if (action === MouseAction.Release) {
+        this.lastSentMask &= ~bit;
+        if (this.lastSentMask === 0) this.endInteraction();
+      }
     }
 
     const p = this.toRemote(localX, localY);
-    this.safeSendPointer(p.x, p.y, this.lastSentMask, true);
+    this.safeSendPointer(p.x, p.y, mouseOutside ? 0 : this.lastSentMask, true);
   }
 
   private handleAxis(ev: AxisEvent): void {

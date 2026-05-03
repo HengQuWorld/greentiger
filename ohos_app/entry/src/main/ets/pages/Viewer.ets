@@ -5162,22 +5162,26 @@ struct Viewer {
             return;
           }
 
-          if (action === MouseAction.Press) {
-            this.lastMask |= bit;
-            this.beginInteraction();
-          }
-          if (action === MouseAction.Release) {
-            this.lastMask &= ~bit;
-            if (this.lastMask === 0) this.endInteraction();
+          const mouseOutside = this.edgeClampEnabled && !this.isLocalWithinContent(localX, localY);
+
+          if (!mouseOutside) {
+            if (action === MouseAction.Press) {
+              this.lastMask |= bit;
+              this.beginInteraction();
+            }
+            if (action === MouseAction.Release) {
+              this.lastMask &= ~bit;
+              if (this.lastMask === 0) this.endInteraction();
+            }
           }
           if (action === MouseAction.Press) this.requestInputFocus();
 
           const p = this.mapToRemotePoint(localX, localY);
 
           if (this.debugEnabled) {
-            console.info(`onMouse action=${action} btn=${button} local=${ev?.x ?? 0},${ev?.y ?? 0} remote=${p.x},${p.y} mask=${this.lastMask}`);
+            console.info(`onMouse action=${action} btn=${button} local=${ev?.x ?? 0},${ev?.y ?? 0} remote=${p.x},${p.y} mask=${mouseOutside ? 0 : this.lastMask}`);
           }
-          this.safeSendPointer(p.x, p.y, this.lastMask);
+          this.safeSendPointer(p.x, p.y, mouseOutside ? 0 : this.lastMask);
           if (action === MouseAction.Release) {
             this.requestTick();
           }

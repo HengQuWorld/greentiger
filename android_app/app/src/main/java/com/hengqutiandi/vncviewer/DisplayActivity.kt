@@ -436,7 +436,12 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                 override val lastPointerY: Int get() = lastY
             }
 
-            handleViewerMouseEvent(event, pointMapper, sender)
+            val dx = event.x - layoutVal.dstX
+            val dy = event.y - layoutVal.dstY
+            val suppress = latestEdgeClampEnabled.value && (
+                dx < 0f || dy < 0f || dx >= layoutVal.dstW || dy >= layoutVal.dstH
+            )
+            handleViewerMouseEvent(event, pointMapper, sender, suppress)
         }
         onDispose {
             activeDisplayGenericMotionHandler = null
