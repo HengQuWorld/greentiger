@@ -438,10 +438,13 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
             val dx = event.x - layoutVal.dstX
             val dy = event.y - layoutVal.dstY
-            val suppress = latestEdgeClampEnabled.value && (
-                dx < 0f || dy < 0f || dx >= layoutVal.dstW || dy >= layoutVal.dstH
-            )
-            handleViewerMouseEvent(event, pointMapper, sender, suppress)
+            val isOutside = dx < 0f || dy < 0f || dx >= layoutVal.dstW || dy >= layoutVal.dstH
+            if (isOutside && !latestEdgeClampEnabled.value) {
+                false
+            } else {
+                val suppress = latestEdgeClampEnabled.value && isOutside
+                handleViewerMouseEvent(event, pointMapper, sender, suppress)
+            }
         }
         onDispose {
             activeDisplayGenericMotionHandler = null
@@ -474,12 +477,16 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val localX = down.position.x
                         val localY = down.position.y
-                        val remote = toRemote(localX, localY)
                         val layout = latestLayout.value
-                        val touchStartedOutside = edgeClampEnabled && (
-                            localX < layout.dstX || localY < layout.dstY ||
+                        val isOutsideContent = localX < layout.dstX || localY < layout.dstY ||
                             localX >= layout.dstX + layout.dstW || localY >= layout.dstY + layout.dstH
-                        )
+
+                        if (isOutsideContent && !edgeClampEnabled) {
+                            return@awaitEachGesture
+                        }
+
+                        val touchStartedOutside = edgeClampEnabled && isOutsideContent
+                        val remote = toRemote(localX, localY)
 
                         beginInteraction()
                         touchStartX = localX

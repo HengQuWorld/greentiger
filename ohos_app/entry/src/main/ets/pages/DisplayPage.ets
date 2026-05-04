@@ -461,14 +461,18 @@ struct DisplayPage {
     const p = this.toRemote(localX, localY);
 
     if (type === TouchType.Down) {
+      const isOutside = isLocalOutsideContent(
+        localX, localY, this.monitorRect, this.windowW, this.windowH, this.fbW, this.fbH
+      );
+      if (isOutside && !this.edgeClampEnabled) {
+        return;
+      }
       this.touchStartX = localX;
       this.touchStartY = localY;
       this.touchStartTs = Date.now();
       this.touchMoved = false;
       this.touchDragging = false;
-      this.touchStartedOutside = this.edgeClampEnabled && isLocalOutsideContent(
-        localX, localY, this.monitorRect, this.windowW, this.windowH, this.fbW, this.fbH
-      );
+      this.touchStartedOutside = this.edgeClampEnabled && isOutside;
       this.beginInteraction();
       this.safeSendPointer(p.x, p.y, 0);
       return;
@@ -529,9 +533,13 @@ struct DisplayPage {
     const action = ev?.action;
     const button = ev?.button;
 
-    const mouseOutside = this.edgeClampEnabled && isLocalOutsideContent(
+    const isOutside = isLocalOutsideContent(
       localX, localY, this.monitorRect, this.windowW, this.windowH, this.fbW, this.fbH
     );
+    if (isOutside && !this.edgeClampEnabled) {
+      return;
+    }
+    const mouseOutside = this.edgeClampEnabled && isOutside;
 
     if (!mouseOutside) {
       const bit = getVncMouseButton(button);
