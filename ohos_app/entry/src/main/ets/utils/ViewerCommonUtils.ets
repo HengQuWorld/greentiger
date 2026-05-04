@@ -154,3 +154,15 @@ export async function saveEdgeClampEnabled(enabled: boolean, context: common.UIA
     console.error('Failed to save edge clamp setting', e);
   }
 }
+
+const CTRL_PASSTHROUGH_KEY = 'ctrl_passthrough';
+
+export async function saveCtrlPassthrough(enabled: boolean, context: common.UIAbilityContext): Promise<void> {
+  try {
+    const pref = await dataPreferences.getPreferences(context, { name: EDGE_CLAMP_PREF_NAME });
+    await pref.put(CTRL_PASSTHROUGH_KEY, enabled);
+    await pref.flush();
+  } catch (e) {
+    console.error('Failed to save ctrl passthrough setting', e);
+  }
+}

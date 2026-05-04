@@ -19,7 +19,7 @@ import {
 } from '../utils/ConnectionUtils';
 import { keySymFromEvent } from '../utils/KeyMap';
 import { SharedViewerRect, VncClientLike, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
-import { InteractFrameThrottle } from '../utils/ViewerCommonUtils';
+import { InteractFrameThrottle, saveCtrlPassthrough } from '../utils/ViewerCommonUtils';
 import { VncClient } from 'libvncviewer.so';
 
 interface ClickEvent {
@@ -232,6 +232,7 @@ struct Viewer {
   private runtimeSshConfig: SshTunnelConfig | null = null;
   private runtimeTouchScrollStep: number = 0;
   private runtimeMacMode: boolean = false;
+  @State private remoteCtrlPassthrough: boolean = false;
   private macAutoChecked: boolean = false;
   @State private showPassword: boolean = false;
   @State private editOpen: boolean = false;
@@ -3291,7 +3292,7 @@ struct Viewer {
   private macClipboardKeys = new Set<string>(['a', 'c', 'v', 'x', 'z']);
 
   private trySwapCtrlForCmd(ev: KeyEvent, keysym: number, isDown: boolean, ctrlDown: boolean, metaDown: boolean): boolean {
-    if (!this.runtimeMacMode || !ctrlDown || metaDown) return false;
+    if (!this.runtimeMacMode || !ctrlDown || metaDown || this.remoteCtrlPassthrough) return false;
     const lower = String.fromCharCode(keysym & 0xff);
     if (!this.macClipboardKeys.has(lower)) return false;
     if (isDown) {
@@ -4136,6 +4137,9 @@ struct Viewer {
     this.ticking = false;
     this.didAdoptServerName = false;
     this.macAutoChecked = false;
+    this.remoteCtrlPassthrough = false;
+    const ctx = this.getHostContext();
+    if (ctx) saveCtrlPassthrough(false, ctx);
     this.releaseViewerPixelMaps();
     this.frameCache = null;
     this.lastMask = 0;
@@ -5913,6 +5917,46 @@ struct Viewer {
         .fontColor(this.cTextSecondary)
         .width('100%');
       this.buildPanelAction({ label: '剪贴板', primary: false, onClick: () => this.togglePanel('clipboard') });
+      if (this.runtimeMacMode) {
+        Row() {
+          Column() {
+            Text('Ctrl 直通')
+              .fontSize(13)
+              .fontColor(this.cTextPrimary)
+              .maxLines(1);
+            Text('Ctrl+C/V 等组合键直接发送到远端')
+              .fontSize(11)
+              .fontColor(this.cTextSecondary)
+              .maxLines(2);
+          }
+          .layoutWeight(1);
+          Row() {
+            Blank()
+              .width(18)
+              .height(18)
+              .backgroundColor(this.cSurfaceAlt)
+              .borderRadius(9)
+              .margin({ left: this.remoteCtrlPassthrough ? 18 : 0 });
+          }
+          .width(42)
+          .height(24)
+          .padding(3)
+          .backgroundColor(this.remoteCtrlPassthrough ? this.cPrimary : this.cBorder)
+          .borderRadius(12)
+          .onClick(() => {
+            const next = !this.remoteCtrlPassthrough;
+            this.remoteCtrlPassthrough = next;
+            const ctx = this.getHostContext();
+            if (ctx) saveCtrlPassthrough(next, ctx);
+          });
+        }
+        .width('100%')
+        .padding({ left: 12, right: 8, top: 8, bottom: 8 })
+        .backgroundColor(this.cSurfaceAlt)
+        .borderRadius(14)
+        .border({ width: 1, color: this.cBorder })
+        .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev));
+      }
       this.buildPanelAction({ label: '打开会话面板', primary: false, onClick: () => this.togglePanel('connection') });
       this.buildPanelAction({ label: this.isFullscreen ? '退出全屏' : '进入全屏', primary: false, onClick: () => {
         this.toggleFullscreen();

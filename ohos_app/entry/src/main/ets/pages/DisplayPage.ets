@@ -77,11 +77,12 @@ struct DisplayPage {
   private remoteMetaDown: boolean = false;
   private remoteChineseMode: boolean = false;
   private macMode: boolean = false;
+  private ctrlPassthrough: boolean = false;
   private macAutoChecked: boolean = false;
   private macClipboardKeys = new Set<string>(['a', 'c', 'v', 'x', 'z']);
 
   private trySwapCtrlForCmd(ev: KeyEvent, keysym: number, isDown: boolean, ctrlDown: boolean, metaDown: boolean): boolean {
-    if (!this.macMode || !ctrlDown || metaDown) return false;
+    if (!this.macMode || !ctrlDown || metaDown || this.ctrlPassthrough) return false;
     const lower = String.fromCharCode(keysym & 0xff);
     if (!this.macClipboardKeys.has(lower)) return false;
     if (isDown) {
@@ -158,6 +159,7 @@ struct DisplayPage {
       if (ctx) {
         const pref = await dataPreferences.getPreferences(ctx, { name: 'vnc_store' });
         this.edgeClampEnabled = !!(await pref.get('edge_clamp_enabled_v1', true)) as boolean;
+        this.ctrlPassthrough = !!(await pref.get('ctrl_passthrough', false)) as boolean;
       }
     } catch (e) {
       console.error('Failed to load edge clamp setting in DisplayPage', e);

@@ -193,6 +193,12 @@ class ConnectionsRepository(context: Context) {
         prefs.edit().putBoolean(KEY_EDGE_CLAMP_ENABLED, enabled).apply()
     }
 
+    fun isCtrlPassthrough(): Boolean = prefs.getBoolean(KEY_CTRL_PASSTHROUGH, false)
+
+    fun setCtrlPassthrough(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_CTRL_PASSTHROUGH, enabled).apply()
+    }
+
     private companion object {
         const val KEY_CONNECTIONS = "connections_v1"
         const val KEY_SELECTED_CONNECTION_ID = "selected_conn_id"
@@ -203,5 +209,6 @@ class ConnectionsRepository(context: Context) {
         const val PASSWORD_PREFIX = "connection_password_"
         const val KEY_LAUNCH_AGREEMENTS_ACCEPTED = "launch_agreements_accepted_v1"
         const val KEY_EDGE_CLAMP_ENABLED = "edge_clamp_enabled_v1"
+        const val KEY_CTRL_PASSTHROUGH = "ctrl_passthrough"
     }
 }

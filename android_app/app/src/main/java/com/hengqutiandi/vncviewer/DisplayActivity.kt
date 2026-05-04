@@ -198,6 +198,10 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         context.getSharedPreferences("vnc_store", Context.MODE_PRIVATE)
             .getBoolean("edge_clamp_enabled_v1", true)
     }
+    val ctrlPassthrough = remember(context) {
+        context.getSharedPreferences("vnc_store", Context.MODE_PRIVATE)
+            .getBoolean("ctrl_passthrough", false)
+    }
 
     val sessionId = launchParams.sessionId
     val monitorIndex = maxOf(0, launchParams.monitorIndex)
@@ -378,7 +382,7 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
         )
         if (keysym == 0) {
             false
-        } else if (macMode && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
+        } else if (macMode && !ctrlPassthrough && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
             if (nativeEvent.action == KeyEvent.ACTION_DOWN) {
                 safeSendKey(0xffe3, false)
                 safeSendKey(0xffeb, true)

@@ -60,6 +60,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -2353,6 +2354,7 @@ private fun ViewerScreen(
     var showSessionList by rememberSaveable { mutableStateOf(false) }
     var openWindows by remember { mutableStateOf(emptyList<OpenViewerWindow>()) }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    var ctrlPassthrough by remember { mutableStateOf(false) }
     var chromeVisible by rememberSaveable { mutableStateOf(false) }
     var chromeHovering by remember { mutableStateOf(false) }
     var chromeHideNonce by rememberSaveable { mutableIntStateOf(0) }
@@ -2590,7 +2592,7 @@ private fun ViewerScreen(
             val keysym = keySymFromAndroidKey(nativeEvent.keyCode, nativeEvent.isShiftPressed, nativeEvent.metaState and android.view.KeyEvent.META_CAPS_LOCK_ON != 0)
             if (keysym == 0) {
                 false
-            } else if (macMode && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
+            } else if (macMode && !ctrlPassthrough && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
                 if (nativeEvent.action == android.view.KeyEvent.ACTION_DOWN) {
                     session.sendKey(0xffe3, false)
                     session.sendKey(0xffeb, true)
@@ -2640,6 +2642,8 @@ private fun ViewerScreen(
         onDispose {
             if (!session.connected) {
                 session.disconnect()
+                ctrlPassthrough = false
+                repository.setCtrlPassthrough(false)
             }
         }
     }
@@ -2831,6 +2835,8 @@ private fun ViewerScreen(
             titleText = titleText,
             touchScrollStep = touchScrollStep,
             fullscreen = fullscreen,
+            macMode = macMode,
+            ctrlPassthrough = ctrlPassthrough,
             securityLevel = session.securityLevel,
             onDismiss = {
                 showControls = false
@@ -2863,7 +2869,12 @@ private fun ViewerScreen(
                 onPushLocalClipboard()
             },
             onScrollUp = { session.sendScroll(8) },
-            onScrollDown = { session.sendScroll(16) }
+            onScrollDown = { session.sendScroll(16) },
+            onToggleCtrlPassthrough = {
+                val next = !ctrlPassthrough
+                ctrlPassthrough = next
+                repository.setCtrlPassthrough(next)
+            }
         )
     }
 
@@ -3751,6 +3762,8 @@ private fun ViewerControlSheet(
     titleText: String,
     touchScrollStep: Int,
     fullscreen: Boolean,
+    macMode: Boolean,
+    ctrlPassthrough: Boolean,
     securityLevel: Int,
     onDismiss: () -> Unit,
     onBack: () -> Unit,
@@ -3761,7 +3774,8 @@ private fun ViewerControlSheet(
     onScrollUp: () -> Unit,
     onScrollDown: () -> Unit,
     onPullRemoteClipboard: () -> Unit,
-    onPushLocalClipboard: () -> Unit
+    onPushLocalClipboard: () -> Unit,
+    onToggleCtrlPassthrough: () -> Unit
 ) {
     val primaryTextColor = Color(0xFFF5F5F4)
     val secondaryTextColor = Color(0xFFD6E3E8)
@@ -3918,6 +3932,29 @@ private fun ViewerControlSheet(
                     ),
                     label = { Text("滚动下", style = MaterialTheme.typography.bodyMedium) }
                 )
+            }
+            if (macMode) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = ctrlPassthrough,
+                        onClick = onToggleCtrlPassthrough,
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = chipContainerColor,
+                            labelColor = primaryTextColor,
+                            selectedContainerColor = VIEWER_CHROME_PRIMARY,
+                            selectedLabelColor = Color.White
+                        ),
+                        label = { Text("Ctrl 直通", style = MaterialTheme.typography.bodyMedium) }
+                    )
+                    Text(
+                        text = "Ctrl+C/V→远端",
+                        color = secondaryTextColor,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
             Text(
                 text = "触控滚动：${touchScrollLabel(touchScrollStep)}",
