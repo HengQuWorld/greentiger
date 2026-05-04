@@ -571,6 +571,13 @@ struct DisplayPage {
     }
     if (dy === 0) return;
 
+    const isOutside = isLocalOutsideContent(
+      axisX, axisY, this.monitorRect, this.windowW, this.windowH, this.fbW, this.fbH
+    );
+    if (isOutside && !this.edgeClampEnabled) {
+      return;
+    }
+
     const p = this.toRemote(axisX, axisY);
     const mask = dy < 0 ? VNC_SCROLL_UP : VNC_SCROLL_DOWN;
     const clicks = getScrollClicksForServer(this.title);
