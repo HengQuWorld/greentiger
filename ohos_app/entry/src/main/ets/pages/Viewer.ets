@@ -453,8 +453,8 @@ struct Viewer {
       if (!ctx) return;
       const pref = await dataPreferences.getPreferences(ctx, { name: 'vnc_store' });
       this.edgeClampEnabled = !!(await pref.get('edge_clamp_enabled_v1', true)) as boolean;
-    } catch (_e) {
-      // use default
+    } catch (e) {
+      console.error('Failed to load edge clamp setting', e);
     }
   }
 
@@ -480,6 +480,7 @@ struct Viewer {
     this.updateWindowTitle();
     this.refreshMonitorWindowsState();
     this.applyFullscreenToWindow();
+    void this.loadEdgeClampSetting();
     this.tryAutoConnect();
   }
 
@@ -5153,7 +5154,7 @@ struct Viewer {
           else if (button === MouseButton.Middle) bit = middle;
           else if (button === MouseButton.Right) bit = right;
 
-          if (!this.isPointWithinFocusedMonitor(localX, localY) && !this.edgeClampEnabled) {
+          if (!this.isLocalWithinContent(localX, localY) && !this.edgeClampEnabled) {
             if (this.lastMask !== 0 && this.lastPointerSentX >= 0 && this.lastPointerSentY >= 0) {
               this.lastMask = 0;
               this.safeSendPointer(this.lastPointerSentX, this.lastPointerSentY, 0, true);
@@ -5199,7 +5200,7 @@ struct Viewer {
           this.handleMouseChromeBehavior();
           const axisX = ev?.x ?? this.lastX;
           const axisY = ev?.y ?? this.lastY;
-          if (!this.isPointWithinFocusedMonitor(axisX, axisY) && !this.edgeClampEnabled) {
+          if (!this.isLocalWithinContent(axisX, axisY) && !this.edgeClampEnabled) {
             return;
           }
           const p = this.mapToRemotePoint(axisX, axisY);

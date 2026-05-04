@@ -1,4 +1,6 @@
 import image from '@ohos.multimedia.image';
+import dataPreferences from '@ohos.data.preferences';
+import common from '@ohos.app.ability.common';
 import { SharedViewerRect } from './ViewerMultiWindow';
 
 export interface ViewportTarget {
@@ -137,5 +139,18 @@ export class InteractFrameThrottle {
   reset(): void {
     this.frameCount = 0;
     this.lastRenderTime = 0;
+  }
+}
+
+const EDGE_CLAMP_PREF_NAME = 'vnc_store';
+const EDGE_CLAMP_KEY = 'edge_clamp_enabled_v1';
+
+export async function saveEdgeClampEnabled(enabled: boolean, context: common.UIAbilityContext): Promise<void> {
+  try {
+    const pref = await dataPreferences.getPreferences(context, { name: EDGE_CLAMP_PREF_NAME });
+    await pref.put(EDGE_CLAMP_KEY, enabled);
+    await pref.flush();
+  } catch (e) {
+    console.error('Failed to save edge clamp setting', e);
   }
 }

@@ -26,6 +26,10 @@ import {
   resolveConnectionAddress
 } from '../utils/ConnectionUtils';
 
+import {
+  saveEdgeClampEnabled
+} from '../utils/ViewerCommonUtils';
+
 import vnc from 'libvncviewer.so';
 
 interface VncFramebufferInfo {
@@ -197,6 +201,8 @@ struct Index {
   @State private mainStorePassword: boolean = false;
   @State private editOpen: boolean = false;
   @State private aboutOpen: boolean = false;
+  @State private systemSettingsOpen: boolean = false;
+  @State private editEdgeClampEnabled: boolean = true;
   @State private agreementDialogMode: number = AGREEMENT_DIALOG_NONE;
   @State private launchAgreementsAccepted: boolean = false;
   @State private privacyPolicyText: string = '';
@@ -665,6 +671,21 @@ struct Index {
 
   private closeAboutDialog(): void {
     this.aboutOpen = false;
+  }
+
+  private closeSystemSettingsDialog(): void {
+    this.systemSettingsOpen = false;
+  }
+
+  private async loadEdgeClampEnabled(): Promise<boolean> {
+    try {
+      const ctx = this.getHostContext();
+      if (!ctx) return true;
+      const pref = await dataPreferences.getPreferences(ctx, { name: 'vnc_store' });
+      return !!(await pref.get('edge_clamp_enabled_v1', true)) as boolean;
+    } catch (_e) {
+      return true;
+    }
   }
 
   private openAgreementDialog(mode: number): void {
@@ -2705,7 +2726,7 @@ struct Index {
   }
 
   private handleConnectionListKeyEvent(ev: KeyEvent): boolean {
-    if (this.editOpen || this.aboutOpen || this.agreementDialogMode !== AGREEMENT_DIALOG_NONE) return false;
+    if (this.editOpen || this.aboutOpen || this.systemSettingsOpen || this.agreementDialogMode !== AGREEMENT_DIALOG_NONE) return false;
     const code = ev?.keyCode ?? 0;
     if (ev?.type === KeyType.Down && (code === KeyCode.KEYCODE_DPAD_UP || code === 19)) {
       return this.moveConnectionSelection(-1);
@@ -2977,6 +2998,19 @@ struct Index {
           Text(`v${BUILD_VERSION}`)
             .fontSize(12)
             .fontColor(this.cTextSecondary);
+          Button('系统设置')
+            .height(30)
+            .fontSize(12)
+            .fontColor(this.cPrimary)
+            .backgroundColor(this.cSurfaceAlt)
+            .border({ width: 1, color: this.cBorder })
+            .borderRadius(12)
+            .padding({ left: 12, right: 12 })
+            .margin({ left: 10 })
+            .onClick(async () => {
+              this.editEdgeClampEnabled = await this.loadEdgeClampEnabled();
+              this.systemSettingsOpen = true;
+            });
           Button('关于')
             .height(30)
             .fontSize(12)
@@ -3672,11 +3706,110 @@ struct Index {
     }
   }
 
+  @Builder
+  private buildSystemSettingsOverlay(): void {
+    if (this.systemSettingsOpen) {
+      Stack() {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('rgba(12,20,22,0.60)')
+          .onClick(() => this.closeSystemSettingsDialog());
+
+        Column() {
+          Row() {
+            Text('系统设置')
+              .fontSize(22)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.cTextPrimary);
+            Blank()
+              .layoutWeight(1);
+            Button() {
+              Image($r('app.media.ic_close'))
+                .width(18)
+                .height(18)
+                .fillColor(this.cTextSecondary)
+            }
+            .width(36)
+            .height(36)
+            .backgroundColor(Color.Transparent)
+            .borderRadius(18)
+            .onClick(() => this.closeSystemSettingsDialog());
+          }
+          .alignItems(VerticalAlign.Center)
+          .width('100%')
+          .padding({ left: 24, right: 20, top: 24, bottom: 20 });
+
+          Blank()
+            .height(1)
+            .color(this.cBorder)
+            .margin({ left: 24, right: 24 });
+
+          Scroll() {
+            Column() {
+              Column() {
+                Text('触摸边缘吸附')
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.cTextPrimary)
+                  .width('100%')
+                  .margin({ bottom: 4 });
+                Text('触摸屏幕黑边区域时，将鼠标定位到远程桌面边缘，便于触发系统工具栏或菜单栏')
+                  .fontSize(11)
+                  .lineHeight(16)
+                  .fontColor(this.cTextSecondary)
+                  .width('100%')
+                  .margin({ bottom: 12 });
+                Row() {
+                  Text(this.editEdgeClampEnabled ? '已开启' : '已关闭')
+                    .fontSize(13)
+                    .fontColor(this.cTextSecondary)
+                    .layoutWeight(1);
+                  BrandSwitch({
+                    isOn: this.editEdgeClampEnabled,
+                    isEnabled: true,
+                    onChange: async (next: boolean) => {
+                      this.editEdgeClampEnabled = next;
+                      const ctx = this.getHostContext();
+                      if (ctx) {
+                        await saveEdgeClampEnabled(next, ctx);
+                      }
+                    }
+                  });
+                }
+              }
+              .width('100%')
+              .padding(18)
+              .backgroundColor(this.cSurface)
+              .border({ width: 1, color: this.cBorder })
+              .borderRadius(16);
+            }
+            .width('100%')
+            .padding({ left: 24, right: 24, top: 20, bottom: 20 });
+          }
+          .layoutWeight(1)
+          .scrollBar(BarState.Auto)
+          .align(Alignment.Top);
+        }
+        .width('100%')
+        .height('50%')
+        .constraintSize({ maxWidth: 720 })
+        .backgroundColor(this.cSurfaceAlt)
+        .borderRadius(24)
+        .shadow({ radius: 32, color: 'rgba(12,20,22,0.18)', offsetX: 0, offsetY: 8 });
+      }
+      .alignContent(Alignment.Center)
+      .width('100%')
+      .height('100%');
+    }
+  }
+
   build() {
     Stack() {
       this.buildConnectionManager();
       this.buildEditOverlay();
       this.buildAboutOverlay();
+      this.buildSystemSettingsOverlay();
       this.buildAgreementOverlay();
     }
     .width('100%')

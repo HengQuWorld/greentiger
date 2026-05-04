@@ -159,8 +159,8 @@ struct DisplayPage {
         const pref = await dataPreferences.getPreferences(ctx, { name: 'vnc_store' });
         this.edgeClampEnabled = !!(await pref.get('edge_clamp_enabled_v1', true)) as boolean;
       }
-    } catch (_e) {
-      // use default
+    } catch (e) {
+      console.error('Failed to load edge clamp setting in DisplayPage', e);
     }
     console.info(`DisplayPage initialized: sessionId=${this.sessionId}, monitorIndex=${this.monitorIndex}, title=${this.title}`);
     this.updateWindowTitle();
