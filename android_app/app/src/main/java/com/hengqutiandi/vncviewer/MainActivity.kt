@@ -196,6 +196,15 @@ private sealed interface MarkdownBlock {
     data class Bullet(val text: String) : MarkdownBlock
 }
 
+internal class ViewerViewModel(application: android.app.Application) : androidx.lifecycle.AndroidViewModel(application) {
+    val session = ViewerSession(application.filesDir.resolve("tigervnc").absolutePath)
+
+    override fun onCleared() {
+        super.onCleared()
+        session.close()
+    }
+}
+
 private fun Bitmap?.safeRecycle() {
     if (this != null && !isRecycled) {
         try {
@@ -641,7 +650,7 @@ private fun TouchScrollStepSelector(
     }
 }
 
-private class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
+internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     private val fallbackFullFrameSyncMs = 500L
     private val monitorDetectionIntervalMs = 1500L
     private val emptyMonitorDetectionIntervalMs = 300L
@@ -1207,18 +1216,11 @@ private fun GreenTigerApp(launchIntent: Intent?) {
     val userAgreementText = remember(context) {
         loadBundledTextAsset(context, userAgreementDocument.assetName, userAgreementDocument.title)
     }
-    val viewerSession = remember(context) {
-        ViewerSession(context.filesDir.resolve("tigervnc").absolutePath)
-    }
+    val viewModel: ViewerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val viewerSession = viewModel.session
     val showToast: (String) -> Unit = remember(context) {
         { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            viewerSession.close()
         }
     }
 
@@ -2750,15 +2752,21 @@ private fun ViewerScreen(
     val shouldRenderChrome = !session.connected || showControls || showDisplaySheet || !frameReady || chromeVisible
     val shouldShowChromeHandle = session.connected && !showControls && !showDisplaySheet && frameReady && !chromeVisible
 
-    androidx.compose.runtime.LaunchedEffect(session.connected, frameReady) {
+    androidx.compose.runtime.LaunchedEffect(session.connected) {
         if (!session.connected) {
             chromeVisible = true
+        }
+    }
+
+    var hasRevealedChrome by rememberSaveable { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(session.connected, frameReady) {
+        if (!session.connected) {
+            hasRevealedChrome = false
             return@LaunchedEffect
         }
-        if (frameReady) {
+        if (frameReady && !hasRevealedChrome) {
+            hasRevealedChrome = true
             revealChrome()
-        } else {
-            chromeVisible = true
         }
     }
 
@@ -2868,8 +2876,16 @@ private fun ViewerScreen(
                 showControls = false
                 onPushLocalClipboard()
             },
-            onScrollUp = { session.sendScroll(8) },
-            onScrollDown = { session.sendScroll(16) },
+            onScrollUp = {
+                val stepPx = getTouchScrollStepPx(touchScrollStep)
+                val ticks = (48f / stepPx).roundToInt().coerceIn(1, 10)
+                session.sendScrollAt(session.lastPointerX, session.lastPointerY, 8, repeatCount = ticks)
+            },
+            onScrollDown = {
+                val stepPx = getTouchScrollStepPx(touchScrollStep)
+                val ticks = (48f / stepPx).roundToInt().coerceIn(1, 10)
+                session.sendScrollAt(session.lastPointerX, session.lastPointerY, 16, repeatCount = ticks)
+            },
             onToggleCtrlPassthrough = {
                 val next = !ctrlPassthrough
                 ctrlPassthrough = next
