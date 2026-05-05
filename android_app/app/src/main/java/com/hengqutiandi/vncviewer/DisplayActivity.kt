@@ -375,11 +375,10 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
 
     val handleKeyEvent: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = { event ->
         val nativeEvent = event.nativeKeyEvent
-        val keysym = keySymFromAndroidKey(
-            nativeEvent.keyCode,
-            nativeEvent.isShiftPressed,
-            nativeEvent.metaState and KeyEvent.META_CAPS_LOCK_ON != 0
-        )
+        val keyCode = nativeEvent.keyCode
+        val shiftOn = nativeEvent.isShiftPressed
+        val capsOn = nativeEvent.metaState and KeyEvent.META_CAPS_LOCK_ON != 0
+        val keysym = keySymFromAndroidKey(keyCode, shiftOn, capsOn)
         if (keysym == 0) {
             false
         } else if (macMode && !ctrlPassthrough && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
@@ -393,7 +392,19 @@ private fun DisplayScreen(launchParams: DisplayLaunchParams) {
             }
             true
         } else {
-            safeSendKey(keysym, nativeEvent.action == KeyEvent.ACTION_DOWN)
+            val down = nativeEvent.action == KeyEvent.ACTION_DOWN
+            val needsExplicitShift = shiftOn && keyCode in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z
+            if (needsExplicitShift) {
+                if (down) {
+                    safeSendKey(0xffe1, true)
+                }
+                safeSendKey(keysym, down)
+                if (!down) {
+                    safeSendKey(0xffe1, false)
+                }
+            } else {
+                safeSendKey(keysym, down)
+            }
             true
         }
     }

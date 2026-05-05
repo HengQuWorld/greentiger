@@ -2591,7 +2591,10 @@ private fun ViewerScreen(
             }
             true
         } else {
-            val keysym = keySymFromAndroidKey(nativeEvent.keyCode, nativeEvent.isShiftPressed, nativeEvent.metaState and android.view.KeyEvent.META_CAPS_LOCK_ON != 0)
+            val keyCode = nativeEvent.keyCode
+            val shiftOn = nativeEvent.isShiftPressed
+            val capsOn = nativeEvent.metaState and android.view.KeyEvent.META_CAPS_LOCK_ON != 0
+            val keysym = keySymFromAndroidKey(keyCode, shiftOn, capsOn)
             if (keysym == 0) {
                 false
             } else if (macMode && !ctrlPassthrough && nativeEvent.isCtrlPressed && !nativeEvent.isMetaPressed && isMacClipboardKey(keysym)) {
@@ -2605,7 +2608,19 @@ private fun ViewerScreen(
                 }
                 true
             } else {
-                session.sendKey(keysym, nativeEvent.action == android.view.KeyEvent.ACTION_DOWN)
+                val down = nativeEvent.action == android.view.KeyEvent.ACTION_DOWN
+                val needsExplicitShift = shiftOn && keyCode in android.view.KeyEvent.KEYCODE_A..android.view.KeyEvent.KEYCODE_Z
+                if (needsExplicitShift) {
+                    if (down) {
+                        session.sendKey(0xffe1, true)
+                    }
+                    session.sendKey(keysym, down)
+                    if (!down) {
+                        session.sendKey(0xffe1, false)
+                    }
+                } else {
+                    session.sendKey(keysym, down)
+                }
                 true
             }
         }
