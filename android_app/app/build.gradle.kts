@@ -51,7 +51,6 @@ val generatedLauncherResDir = layout.buildDirectory.dir("generated/res/harmonyLa
 val generatedAgreementAssetsDir = layout.buildDirectory.dir("generated/assets/agreements")
 val harmonyLauncherBgSvg = rootDir.resolve("../ohos_app/AppScope/resources/base/media/app_icon_background.svg")
 val harmonyLauncherFgSvg = rootDir.resolve("../ohos_app/AppScope/resources/base/media/app_icon_foreground.svg")
-val agreementDocsDir = rootDir.resolve("../docs")
 val syncAgreementsScript = rootDir.resolve("../scripts/sync_agreements.py")
 
 android {
@@ -218,10 +217,6 @@ val generateLauncherIconsFromHarmonySvg = tasks.register("generateLauncherIconsF
 }
 
 val syncAgreementDocs = tasks.register("syncAgreementDocs") {
-    inputs.files(
-        agreementDocsDir.resolve("privacy-policy.md"),
-        agreementDocsDir.resolve("user-agreement.md")
-    )
     inputs.file(syncAgreementsScript)
     outputs.dir(generatedAgreementAssetsDir)
     doLast {

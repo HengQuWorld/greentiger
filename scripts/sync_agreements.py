@@ -1,30 +1,67 @@
 #!/usr/bin/env python3
+"""Fetch agreement documents from the official website at build time.
+
+Agreement texts are authoritative only at https://www.hengqu.world/agreements/.
+This script downloads them during the build so the app can display them offline.
+"""
 
 from __future__ import annotations
 
-import shutil
 import sys
 from pathlib import Path
+from urllib.request import urlopen, Request
+from urllib.error import URLError
+
+AGREEMENTS = {
+    "privacy-policy.md": "https://www.hengqu.world/api/agreements/privacy-policy",
+    "user-agreement.md": "https://www.hengqu.world/api/agreements/user-agreement",
+}
+
+FALLBACK_TEMPLATE = """# 翠虎远程桌面{title_suffix}
+
+> 无法在构建时获取协议原文。
+>
+> 正式版本请访问官方网站：{url}
+
+---
+
+请访问 [{url}]({url}) 阅读完整协议。
+"""
 
 
-AGREEMENT_FILES = (
-    "privacy-policy.md",
-    "user-agreement.md",
-)
+def fetch_agreement(url: str, timeout: int = 30) -> str | None:
+    req = Request(url, headers={"User-Agent": "greentiger-build/1.0"})
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                print(f"[sync_agreements] HTTP {resp.status} for {url}", file=sys.stderr)
+                return None
+            return resp.read().decode("utf-8")
+    except URLError as e:
+        print(f"[sync_agreements] WARNING: failed to fetch {url}: {e}", file=sys.stderr)
+        return None
 
 
 def sync_agreements(target_dir: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    docs_dir = repo_root / "docs"
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    for filename in AGREEMENT_FILES:
-        source = docs_dir / filename
+    for filename, url in AGREEMENTS.items():
+        fetched_content = fetch_agreement(url)
+        if fetched_content is not None:
+            content = fetched_content
+            status = "fetched"
+        else:
+            slug = filename.replace(".md", "")
+            title_suffix = "隐私协议" if "privacy" in slug else "用户协议"
+            content = FALLBACK_TEMPLATE.format(
+                title_suffix=title_suffix,
+                url=url.replace("/api/agreements/", "/agreements/"),
+            )
+            status = "fallback"
+
         target = target_dir / filename
-        if not source.is_file():
-            raise FileNotFoundError(f"Missing agreement source: {source}")
-        shutil.copyfile(source, target)
-        print(f"[sync_agreements] {source} -> {target}")
+        target.write_text(content, encoding="utf-8")
+        print(f"[sync_agreements] {status} -> {target}")
 
 
 def main() -> int:
