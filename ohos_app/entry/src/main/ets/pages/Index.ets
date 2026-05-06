@@ -114,6 +114,7 @@ const EDIT_TAB_ADVANCED = 1;
 const MARKDOWN_BLOCK_PARAGRAPH = 0;
 const MARKDOWN_BLOCK_HEADING = 1;
 const MARKDOWN_BLOCK_BULLET = 2;
+const MARKDOWN_BLOCK_BLOCKQUOTE = 3;
 const AGREEMENT_DIALOG_NONE = 0;
 const AGREEMENT_DIALOG_PRIVACY = 1;
 const AGREEMENT_DIALOG_USER = 2;
@@ -731,11 +732,10 @@ struct Index {
 
   private stripInlineMarkdown(value: string): string {
     return value
-      .replace(/\[(.*?)\]\((.*?)\)/g, '$1')
-      .replace(/`([^`]+)`/g, '$1')
       .replace(/\*\*(.*?)\*\*/g, '$1')
       .replace(/__(.*?)__/g, '$1')
-      .replace(/\*(.*?)\*/g, '$1');
+      .replace(/`(.*?)`/g, '$1')
+      .replace(/\[(.*?)\]\((.*?)\)/g, '$1');
   }
 
   private parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
@@ -780,6 +780,11 @@ struct Index {
       if (line.startsWith('# ')) {
         flushParagraph();
         pushBlock(MARKDOWN_BLOCK_HEADING, 1, this.stripInlineMarkdown(line.substring(2).trim()));
+        return;
+      }
+      if (line.startsWith('> ')) {
+        flushParagraph();
+        pushBlock(MARKDOWN_BLOCK_BLOCKQUOTE, 0, this.stripInlineMarkdown(line.substring(2).trim()));
         return;
       }
       if (line.startsWith('- ')) {
@@ -934,6 +939,21 @@ struct Index {
           .fontSize(14)
           .lineHeight(22)
           .fontColor(this.cTextMuted);
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top);
+    } else if (block.type === MARKDOWN_BLOCK_BLOCKQUOTE) {
+      Row() {
+        Blank()
+          .width(3)
+          .backgroundColor(this.cBorder)
+          .borderRadius(1.5);
+        Text(block.text)
+          .layoutWeight(1)
+          .fontSize(14)
+          .lineHeight(22)
+          .fontColor(this.cTextSecondary)
+          .padding({ left: 12, right: 8, top: 6, bottom: 6 });
       }
       .width('100%')
       .alignItems(VerticalAlign.Top);

@@ -27,7 +27,9 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.WindowInsets
@@ -36,7 +38,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -194,6 +195,7 @@ private sealed interface MarkdownBlock {
     data class Heading(val level: Int, val text: String) : MarkdownBlock
     data class Paragraph(val text: String) : MarkdownBlock
     data class Bullet(val text: String) : MarkdownBlock
+    data class Blockquote(val text: String) : MarkdownBlock
 }
 
 internal class ViewerViewModel(application: android.app.Application) : androidx.lifecycle.AndroidViewModel(application) {
@@ -223,7 +225,11 @@ private fun loadBundledTextAsset(context: Context, assetName: String, documentNa
 }
 
 private fun stripInlineMarkdown(text: String): String {
-    return text.replace("`", "").replace(Regex("\\[(.+?)\\]\\((.+?)\\)"), "$1")
+    return text
+        .replace(Regex("\\*\\*(.+?)\\*\\*"), "$1")
+        .replace(Regex("__(.+?)__"), "$1")
+        .replace("`", "")
+        .replace(Regex("\\[(.+?)\\]\\((.+?)\\)"), "$1")
 }
 
 private fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
@@ -251,6 +257,10 @@ private fun parseMarkdownBlocks(markdown: String): List<MarkdownBlock> {
             line.startsWith("# ") -> {
                 flushParagraph()
                 blocks += MarkdownBlock.Heading(1, stripInlineMarkdown(line.removePrefix("# ").trim()))
+            }
+            line.startsWith("> ") -> {
+                flushParagraph()
+                blocks += MarkdownBlock.Blockquote(stripInlineMarkdown(line.removePrefix("> ").trim()))
             }
             line.startsWith("- ") -> {
                 flushParagraph()
@@ -4466,6 +4476,32 @@ private fun AgreementMarkdownContent(
                             style = MaterialTheme.typography.bodyMedium,
                             lineHeight = 22.sp,
                             color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                is MarkdownBlock.Blockquote -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .fillMaxHeight()
+                                .background(
+                                    MaterialTheme.colorScheme.outlineVariant,
+                                    RoundedCornerShape(1.5.dp)
+                                )
+                        )
+                        Text(
+                            text = block.text,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            lineHeight = 22.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
