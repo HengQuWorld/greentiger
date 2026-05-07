@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 144 144">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <!-- Background: Deep Teal (matches #2c4f54 cPrimary) -->
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#406d73" />
       <stop offset="100%" stop-color="#1d3538" />
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="144" height="144" fill="url(#bg)" />
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)" />
 </svg>
