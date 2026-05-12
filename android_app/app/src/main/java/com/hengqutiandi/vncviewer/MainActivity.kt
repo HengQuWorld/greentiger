@@ -102,6 +102,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -282,13 +283,15 @@ private fun FloatingNavigationPad(
     onRight: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPositioned: ((androidx.compose.ui.layout.LayoutCoordinates) -> Unit)? = null
 ) {
     Box(
         modifier = modifier
             .padding(8.dp)
             .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
             .padding(8.dp)
+            .then(if (onPositioned != null) Modifier.onGloballyPositioned { onPositioned(it) } else Modifier)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -318,7 +321,7 @@ private fun NavPadButton(text: String, onClick: () -> Unit) {
             .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
+                    awaitFirstDown()
                     currentOnClick()
                     var running = true
                     val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
@@ -2372,6 +2375,7 @@ private fun ViewerScreen(
     var chromeHideNonce by rememberSaveable { mutableIntStateOf(0) }
     var chromeHideDelayMs by rememberSaveable { mutableStateOf(VIEWER_CHROME_AUTO_HIDE_MS) }
     var showNavigationPad by rememberSaveable { mutableStateOf(true) }
+    var navPadBoundsInWindow by remember { mutableStateOf(android.graphics.Rect()) }
     var interactionMode by rememberSaveable { mutableStateOf(ViewerInteractionMode.Control) }
     var isEditingMonitors by rememberSaveable { mutableStateOf(false) }
     var editMonitorsRects by remember { mutableStateOf<List<android.graphics.Rect>>(emptyList()) }
@@ -2995,6 +2999,13 @@ private fun ViewerScreen(
                 .onSizeChanged { viewerSize = it }
                 .consumeScroll()
                 .pointerInteropFilter { event ->
+                    if (navPadBoundsInWindow.width() > 0 &&
+                        navPadBoundsInWindow.contains(event.rawX.toInt(), event.rawY.toInt())) {
+                        // Event is within the navigation pad — do NOT route to
+                        // VNC. Return false so Compose gesture system processes
+                        // it (NavPadButton.pointerInput etc.).
+                        return@pointerInteropFilter false
+                    }
                     handleViewerMotionEvent(
                         event = event,
                         placement = placement,
@@ -3478,6 +3489,14 @@ private fun ViewerScreen(
                 onZoomOut = {
                     extendChromeInteractionIfVisible()
                     updateZoomState(stepViewerZoom(zoomState, -VIEWER_ZOOM_STEP_SCALE, placement, session.currentMonitorRect))
+                },
+                onPositioned = { coords ->
+                    val pos = coords.localToWindow(androidx.compose.ui.geometry.Offset.Zero)
+                    val size = coords.size
+                    navPadBoundsInWindow = android.graphics.Rect(
+                        pos.x.toInt(), pos.y.toInt(),
+                        (pos.x + size.width).toInt(), (pos.y + size.height).toInt()
+                    )
                 },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 56.dp, end = 32.dp)
             )

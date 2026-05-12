@@ -10,7 +10,6 @@ import androidx.activity.ComponentActivity
 
 abstract class MouseSafeActivity : ComponentActivity() {
     protected var statusBarInsetY = 0f
-    private var mouseNonPrimaryDownActive = false
     private var lastMouseX = 0f
     private var lastMouseY = 0f
 
@@ -38,11 +37,14 @@ abstract class MouseSafeActivity : ComponentActivity() {
             lastMouseY = ev.y
             when (ev.actionMasked) {
                 MotionEvent.ACTION_SCROLL,
-                MotionEvent.ACTION_HOVER_MOVE,
-                MotionEvent.ACTION_BUTTON_PRESS,
-                MotionEvent.ACTION_BUTTON_RELEASE -> {
+                MotionEvent.ACTION_HOVER_MOVE -> {
                     routeMouseToHandler(ev)
                 }
+                // ACTION_BUTTON_PRESS / ACTION_BUTTON_RELEASE are NOT routed
+                // here. They are redundant with the ACTION_DOWN / ACTION_UP
+                // events delivered via dispatchTouchEvent, which pass through
+                // Compose hit-testing so that navigation/chrome UI can consume
+                // them before they reach the VNC handler.
             }
             return true
         }
@@ -57,27 +59,11 @@ abstract class MouseSafeActivity : ComponentActivity() {
                 MotionEvent.ACTION_MOVE -> {
                     if (ev.buttonState == 0) return true
                 }
-                MotionEvent.ACTION_DOWN -> {
-                    if (ev.buttonState and (MotionEvent.BUTTON_SECONDARY or MotionEvent.BUTTON_TERTIARY) != 0) {
-                        mouseNonPrimaryDownActive = true
-                        routeMouseToHandler(ev)
-                        return true
-                    }
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (mouseNonPrimaryDownActive) {
-                        mouseNonPrimaryDownActive = false
-                        routeMouseToHandler(ev)
-                        return true
-                    }
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    if (mouseNonPrimaryDownActive) {
-                        mouseNonPrimaryDownActive = false
-                        routeMouseToHandler(ev)
-                        return true
-                    }
-                }
+                // All button press/release events (ACTION_DOWN / ACTION_UP
+                // with any button mask) fall through to super so that Compose
+                // hit-testing can deliver them to the correct UI element.
+                // The VNC handler receives them via pointerInteropFilter only
+                // when no navigation / chrome UI sits above that position.
             }
         }
         return super.dispatchTouchEvent(ev)
