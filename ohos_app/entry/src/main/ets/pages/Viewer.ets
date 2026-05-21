@@ -384,7 +384,7 @@ struct Viewer {
   @State private firstPixel: string = '';
   private lastDebugTs: number = 0;
 
-  @State private showNavigationPad: boolean = false;
+  @State private showNavigationPad: boolean = true;
 
   @State serverName: string = '';
   private didAdoptServerName: boolean = false;
