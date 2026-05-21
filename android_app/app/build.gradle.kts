@@ -182,9 +182,9 @@ val generateLauncherIconsFromHarmonySvg = tasks.register("generateLauncherIconsF
         
         val bgDefs = bgContent.substringAfter("<defs>").substringBefore("</defs>")
         var mergedSvg = fgContent.replace("<defs>", "<defs>\n$bgDefs")
-        mergedSvg = mergedSvg.replace("</defs>", "</defs>\n  <rect x=\"0\" y=\"0\" width=\"144\" height=\"144\" rx=\"32\" ry=\"32\" fill=\"url(#bg)\" />")
+        mergedSvg = mergedSvg.replace("</defs>", "</defs>\n  <rect x=\"0\" y=\"0\" width=\"1024\" height=\"1024\" rx=\"228\" ry=\"228\" fill=\"url(#bg)\" />")
         mergedSvg = mergedSvg.replace("fill=\"rgba(255,255,255,0.04)\"", "fill=\"#FFFFFF\" fill-opacity=\"0.04\"")
-        mergedSvg = mergedSvg.replace("width=\"1024\" height=\"1024\"", "width=\"144\" height=\"144\"")
+        mergedSvg = mergedSvg.replaceFirst("width=\"1024\" height=\"1024\"", "width=\"144\" height=\"144\"")
         
         sanitizedSvg.writeText(mergedSvg)
         
