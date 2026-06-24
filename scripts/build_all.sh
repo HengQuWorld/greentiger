@@ -103,14 +103,20 @@ collect_native_changes() {
 
 run_android_build() {
   local mode="$1"
-  log "Building Android ${mode} package"
+  local skip_native="$2"
+  log "Building Android ${mode} package${skip_native:+ (skipping native)}"
   (
     cd "${ANDROID_DIR}"
+    local gradle_args=()
     if [[ "${mode}" == "release" ]]; then
-      ./gradlew assembleRelease
+      gradle_args+=("assembleRelease")
     else
-      ./gradlew assembleDebug
+      gradle_args+=("assembleDebug")
     fi
+    if [[ "${skip_native}" == "true" ]]; then
+      gradle_args+=("-PskipNativeBuild")
+    fi
+    ./gradlew "${gradle_args[@]}"
   )
 }
 
@@ -175,19 +181,85 @@ main() {
   fi
 
   local build_mode="debug"
-  if [[ "${1:-}" == "--release" || "${1:-}" == "release" ]]; then
-    build_mode="release"
-  fi
+  local platform="all"
+  local skip_native="auto"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --release|release)
+        build_mode="release"
+        ;;
+      --android|android)
+        platform="android"
+        ;;
+      --ohos|ohos)
+        platform="ohos"
+        ;;
+      --skip-native|fast)
+        skip_native="true"
+        ;;
+      --full|full)
+        skip_native="false"
+        ;;
+      --help|-h)
+        printf 'Usage: %s [OPTIONS]\n\n' "${BASH_SOURCE[0]}"
+        printf 'Options:\n'
+        printf '  --release     Release build (default: debug)\n'
+        printf '  --android     Build Android only\n'
+        printf '  --ohos        Build HarmonyOS only\n'
+        printf '  --skip-native Skip native CMake build (requires prior full build)\n'
+        printf '  --full        Force full build including native code\n'
+        printf '  --help        Show this help\n'
+        printf '\nAuto-detection (default):\n'
+        printf '  If neither --skip-native nor --full is specified, the script\n'
+        printf '  automatically detects native code changes and skips CMake when\n'
+        printf '  only frontend (Kotlin/Compose) code has been modified.\n'
+        exit 0
+        ;;
+      *)
+        printf 'Unknown option: %s\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+    shift
+  done
 
   local native_changes
   native_changes="$(collect_native_changes)"
 
+  if [[ "${skip_native}" == "auto" ]]; then
+    local native_cache="${ANDROID_DIR}/app/.native-libs-cache"
+    if [[ -n "${native_changes}" ]]; then
+      skip_native="false"
+      log "Auto-detect: native code changed, full build required"
+      printf '  Changed files:\n'
+      printf '%s\n' "${native_changes}" | sed 's/^/    /'
+    elif [[ ! -d "${native_cache}" ]] || [[ -z "$(ls -A "${native_cache}" 2>/dev/null)" ]]; then
+      skip_native="false"
+      log "Auto-detect: no cached native libs found, full build required"
+    else
+      skip_native="true"
+      log "Auto-detect: no native code changes, skipping CMake build"
+    fi
+  fi
+
   log "Repository root: ${REPO_ROOT}"
   print_selected_mode "${build_mode}"
-  bootstrap_sources
-  run_android_build "${build_mode}"
-  run_ohos_build "${native_changes}" "${build_mode}"
-  log "All platform builds completed successfully (${build_mode})"
+  if [[ "${platform}" != "ohos" ]]; then
+    bootstrap_sources
+  fi
+
+  if [[ "${platform}" == "ohos" ]]; then
+    bootstrap_sources
+    run_ohos_build "${native_changes}" "${build_mode}"
+  elif [[ "${platform}" == "android" ]]; then
+    run_android_build "${build_mode}" "${skip_native}"
+  else
+    run_android_build "${build_mode}" "${skip_native}"
+    run_ohos_build "${native_changes}" "${build_mode}"
+  fi
+
+  log "Build completed successfully (${build_mode}, platform=${platform}${skip_native:+, skip-native})"
   print_artifact_summary "${build_mode}"
 }
 

@@ -56,6 +56,7 @@ android_app/*.iml
 android_app/build/
 android_app/app/build/
 android_app/app/.cxx/
+android_app/app/.native-libs-cache/
 android_app/captures/
 certs/
 log/

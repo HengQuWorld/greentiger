@@ -41,6 +41,9 @@ val gitVersionName = getGitVersion()
 val gitVersionCode = getGitVersionCode(gitVersionName)
 println("[Build] Dynamic App Version: $gitVersionName ($gitVersionCode)")
 
+val skipNativeBuild = project.hasProperty("skipNativeBuild")
+val nativeLibsCacheDir = file(".native-libs-cache")
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -67,15 +70,17 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-                arguments += listOf("-DANDROID_STL=c++_shared")
+        if (!skipNativeBuild) {
+            externalNativeBuild {
+                cmake {
+                    cppFlags += "-std=c++17"
+                    arguments += listOf("-DANDROID_STL=c++_shared")
+                }
             }
-        }
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            ndk {
+                abiFilters += listOf("arm64-v8a", "x86_64")
+            }
         }
     }
 
@@ -128,10 +133,18 @@ android {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+    if (!skipNativeBuild) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
+        }
+    }
+
+    if (skipNativeBuild) {
+        sourceSets {
+            getByName("main").jniLibs.srcDirs(nativeLibsCacheDir.absolutePath)
         }
     }
 
@@ -233,4 +246,67 @@ val syncAgreementDocs = tasks.register("syncAgreementDocs") {
 tasks.named("preBuild").configure {
     dependsOn(generateLauncherIconsFromHarmonySvg)
     dependsOn(syncAgreementDocs)
+}
+
+// Caches compiled .so files from CMake intermediates so subsequent builds can
+// skip native compilation with -PskipNativeBuild.
+// DEPENDS ON AGP 8.x directory layout:
+//   build/intermediates/cmake/{variant}/obj/{abi}/  or
+//   build/intermediates/cxx/{variant}/{hash}/obj/{abi}/
+// If AGP changes this structure in a future version, the search paths below
+// may need updating. The task degrades gracefully (warns, exits early).
+val cacheNativeLibs = tasks.register("cacheNativeLibs") {
+    outputs.dir(nativeLibsCacheDir)
+    doLast {
+        val intermediatesDir = file("${layout.buildDirectory.get().asFile}/intermediates")
+        val searchDirs = mutableListOf<File>()
+        if (file("${intermediatesDir}/cmake").exists()) {
+            searchDirs.add(file("${intermediatesDir}/cmake"))
+        }
+        if (file("${intermediatesDir}/cxx").exists()) {
+            file("${intermediatesDir}/cxx").listFiles()?.filter { it.isDirectory }?.forEach { variantDir ->
+                variantDir.listFiles()?.filter { it.isDirectory }?.forEach { hashDir ->
+                    searchDirs.add(hashDir)
+                }
+            }
+        }
+        if (searchDirs.isEmpty()) {
+            logger.lifecycle("[cacheNativeLibs] No CMake/CXX output directory found, skipping cache")
+            return@doLast
+        }
+        val abis = listOf("arm64-v8a", "x86_64")
+        abis.forEach { abi ->
+            val destDir = file("${nativeLibsCacheDir}/${abi}")
+            searchDirs.forEach { baseDir ->
+                val candidates = listOf(
+                    file("${baseDir}/debug/obj/${abi}"),
+                    file("${baseDir}/release/obj/${abi}"),
+                    file("${baseDir}/relWithDebInfo/obj/${abi}"),
+                    file("${baseDir}/obj/${abi}")
+                )
+                candidates.forEach { srcDir ->
+                    if (srcDir.exists()) {
+                        destDir.mkdirs()
+                        srcDir.listFiles()?.filter { it.extension == "so" }?.forEach { soFile ->
+                            soFile.copyTo(File(destDir, soFile.name), overwrite = true)
+                        }
+                    }
+                }
+            }
+        }
+        if (!nativeLibsCacheDir.exists() || nativeLibsCacheDir.listFiles()?.isEmpty() != false) {
+            logger.warn("[cacheNativeLibs] No cached native libs found. Run a full build first (without -PskipNativeBuild).")
+        } else {
+            logger.lifecycle("[cacheNativeLibs] Native libs cached to ${nativeLibsCacheDir.absolutePath}")
+        }
+    }
+}
+
+// finalizedBy runs cacheNativeLibs even when the assemble task fails.
+// This is harmless in practice: if compilation fails, intermediates will
+// be empty and cacheNativeLibs will warn and exit early.
+tasks.matching { it.name == "assembleDebug" || it.name == "assembleRelease" }.configureEach {
+    if (!skipNativeBuild) {
+        finalizedBy("cacheNativeLibs")
+    }
 }
