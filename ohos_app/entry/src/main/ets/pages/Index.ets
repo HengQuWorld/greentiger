@@ -98,8 +98,8 @@ interface BorderSpec {
 }
 
 interface ConnectionDetailLine {
-  label: string;
-  value: string;
+  label: ResourceStr;
+  value: ResourceStr;
 }
 
 interface MarkdownBlock {
@@ -267,6 +267,14 @@ struct Index {
     }
   }
 
+  private s(res: Resource, ...args: (string | number)[]): string {
+    try {
+      return getContext(this).resourceManager.getStringSync(res, ...args);
+    } catch (e) {
+      return '';
+    }
+  }
+
   private toast(message: string): void {
     try {
       const pa = this.getUIContext()?.getPromptAction?.();
@@ -278,7 +286,7 @@ struct Index {
   private openExternalUrl(url: string): void {
     const context = this.getHostContext();
     if (!context) {
-      this.toast('无法打开链接');
+      this.toast(this.s($r('app.string.cannot_open_link')));
       return;
     }
     const want: BrowserWant = {
@@ -294,7 +302,7 @@ struct Index {
     context.startAbility(want)
       .catch((e: ErrorLike) => {
         console.error('Failed to open external url', e);
-        this.toast('无法打开链接');
+        this.toast(this.s($r('app.string.cannot_open_link')));
       });
   }
 
@@ -306,7 +314,7 @@ struct Index {
       })
       .catch((e: ErrorLike) => {
         console.error('Failed to copy text', e);
-        this.toast('复制失败');
+        this.toast(this.s($r('app.string.copy_failed')));
       });
   }
 
@@ -484,7 +492,7 @@ struct Index {
     if (!changed) return;
     this.connections = next;
     void this.saveConnections();
-    this.toast('名称已保存');
+    this.toast(this.s($r('app.string.conn_name_saved')));
   }
 
   private selectConnection(id: string): void {
@@ -540,14 +548,14 @@ struct Index {
     }
     this.connections = next;
     void this.saveConnections();
-    this.toast(enable ? '已开启保存密码' : '已关闭保存密码');
+    this.toast(this.s($r(enable ? 'app.string.conn_password_save_on' : 'app.string.conn_password_save_off')));
   }
 
   private saveCurrentFieldsToSelected(): void {
     if (this.connected || !this.selectedConnId) return;
     const addr = (this.address ?? '').trim();
     if (addr && !parseAddress(addr)) {
-      this.toast('地址格式不正确，例如 192.168.1.2:5900 或 [::1]:5900');
+      this.toast(this.s($r('app.string.conn_address_format_error')));
       return;
     }
 
@@ -555,7 +563,7 @@ struct Index {
     const selected = curr.find(it => it.id === this.selectedConnId);
     const sshTunnel = normalizeSshTunnelConfigForAddress(selected?.sshTunnel, addr);
     if (!parseAddress(resolveConnectionAddress(addr, sshTunnel))) {
-      this.toast('请填写地址，或在开启 SSH 隧道时提供有效的转发目标');
+      this.toast(this.s($r('app.string.conn_fill_address_or_ssh')));
       return;
     }
     const next: ConnectionItem[] = [];
@@ -583,7 +591,7 @@ struct Index {
     }
     this.connections = next;
     void this.saveConnections();
-    this.toast('已保存');
+    this.toast(this.s($r('app.string.conn_saved')));
   }
 
   private openCreateDialog(): void {
@@ -632,12 +640,22 @@ struct Index {
       const res = await pa.showDialog({
         title: normalizeConnName(c.name, c.address, c.sshTunnel),
         message: this.isConnectionUsingSsh(c)
-          ? `路径：${this.getConnectionPathSummary(c)}\nVNC：${this.getConnectionVncTarget(c)}\nSSH：${this.getConnectionSshServer(c)}`
-          : `路径：${this.getConnectionPathSummary(c)}\nVNC：${this.getConnectionVncTarget(c)}\n方式：直连`,
+          ? this.s(
+            $r('app.string.conn_route_dialog_ssh'),
+            this.getConnectionPathSummary(c),
+            this.getConnectionVncTarget(c),
+            this.getConnectionSshServer(c)
+          )
+          : this.s(
+            $r('app.string.conn_route_dialog_direct'),
+            this.getConnectionPathSummary(c),
+            this.getConnectionVncTarget(c),
+            this.s($r('app.string.conn_route_direct_access'), this.getConnectionVncTarget(c))
+          ),
         buttons: [
-          { text: '取消', color: this.cTextSecondary },
-          { text: '编辑', color: this.cPrimary },
-          { text: '删除', color: this.cError }
+          { text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary },
+          { text: this.s($r('app.string.action_edit')), color: this.cPrimary },
+          { text: this.s($r('app.string.action_delete')), color: this.cError }
         ]
       });
       if (res.index === 1) {
@@ -711,7 +729,7 @@ struct Index {
       this.agreementDialogMode = AGREEMENT_DIALOG_NONE;
     } catch (e) {
       console.error('Failed to persist launch agreements consent', e);
-      this.toast('保存协议确认状态失败');
+      this.toast(this.s($r('app.string.agreement_save_failed')));
     }
   }
 
@@ -722,12 +740,12 @@ struct Index {
       await ctx.terminateSelf();
     } catch (e) {
       console.error('Failed to terminate app', e);
-      this.toast('无法退出应用');
+      this.toast(this.s($r('app.string.agreement_cannot_exit')));
     }
   }
 
   private createFallbackAgreementText(title: string): string {
-    return `# ${title}\n\n协议内容加载失败，请稍后重试。`;
+    return `# ${title}\n\n${this.s($r('app.string.agreement_content_load_failed'))}`;
   }
 
   private stripInlineMarkdown(value: string): string {
@@ -814,8 +832,8 @@ struct Index {
   }
 
   private async loadAgreementsState(): Promise<void> {
-    const privacyText = this.loadAgreementText(PRIVACY_POLICY_RAWFILE, '翠虎远程桌面隐私协议');
-    const userText = this.loadAgreementText(USER_AGREEMENT_RAWFILE, '翠虎远程桌面用户协议');
+    const privacyText = this.loadAgreementText(PRIVACY_POLICY_RAWFILE, this.s($r('app.string.agreement_privacy_full')));
+    const userText = this.loadAgreementText(USER_AGREEMENT_RAWFILE, this.s($r('app.string.agreement_user_full')));
     this.privacyPolicyText = privacyText;
     this.userAgreementText = userText;
     this.privacyPolicyBlocks = this.parseMarkdownBlocks(privacyText);
@@ -839,12 +857,12 @@ struct Index {
 
   private getAgreementDialogTitle(): string {
     if (this.agreementDialogMode === AGREEMENT_DIALOG_PRIVACY) {
-      return '隐私协议';
+      return this.s($r('app.string.agreement_privacy'));
     }
     if (this.agreementDialogMode === AGREEMENT_DIALOG_USER) {
-      return '用户协议';
+      return this.s($r('app.string.agreement_user'));
     }
-    return '协议阅读与确认';
+    return this.s($r('app.string.agreement_read_confirm'));
   }
 
   private isLaunchAgreementDialog(): boolean {
@@ -870,7 +888,7 @@ struct Index {
           .lineHeight(22)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.cPrimary);
-        Text('应用内完整查看')
+        Text($r('app.string.about_view_in_app'))
           .fontSize(12)
           .lineHeight(18)
           .fontColor(this.cTextSecondary)
@@ -903,7 +921,7 @@ struct Index {
             .lineHeight(18)
             .fontColor(this.cPrimary)
             .onClick(() => this.openExternalUrl(uri));
-          Text('复制')
+          Text($r('app.string.action_copy'))
             .fontSize(12)
             .lineHeight(18)
             .fontColor(this.cTextSecondary)
@@ -970,7 +988,7 @@ struct Index {
   private buildAgreementMarkdown(blocks: MarkdownBlock[]): void {
     Column({ space: 12 }) {
       if (blocks.length === 0) {
-        Text('协议内容加载中...')
+        Text($r('app.string.agreement_loading'))
           .width('100%')
           .fontSize(14)
           .lineHeight(22)
@@ -986,7 +1004,7 @@ struct Index {
   }
 
   @Builder
-  private buildAgreementSection(title: string, blocks: MarkdownBlock[]): void {
+  private buildAgreementSection(title: ResourceStr, blocks: MarkdownBlock[]): void {
     Column({ space: 12 }) {
       Text(title)
         .width('100%')
@@ -1141,18 +1159,18 @@ struct Index {
 
   private validateEditSshConfig(config: SshTunnelConfig): string {
     if (!config.enabled) return '';
-    if (!config.sshHost) return 'SSH 服务器不能为空';
-    if (!config.sshUser) return 'SSH 用户名不能为空';
-    if (!isValidPort(config.sshPort)) return 'SSH 端口必须在 1 到 65535 之间';
-    if (!config.remoteHost) return 'SSH 转发目标不能为空';
-    if (!isValidPort(config.remotePort)) return 'SSH 转发目标端口必须在 1 到 65535 之间';
+    if (!config.sshHost) return this.s($r('app.string.ssh_server_required'));
+    if (!config.sshUser) return this.s($r('app.string.ssh_user_required'));
+    if (!isValidPort(config.sshPort)) return this.s($r('app.string.ssh_port_invalid'));
+    if (!config.remoteHost) return this.s($r('app.string.ssh_remote_host_required'));
+    if (!isValidPort(config.remotePort)) return this.s($r('app.string.ssh_remote_port_invalid'));
     if (config.authType === SSH_AUTH_PUBLIC_KEY) {
-      if (!config.privateKeyPath) return 'SSH 私钥路径不能为空';
+      if (!config.privateKeyPath) return this.s($r('app.string.ssh_private_key_required'));
     } else if (config.authType === SSH_AUTH_PASSWORD) {
-      if (!config.sshPassword) return 'SSH 密码不能为空';
+      if (!config.sshPassword) return this.s($r('app.string.ssh_password_required'));
     }
     if (config.strictHostKeyCheck && !config.knownHostsPath) {
-      return '开启严格主机校验时必须提供 known_hosts 路径';
+      return this.s($r('app.string.ssh_known_hosts_required'));
     }
     return '';
   }
@@ -1211,13 +1229,13 @@ struct Index {
   private async saveEditDialog(): Promise<void> {
     const addr = (this.editAddress ?? '').trim();
     if (addr && !parseAddress(addr)) {
-      this.toast('地址格式不正确，例如 192.168.1.2:5900 或 [::1]:5900');
+      this.toast(this.s($r('app.string.conn_address_format_error')));
       return;
     }
     const sshTunnel = this.buildEditSshConfig(addr);
     if (!sshTunnel) return;
     if (!parseAddress(resolveConnectionAddress(addr, sshTunnel))) {
-      this.toast('请填写地址，或在开启 SSH 隧道时提供有效的转发目标');
+      this.toast(this.s($r('app.string.conn_fill_address_or_ssh')));
       return;
     }
 
@@ -1258,16 +1276,16 @@ struct Index {
     const c = (this.connections ?? []).find(it => it.id === id);
     if (!c) return;
     if (this.connected) {
-      this.toast('已连接时不能删除连接配置');
+      this.toast(this.s($r('app.string.conn_cannot_delete_while_connected')));
       return;
     }
     try {
       const pa = this.getUIContext()?.getPromptAction?.();
       if (!pa?.showDialog) return;
       const res = await pa.showDialog({
-        title: '删除连接',
-        message: `确认删除“${normalizeConnName(c.name, c.address, c.sshTunnel)}”？`,
-        buttons: [{ text: '取消', color: this.cTextSecondary }, { text: '删除', color: this.cError }]
+        title: this.s($r('app.string.conn_delete_title')),
+        message: this.s($r('app.string.conn_delete_confirm'), normalizeConnName(c.name, c.address, c.sshTunnel)),
+        buttons: [{ text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary }, { text: this.s($r('app.string.action_delete')), color: this.cError }]
       });
       if (res.index !== 1) return;
     } catch (e) {
@@ -1456,7 +1474,7 @@ struct Index {
       if (prc !== 0) {
         this.lastError = ((vnc as VncClient).getLastError?.() as string) ?? '';
         this.disconnect(true);
-        this.toast(this.lastError || '连接失败');
+        this.toast(this.lastError || this.s($r('app.string.conn_failed')));
         return;
       }
     }
@@ -1475,7 +1493,7 @@ struct Index {
       if (prc !== 0) {
         this.lastError = ((vnc as VncClient).getLastError?.() as string) ?? '';
         this.disconnect(true);
-        this.toast(this.lastError || '连接已断开');
+        this.toast(this.lastError || this.s($r('app.string.conn_disconnected')));
         return;
       }
 
@@ -1543,7 +1561,7 @@ struct Index {
       this.saveSelectedName();
       const parsed = parseAddress(this.address);
       if (!parsed) {
-        this.toast('地址格式不正确，例如 192.168.1.2:5900 或 [::1]:5900');
+        this.toast(this.s($r('app.string.conn_address_format_error')));
         return;
       }
       (vnc as VncClient).setDebugOptions?.(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
@@ -1555,7 +1573,7 @@ struct Index {
       this.maybeAdoptServerNameAsConnName();
       this.lastError = ((vnc as VncClient).getLastError?.() as string) ?? '';
       if (!this.connected) {
-        this.toast(this.lastError || '连接失败');
+        this.toast(this.lastError || this.s($r('app.string.conn_failed')));
         return;
       }
       this.touchConnectionUsed();
@@ -1567,7 +1585,7 @@ struct Index {
         this.showPanel = false;
         if (!this.didShowPanelGestureHint) {
           this.didShowPanelGestureHint = true;
-          this.toast('已进入全屏视图：从左侧边缘右滑可打开连接面板');
+          this.toast(this.s($r('app.string.conn_fullscreen_entered')));
         }
       }
       this.startLoop();
@@ -1576,7 +1594,7 @@ struct Index {
       this.connected = false;
       this.pm = undefined;
       const msg = (e as Error)?.message;
-      this.lastError = msg ?? '连接失败';
+      this.lastError = msg ?? this.s($r('app.string.conn_failed'));
       this.toast(this.lastError);
     } finally {
       this.connecting = false;
@@ -1597,9 +1615,9 @@ struct Index {
   }
 
   private getPanelBarTitle(): string {
-    if (this.connected) return '已连接';
+    if (this.connected) return this.s($r('app.string.conn_connected'));
     const c = this.getSelectedConnection();
-    if (!c) return '快速连接';
+    if (!c) return this.s($r('app.string.conn_quick_connect'));
     return normalizeConnName(c.name, c.address, c.sshTunnel);
   }
 
@@ -1607,7 +1625,7 @@ struct Index {
     const addr = resolveConnectionAddress(this.address, this.getSelectedConnection()?.sshTunnel);
     if (addr) return addr;
     const c = this.getSelectedConnection();
-    return resolveConnectionAddress(c?.address ?? '', c?.sshTunnel) || '填写地址并连接，例如 192.168.1.2:5900';
+    return resolveConnectionAddress(c?.address ?? '', c?.sshTunnel) || this.s($r('app.string.conn_address_hint'));
   }
 
   private disconnect(preserveError: boolean = false): void {
@@ -1660,7 +1678,7 @@ struct Index {
 
   private async saveImage(): Promise<void> {
     if (!this.pm) {
-      this.toast('没有图像数据');
+      this.toast(this.s($r('app.string.viewer_save_image_no_data')));
       return;
     }
     try {
@@ -1682,10 +1700,10 @@ struct Index {
       const file = fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
       fs.writeSync(file.fd, data);
       fs.closeSync(file);
-      this.toast(`已保存: ${path}`);
+      this.toast(this.s($r('app.string.viewer_save_image_saved'), path));
     } catch (e) {
       console.error('Failed to save image', e);
-      this.toast(`保存失败: ${e}`);
+      this.toast(this.s($r('app.string.viewer_save_image_failed'), `${e}`));
     }
   }
 
@@ -1693,11 +1711,11 @@ struct Index {
   private buildControls(): void {
     Column() {
       Row() {
-        Text('连接')
+        Text($r('app.string.conn_connect'))
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .layoutWeight(1);
-        Button('新增')
+        Button($r('app.string.conn_new'))
           .height(32)
           .fontSize(12)
           .fontColor(this.cPrimary)
@@ -1706,7 +1724,7 @@ struct Index {
           .borderRadius(12)
           .enabled(!this.connected)
           .onClick(() => this.openCreateDialog());
-        Text('收起')
+        Text($r('app.string.conn_collapse'))
           .fontSize(12)
           .fontColor(this.cTextSecondary)
           .margin({ left: 12 })
@@ -1714,14 +1732,14 @@ struct Index {
             this.showPanel = false;
             if (this.connected && !this.didShowPanelGestureHint) {
               this.didShowPanelGestureHint = true;
-              this.toast('从左侧边缘右滑可打开连接面板');
+              this.toast(this.s($r('app.string.conn_panel_swipe_hint')));
             }
           });
       }
       .padding({ left: 12, right: 12, top: 12, bottom: 8 });
 
       if (this.connections.length === 0) {
-        Text('暂无已保存连接。点击“新增连接”添加，或直接在下方输入地址连接。')
+        Text($r('app.string.conn_no_saved'))
           .fontSize(13)
           .fontColor(this.cTextSecondary)
           .padding({ left: 12, right: 12, bottom: 10 });
@@ -1745,15 +1763,15 @@ struct Index {
                           .layoutWeight(1);
                       }
                       if ((c.user ?? '').trim()) {
-                        Text(`账号: ${(c.user ?? '').trim()}`).fontSize(12).fontColor(this.cTextSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
+                        Text(this.s($r('app.string.conn_user_prefix'), (c.user ?? '').trim())).fontSize(12).fontColor(this.cTextSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
                       }
                       if (c.storePassword && (c.password ?? '').length > 0) {
-                        Text('已保存密码').fontSize(12).fontColor(this.cTextSecondary).margin({ left: 8 });
+                        Text($r('app.string.conn_password_saved')).fontSize(12).fontColor(this.cTextSecondary).margin({ left: 8 });
                       }
                     }.margin({ top: 2 });
                   }.layoutWeight(1);
                   if (!this.connected && c.id === this.selectedConnId) {
-                    Text('编辑/删除')
+                    Text($r('app.string.conn_edit_delete'))
                       .fontSize(12)
                       .fontColor(this.cTextSecondary)
                       .margin({ left: 12 })
@@ -1771,11 +1789,11 @@ struct Index {
       }
 
       Row() {
-        Text('快速连接')
+        Text($r('app.string.conn_quick_connect'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .layoutWeight(1);
-        Button(this.authOpen ? '收起认证' : '连接认证')
+        Button(this.authOpen ? $r('app.string.conn_collapse_auth') : $r('app.string.conn_open_auth'))
           .height(32)
           .fontSize(12)
           .fontColor(this.cPrimary)
@@ -1788,40 +1806,40 @@ struct Index {
       .padding({ left: 12, right: 12, top: 8, bottom: 6 });
 
       Column() {
-        Text('地址（直连时填写）')
+        Text($r('app.string.conn_address_label'))
           .fontSize(12)
           .fontColor(this.cTextSecondary)
           .width('100%')
           .padding({ bottom: 4 });
-        TextInput({ text: this.address, placeholder: '例如 192.168.1.2:5900；SSH 隧道时可留空' })
+        TextInput({ text: this.address, placeholder: $r('app.string.conn_desktop_addr_ssh_hint') })
           .onChange((v: string) => this.address = v)
           .enabled(!this.connected)
           .padding({ bottom: 8 });
 
         if (this.authOpen) {
-          Text('账号（可选）')
+          Text($r('app.string.conn_user_optional'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .width('100%')
             .padding({ bottom: 4 });
-          TextInput({ text: this.user, placeholder: '账号' })
+          TextInput({ text: this.user, placeholder: $r('app.string.conn_user_placeholder') })
             .onChange((v: string) => this.user = v)
             .enabled(!this.connected)
             .padding({ bottom: 8 });
 
-          Text('密码（可选）')
+          Text($r('app.string.conn_password_optional'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .width('100%')
             .padding({ bottom: 4 });
-          TextInput({ text: this.password, placeholder: '密码' })
+          TextInput({ text: this.password, placeholder: $r('app.string.conn_password_placeholder') })
             .type(InputType.Password)
             .onChange((v: string) => this.password = v)
             .enabled(!this.connected)
             .padding({ bottom: 8 });
           if (this.selectedConnId) {
             Row() {
-              Text('记住密码')
+              Text($r('app.string.conn_remember_password'))
                 .fontSize(12)
                 .fontColor(this.cTextSecondary)
                 .layoutWeight(1);
@@ -1843,7 +1861,7 @@ struct Index {
       }
 
       Row() {
-        Button(this.connected ? '断开连接' : (this.connecting ? '连接中…' : '连接'))
+        Button(this.connected ? $r('app.string.conn_disconnect') : (this.connecting ? $r('app.string.conn_connecting') : $r('app.string.conn_connect')))
           .layoutWeight(1)
           .height(44)
           .fontSize(15)
@@ -1861,11 +1879,11 @@ struct Index {
 
       if (this.connected) {
         Row() {
-          Text(`已连接 ${this.fbW}x${this.fbH}`)
+          Text(this.s($r('app.string.conn_connected')) + ` ${this.fbW}x${this.fbH}`)
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .layoutWeight(1);
-          Button(this.devToolsEnabled ? '开发者工具:开' : '开发者工具:关')
+          Button(this.devToolsEnabled ? this.s($r('app.string.viewer_devtools_on')) : this.s($r('app.string.viewer_devtools_off')))
             .fontSize(12)
             .height(28)
             .fontColor(this.cPrimary)
@@ -1877,7 +1895,7 @@ struct Index {
 
         if (this.devToolsEnabled) {
           Row() {
-            Button(this.debugEnabled ? '调试:开' : '调试:关')
+            Button(this.debugEnabled ? this.s($r('app.string.viewer_debug_on')) : this.s($r('app.string.viewer_debug_off')))
               .fontSize(12)
               .height(28)
               .fontColor(this.cPrimary)
@@ -1893,7 +1911,7 @@ struct Index {
                   this.firstPixel = '';
                 }
               });
-            Button(`格式:${this.debugPmFormat === 0 ? 'RGBA' : 'ARGB'}`)
+            Button(this.s($r('app.string.devtools_pixel_format'), this.debugPmFormat === 0 ? 'RGBA' : 'ARGB'))
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
@@ -1907,7 +1925,7 @@ struct Index {
                 this.pm = undefined;
                 void this.ensurePixelMap();
               });
-            Button(`顺序:${this.debugByteOrder}`)
+            Button(this.s($r('app.string.devtools_byte_order'), this.debugByteOrder))
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
@@ -1924,7 +1942,7 @@ struct Index {
           }.padding({ left: 12, right: 12, bottom: 8 });
 
           Row() {
-            Button('刷新画面')
+            Button($r('app.string.viewer_refresh_frame'))
               .fontSize(12)
               .height(28)
               .layoutWeight(1)
@@ -1933,7 +1951,7 @@ struct Index {
               .border({ width: 1, color: this.cBorder })
               .borderRadius(12)
               .onClick(() => (vnc as VncClient).refresh?.());
-            Button('存图')
+            Button($r('app.string.viewer_save_frame'))
               .fontSize(12)
               .height(28)
               .layoutWeight(1)
@@ -2004,12 +2022,12 @@ struct Index {
     Column() {
       Row() {
         Column() {
-          Text('当前连接方式')
+          Text($r('app.string.conn_current_route'))
             .fontSize(12)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.cPrimary)
             .width('100%');
-          Text(routeLabel === 'SSH 隧道' ? '经 SSH 安全连接' : '直接连接')
+          Text(routeLabel === this.s($r('app.string.conn_route_ssh_tunnel')) ? this.s($r('app.string.conn_route_ssh_secure')) : this.s($r('app.string.conn_route_direct')))
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.cTextPrimary)
@@ -2031,7 +2049,9 @@ struct Index {
       .width('100%')
       .alignItems(VerticalAlign.Center);
 
-      Text(routeLabel === 'SSH 隧道' ? `先连接 SSH ${sshServer}，再转发到 ${vncTarget}` : `本机直接访问 ${vncTarget}`)
+      Text(routeLabel === this.s($r('app.string.conn_route_ssh_tunnel'))
+        ? this.s($r('app.string.conn_route_ssh_via'), sshServer, vncTarget)
+        : this.s($r('app.string.conn_route_direct_access'), vncTarget))
         .fontSize(11)
         .lineHeight(16)
         .fontColor(this.cTextSecondary)
@@ -2077,25 +2097,25 @@ struct Index {
   private buildEditAdvancedSection(): void {
     Column() {
       Column() {
-        Text('触控滚动')
+        Text($r('app.string.conn_ssh_touch_scroll_title'))
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.cTextPrimary)
           .width('100%')
           .padding({ bottom: 4 });
-        Text('调整触摸滚动步长。')
+        Text($r('app.string.conn_ssh_touch_scroll_desc'))
           .fontSize(11)
           .lineHeight(16)
           .fontColor(this.cTextSecondary)
           .width('100%')
           .padding({ bottom: 10 });
-        Text('触摸滚动步长')
+        Text($r('app.string.conn_touch_scroll_step'))
           .fontSize(12)
           .fontColor(this.cTextSecondary)
           .width('100%')
           .padding({ bottom: 6 });
         Row() {
-          Button('自动')
+          Button($r('app.string.button_auto'))
             .height(28)
             .fontSize(12)
             .fontColor(this.editTouchScrollStep <= 0 ? this.cPrimaryFg : this.cPrimary)
@@ -2103,7 +2123,7 @@ struct Index {
             .border({ width: 1, color: this.cBorder })
             .borderRadius(12)
             .onClick(() => this.updateEditTouchScrollStep(0));
-          Button('慢')
+          Button($r('app.string.tool_scroll_slow'))
             .height(28)
             .fontSize(12)
             .margin({ left: 6 })
@@ -2112,7 +2132,7 @@ struct Index {
             .border({ width: 1, color: this.cBorder })
             .borderRadius(12)
             .onClick(() => this.updateEditTouchScrollStep(18));
-          Button('中')
+          Button($r('app.string.tool_scroll_medium'))
             .height(28)
             .fontSize(12)
             .margin({ left: 6 })
@@ -2121,7 +2141,7 @@ struct Index {
             .border({ width: 1, color: this.cBorder })
             .borderRadius(12)
             .onClick(() => this.updateEditTouchScrollStep(12));
-          Button('快')
+          Button($r('app.string.tool_scroll_fast'))
             .height(28)
             .fontSize(12)
             .margin({ left: 6 })
@@ -2132,7 +2152,9 @@ struct Index {
             .onClick(() => this.updateEditTouchScrollStep(8));
         }
         .width('100%');
-        Text(this.editTouchScrollStep <= 0 ? '当前：自动（按系统自适应）' : `当前：${this.editTouchScrollStep}px`)
+        Text(this.editTouchScrollStep <= 0
+          ? this.s($r('app.string.conn_touch_scroll_auto_current'))
+          : this.s($r('app.string.conn_touch_scroll_value_current'), this.editTouchScrollStep))
           .fontSize(11)
           .fontColor(this.cTextTertiary)
           .width('100%')
@@ -2146,13 +2168,13 @@ struct Index {
       .margin({ bottom: 12 });
 
       Column() {
-        Text('Mac 键盘模式')
+        Text($r('app.string.conn_mac_mode_title'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.cTextPrimary)
           .width('100%')
           .padding({ bottom: 4 });
-        Text('连接 Mac 时自动将 Ctrl 映射为 ⌘ 键，修复剪贴板快捷键。连接后会自动识别，仅需在识别结果不对时手动开启。')
+        Text($r('app.string.conn_mac_mode_desc'))
           .fontSize(11)
           .lineHeight(16)
           .fontColor(this.cTextSecondary)
@@ -2160,7 +2182,7 @@ struct Index {
           .padding({ bottom: 10 });
         Row() {
           Column() {
-            Text('Mac 键盘模式')
+            Text($r('app.string.conn_mac_mode_label'))
               .fontSize(12)
               .fontColor(this.cTextSecondary);
           }
@@ -2181,15 +2203,15 @@ struct Index {
       .margin({ bottom: 12 });
 
       Column() {
-        Text('SSH 隧道')
+        Text($r('app.string.conn_ssh_title'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.cTextPrimary)
           .width('100%')
           .padding({ bottom: 4 });
         Text(this.editSshEnabled
-          ? '通过 SSH 服务器转发到桌面时，在这里配置。'
-          : '只有通过堡垒机、跳板机或内网隧道访问时，才需要开启。')
+          ? $r('app.string.conn_ssh_enabled_hint')
+          : $r('app.string.conn_ssh_disabled_hint'))
           .fontSize(11)
           .lineHeight(16)
           .fontColor(this.cTextSecondary)
@@ -2198,12 +2220,12 @@ struct Index {
 
         Row() {
           Column() {
-            Text(this.editSshEnabled ? '已开启 SSH 隧道' : '直接连接')
+            Text(this.editSshEnabled ? this.s($r('app.string.conn_ssh_route_enabled_label')) : this.s($r('app.string.conn_ssh_route_disabled_label')))
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.editSshEnabled ? this.cPrimary : this.cTextPrimary)
               .width('100%');
-            Text(this.editSshEnabled ? '先连接 SSH 服务器，再转发到目标桌面。' : '默认直接连接目标桌面，需要时再开启 SSH。')
+            Text(this.editSshEnabled ? this.s($r('app.string.conn_ssh_route_enabled_hint')) : this.s($r('app.string.conn_ssh_route_disabled_hint')))
               .fontSize(11)
               .lineHeight(16)
               .fontColor(this.cTextSecondary)
@@ -2220,27 +2242,29 @@ struct Index {
         }
         .padding({ bottom: 10 });
         if (this.editSshEnabled) {
-          TextInput({ text: this.editSshHost, placeholder: 'SSH 服务器，例如 bastion.example.com' })
+          TextInput({ text: this.editSshHost, placeholder: this.s($r('app.string.conn_ssh_server_placeholder')) })
             .onChange((v: string) => this.editSshHost = v)
             .padding({ bottom: 8 });
 
           if (this.editSshReuseDesktopUser) {
             this.buildInheritedFieldCard(
-              'SSH 用户名',
-              (this.editUser ?? '').trim() ? `跟随基本页账号：${(this.editUser ?? '').trim()}` : '等待复用基本页中的桌面用户名',
+              this.s($r('app.string.ssh_inherited_field_ssh_user')),
               (this.editUser ?? '').trim()
-                ? '当前字段由基本页“账号”接管；关闭上方复用开关后可单独填写。'
-                : '当前字段由基本页“账号”接管；先在基本页填写后，这里会自动同步。',
+                ? this.s($r('app.string.ssh_inherited_user_prefix'), (this.editUser ?? '').trim())
+                : this.s($r('app.string.ssh_waiting_for_desktop_user')),
+              (this.editUser ?? '').trim()
+                ? this.s($r('app.string.ssh_inherited_user_desc_ok'))
+                : this.s($r('app.string.ssh_inherited_user_desc_waiting')),
               (this.editUser ?? '').trim().length === 0
             );
           } else {
-            TextInput({ text: this.editSshUser, placeholder: 'SSH 用户名' })
+            TextInput({ text: this.editSshUser, placeholder: this.s($r('app.string.ssh_inherited_field_ssh_user')) })
               .onChange((v: string) => this.editSshUser = v)
               .padding({ bottom: 8 });
           }
 
           Row() {
-            Text(this.isReusingEditDesktopCredentials() ? '重用桌面账号密码' : '单独填写 SSH 账号信息')
+            Text(this.isReusingEditDesktopCredentials() ? this.s($r('app.string.ssh_reuse_desktop_creds')) : this.s($r('app.string.ssh_separate_ssh_info')))
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .layoutWeight(1);
@@ -2254,24 +2278,26 @@ struct Index {
 
           Text(this.isReusingEditDesktopCredentials()
             ? (this.editSshAuthType === SSH_AUTH_PUBLIC_KEY
-              ? ((this.editUser ?? '').trim() ? `当前复用基本页中的桌面用户名：${(this.editUser ?? '').trim()}` : '请先在基本页填写桌面用户名。')
+              ? ((this.editUser ?? '').trim()
+                ? this.s($r('app.string.ssh_reuse_user_prefix'), (this.editUser ?? '').trim())
+                : this.s($r('app.string.ssh_reuse_waiting_user')))
               : ((this.editUser ?? '').trim()
-                ? `当前复用基本页中的桌面账号；用户名：${(this.editUser ?? '').trim()}`
-                : '请先在基本页填写桌面用户名和密码。'))
-            : 'SSH 账号信息可以与桌面账号不同。')
+                ? this.s($r('app.string.ssh_reuse_account_prefix'), (this.editUser ?? '').trim())
+                : this.s($r('app.string.ssh_reuse_waiting_user_password'))))
+            : this.s($r('app.string.ssh_desc_separate')))
             .fontSize(11)
             .lineHeight(16)
             .fontColor(this.cTextTertiary)
             .width('100%')
             .padding({ bottom: 8 });
 
-          Text('登录方式')
+          Text($r('app.string.ssh_login_method'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .width('100%')
             .padding({ bottom: 6 });
           Row() {
-            Button('密码登录')
+            Button($r('app.string.ssh_auth_password_label'))
               .height(28)
               .fontSize(12)
               .fontColor(this.editSshAuthType === SSH_AUTH_PASSWORD ? this.cPrimaryFg : this.cPrimary)
@@ -2279,7 +2305,7 @@ struct Index {
               .border({ width: 1, color: this.cBorder })
               .borderRadius(12)
               .onClick(() => this.setEditSshAuthType(SSH_AUTH_PASSWORD));
-            Button('密钥登录')
+            Button($r('app.string.ssh_auth_key_label'))
               .height(28)
               .fontSize(12)
               .margin({ left: 6 })
@@ -2293,32 +2319,32 @@ struct Index {
           .padding({ bottom: 8 });
 
           if (this.editSshAuthType === SSH_AUTH_PUBLIC_KEY) {
-            TextInput({ text: this.editSshPrivateKeyPath, placeholder: '私钥路径，例如 /data/storage/el2/base/files/id_ed25519' })
+            TextInput({ text: this.editSshPrivateKeyPath, placeholder: this.s($r('app.string.ssh_private_key_path_placeholder')) })
               .onChange((v: string) => this.editSshPrivateKeyPath = v)
               .padding({ bottom: 8 });
-            TextInput({ text: this.editSshPrivateKeyPassphrase, placeholder: '私钥口令（可选）' })
+            TextInput({ text: this.editSshPrivateKeyPassphrase, placeholder: this.s($r('app.string.ssh_private_key_passphrase_optional')) })
               .type(InputType.Password)
               .onChange((v: string) => this.editSshPrivateKeyPassphrase = v)
               .padding({ bottom: 8 });
           } else {
             if (this.editSshReuseDesktopPassword) {
               this.buildInheritedFieldCard(
-                'SSH 密码',
-                (this.editPassword ?? '') ? '已复用基本页中的桌面密码' : '等待复用基本页中的桌面密码',
-                (this.editPassword ?? '')
-                  ? '当前字段由基本页“密码”接管；关闭上方复用开关后可单独填写。'
-                  : '当前字段由基本页“密码”接管；先在基本页填写后，这里会自动同步。',
+                this.s($r('app.string.ssh_inherited_field_ssh_password')),
+                this.s((this.editPassword ?? '') ? $r('app.string.ssh_inherited_password_ok') : $r('app.string.ssh_inherited_password_waiting')),
+                this.s((this.editPassword ?? '')
+                  ? $r('app.string.ssh_inherited_password_desc_ok')
+                  : $r('app.string.ssh_inherited_password_desc_waiting')),
                 (this.editPassword ?? '').length === 0
               );
             } else {
-              TextInput({ text: this.editSshPassword, placeholder: 'SSH 密码' })
+              TextInput({ text: this.editSshPassword, placeholder: this.s($r('app.string.ssh_password_placeholder')) })
                 .type(InputType.Password)
                 .onChange((v: string) => this.editSshPassword = v)
                 .padding({ bottom: 8 });
             }
             Text(this.editSshReuseDesktopPassword
-              ? ((this.editPassword ?? '') ? 'SSH 密码跟随基本页中的桌面密码。' : '请先在基本页填写桌面密码。')
-              : '如果 SSH 使用独立密码，可单独填写。')
+              ? this.s((this.editPassword ?? '') ? $r('app.string.ssh_reuse_password_msg_ok') : $r('app.string.ssh_reuse_password_msg_waiting'))
+              : this.s($r('app.string.ssh_separate_password_msg')))
               .fontSize(11)
               .lineHeight(16)
               .fontColor(this.cTextTertiary)
@@ -2326,19 +2352,19 @@ struct Index {
               .padding({ bottom: 8 });
           }
 
-          TextInput({ text: this.editSshPortText, placeholder: 'SSH 端口' })
+          TextInput({ text: this.editSshPortText, placeholder: this.s($r('app.string.ssh_port_placeholder')) })
             .type(InputType.Number)
             .onChange((v: string) => this.editSshPortText = v)
             .padding({ bottom: 8 });
 
           if (this.editSshAuthType === SSH_AUTH_PUBLIC_KEY) {
-            TextInput({ text: this.editSshPublicKeyPath, placeholder: '公钥路径（可选）' })
+            TextInput({ text: this.editSshPublicKeyPath, placeholder: this.s($r('app.string.ssh_public_key_path_optional')) })
               .onChange((v: string) => this.editSshPublicKeyPath = v)
               .padding({ bottom: 8 });
           }
 
           Row() {
-            Text('严格校验主机指纹')
+            Text($r('app.string.ssh_strict_host_key_check'))
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .layoutWeight(1);
@@ -2351,27 +2377,27 @@ struct Index {
           .padding({ bottom: 8 });
 
           if (this.editSshStrictHostKeyCheck || !!(this.editSshKnownHostsPath ?? '').trim()) {
-            TextInput({ text: this.editSshKnownHostsPath, placeholder: 'known_hosts 路径（开启严格校验时必填）' })
+            TextInput({ text: this.editSshKnownHostsPath, placeholder: this.s($r('app.string.ssh_known_hosts_path_placeholder')) })
               .onChange((v: string) => this.editSshKnownHostsPath = v)
               .padding({ bottom: 8 });
           }
 
-          Text('单独指定桌面目标')
+          Text($r('app.string.ssh_remote_specify_target'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .width('100%')
             .padding({ bottom: 6 });
-          Text('默认预填为远端 127.0.0.1。只有需要从 SSH 服务器再转发到其他内网主机时，才修改这里。')
+          Text($r('app.string.ssh_remote_default_hint'))
             .fontSize(11)
             .lineHeight(16)
             .fontColor(this.cTextTertiary)
             .width('100%')
             .padding({ bottom: 8 });
           Row() {
-            TextInput({ text: this.editSshRemoteHost, placeholder: '默认预填 127.0.0.1；需要其他内网主机时再修改' })
+            TextInput({ text: this.editSshRemoteHost, placeholder: this.s($r('app.string.ssh_remote_host_placeholder')) })
               .onChange((v: string) => this.editSshRemoteHost = v)
               .layoutWeight(1);
-            TextInput({ text: this.editSshRemotePortText, placeholder: '端口' })
+            TextInput({ text: this.editSshRemotePortText, placeholder: this.s($r('app.string.ssh_remote_port_placeholder')) })
               .type(InputType.Number)
               .onChange((v: string) => this.editSshRemotePortText = v)
               .width(96)
@@ -2379,7 +2405,7 @@ struct Index {
           }
           .width('100%');
         } else {
-          Text('开启 SSH 后，这里会出现服务器、认证方式、端口、安全校验和目标覆盖等设置。')
+          Text($r('app.string.ssh_placeholder_hint'))
             .fontSize(11)
             .lineHeight(16)
             .fontColor(this.cTextSecondary)
@@ -2408,11 +2434,11 @@ struct Index {
 
         Column() {
           Row() {
-            Text(this.editId ? '编辑连接' : '新增连接')
+            Text(this.editId ? this.s($r('app.string.conn_edit_connection')) : this.s($r('app.string.conn_new_connection')))
               .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .layoutWeight(1);
-            Button('关闭')
+            Button($r('app.string.action_close'))
               .height(28)
               .fontSize(12)
               .fontColor(this.cPrimary)
@@ -2431,7 +2457,7 @@ struct Index {
             );
 
             Row() {
-              Button('基本')
+              Button($r('app.string.conn_edit_tab_basic'))
                 .layoutWeight(1)
                 .height(32)
                 .fontSize(12)
@@ -2440,7 +2466,7 @@ struct Index {
                 .border({ width: 1, color: this.cBorder })
                 .borderRadius(14)
                 .onClick(() => this.editTabIndex = EDIT_TAB_BASIC);
-              Button(this.hasAnyEditAdvancedOptions() ? '高级（已配置）' : '高级')
+              Button(this.hasAnyEditAdvancedOptions() ? $r('app.string.conn_advanced_tab_configured') : $r('app.string.conn_advanced_tab'))
                 .layoutWeight(1)
                 .height(32)
                 .margin({ left: 8 })
@@ -2459,31 +2485,31 @@ struct Index {
                 Column() {
                   if (this.editTabIndex === EDIT_TAB_BASIC) {
                     Column() {
-                      Text('远程桌面')
+                      Text($r('app.string.conn_remote_desktop'))
                         .fontSize(14)
                         .fontWeight(FontWeight.Medium)
                         .fontColor(this.cTextPrimary)
                         .width('100%')
                         .padding({ bottom: 4 });
                       Text(this.editSshEnabled
-                        ? '这里填写最终要访问的桌面地址。启用 SSH 时，如果不单独覆盖目标，会默认使用这里的地址。'
-                        : '填写要连接的桌面地址和常用登录信息。')
+                        ? this.s($r('app.string.conn_desktop_address_hint_with_ssh'))
+                        : this.s($r('app.string.conn_desktop_address_hint_simple')))
                         .fontSize(11)
                         .lineHeight(16)
                         .fontColor(this.cTextSecondary)
                         .width('100%')
                         .padding({ bottom: 10 });
 
-                      Text('连接名称（可选）')
+                      Text($r('app.string.conn_name_optional'))
                         .fontSize(12)
                         .fontColor(this.cTextSecondary)
                         .width('100%')
                         .padding({ bottom: 4 });
-                      TextInput({ text: this.editName, placeholder: '例如 办公室电脑' })
+                      TextInput({ text: this.editName, placeholder: $r('app.string.conn_name_placeholder') })
                         .onChange((v: string) => this.editName = v)
                         .padding({ bottom: 10 });
 
-                      Text('桌面地址')
+                      Text($r('app.string.conn_desktop_address'))
                         .fontSize(12)
                         .fontColor(this.cTextSecondary)
                         .width('100%')
@@ -2491,33 +2517,33 @@ struct Index {
                       TextInput({
                         text: this.editAddress,
                         placeholder: this.editSshEnabled
-                          ? '例如 192.168.1.2:5900；不单独指定目标时会使用这里'
-                          : '例如 192.168.1.2:5900'
+                          ? this.s($r('app.string.conn_address_placeholder_with_ssh'))
+                          : this.s($r('app.string.conn_address_placeholder_simple'))
                       })
                         .onChange((v: string) => this.editAddress = v)
                         .padding({ bottom: 10 });
 
-                      Text('桌面用户名（可选）')
+                      Text($r('app.string.conn_desktop_user_label'))
                         .fontSize(12)
                         .fontColor(this.cTextSecondary)
                         .width('100%')
                         .padding({ bottom: 4 });
-                      TextInput({ text: this.editUser, placeholder: '桌面用户名' })
+                      TextInput({ text: this.editUser, placeholder: $r('app.string.conn_desktop_user_placeholder') })
                         .onChange((v: string) => this.updateEditUser(v))
                         .padding({ bottom: 10 });
 
-                      Text('桌面密码（可选）')
+                      Text($r('app.string.conn_desktop_password_label'))
                         .fontSize(12)
                         .fontColor(this.cTextSecondary)
                         .width('100%')
                         .padding({ bottom: 4 });
-                      TextInput({ text: this.editPassword, placeholder: '桌面密码（可选）' })
+                      TextInput({ text: this.editPassword, placeholder: $r('app.string.conn_desktop_password_placeholder') })
                         .type(InputType.Password)
                         .onChange((v: string) => this.updateEditPassword(v))
                         .padding({ bottom: 10 });
 
                       Row() {
-                        Text('保存桌面密码')
+                        Text($r('app.string.conn_save_desktop_password'))
                           .fontSize(12)
                           .fontColor(this.cTextSecondary)
                           .layoutWeight(1);
@@ -2548,7 +2574,7 @@ struct Index {
           .width('100%');
 
           Row() {
-            Button('取消')
+            Button($r('app.string.action_cancel'))
               .layoutWeight(1)
               .height(36)
               .fontColor(this.cPrimary)
@@ -2556,7 +2582,7 @@ struct Index {
               .border({ width: 1, color: this.cBorder })
               .borderRadius(14)
               .onClick(() => this.closeEditDialog());
-            Button('保存')
+            Button($r('app.string.action_save'))
               .layoutWeight(1)
               .height(36)
               .margin({ left: 10 })
@@ -2654,7 +2680,7 @@ struct Index {
             }
           })
       } else {
-        Text(this.connected ? '正在等待首帧…' : '未连接')
+        Text(this.connected ? this.s($r('app.string.viewer_waiting_first_frame_state')) : this.s($r('app.string.conn_disconnected_state')))
           .fontSize(14)
           .fontColor(this.cOnInk);
       }
@@ -2767,7 +2793,7 @@ struct Index {
 
   private formatLastUsed(ts: number): string {
     const v = ts ?? 0;
-    if (!v || !Number.isFinite(v)) return '从未连接';
+    if (!v || !Number.isFinite(v)) return this.s($r('app.string.conn_last_used_never'));
     try {
       const d = new Date(v);
       const y = d.getFullYear();
@@ -2775,15 +2801,15 @@ struct Index {
       const day = `${d.getDate()}`.padStart(2, '0');
       const hh = `${d.getHours()}`.padStart(2, '0');
       const mm = `${d.getMinutes()}`.padStart(2, '0');
-      return `上次连接 ${y}-${m}-${day} ${hh}:${mm}`;
+      return this.s($r('app.string.conn_last_used_template'), `${y}-${m}-${day}`, `${hh}:${mm}`);
     } catch (e) {
-      return '上次连接 -';
+      return this.s($r('app.string.conn_last_used_unknown'));
     }
   }
 
   private formatDisplayHostPort(host: string, port: number): string {
     const trimmedHost = (host ?? '').trim();
-    if (!trimmedHost) return '未填写';
+    if (!trimmedHost) return this.s($r('app.string.conn_not_provided'));
     const displayHost = trimmedHost.includes(':') && !trimmedHost.startsWith('[') ? `[${trimmedHost}]` : trimmedHost;
     return `${displayHost}:${port}`;
   }
@@ -2856,7 +2882,7 @@ struct Index {
   }
 
   private getRouteLabelForAddress(address: string, sshTunnel?: SshTunnelConfig): string {
-    return this.isRouteUsingSsh(address, sshTunnel) ? 'SSH 隧道' : '直连';
+    return this.isRouteUsingSsh(address, sshTunnel) ? this.s($r('app.string.conn_route_ssh_tunnel')) : this.s($r('app.string.conn_route_direct'));
   }
 
   private getConnectionRouteLabel(connection: ConnectionItem): string {
@@ -2867,7 +2893,7 @@ struct Index {
     const normalizedSsh = this.getNormalizedSshForAddress(address, sshTunnel);
     if (!normalizedSsh.enabled) {
       const trimmedAddress = (address ?? '').trim();
-      return trimmedAddress ? trimmedAddress : '未填写';
+      return trimmedAddress ? trimmedAddress : this.s($r('app.string.conn_not_provided'));
     }
     return this.formatDisplayHostPort(normalizedSsh.remoteHost, normalizedSsh.remotePort);
   }
@@ -2890,10 +2916,10 @@ struct Index {
   private getPathSummaryForAddress(address: string, sshTunnel?: SshTunnelConfig): string {
     const vncTarget = this.getVncTargetForAddress(address, sshTunnel);
     if (!this.isRouteUsingSsh(address, sshTunnel)) {
-      return `本机 -> VNC ${vncTarget}`;
+      return this.s($r('app.string.conn_path_direct'), vncTarget);
     }
     const sshServer = this.getSshServerForAddress(address, sshTunnel);
-    return `本机 -> SSH ${sshServer} -> VNC ${vncTarget}`;
+    return this.s($r('app.string.conn_path_ssh'), sshServer, vncTarget);
   }
 
   private getConnectionPathSummary(connection: ConnectionItem): string {
@@ -2932,7 +2958,7 @@ struct Index {
 
   private async openViewerWindow(c: ConnectionItem): Promise<void> {
     if (!parseAddress(resolveConnectionAddress(c?.address ?? '', c?.sshTunnel))) {
-      this.toast('请填写地址，或在开启 SSH 隧道时提供有效的转发目标');
+      this.toast(this.s($r('app.string.conn_fill_address_or_ssh')));
       return;
     }
     try {
@@ -2963,7 +2989,7 @@ struct Index {
         ? error.message
         : ((e instanceof Error) ? e.message : `${e}`);
       console.error('openViewerWindow failed', e);
-      this.toast(`打开连接窗口失败: ${msg}`);
+      this.toast(this.s($r('app.string.viewer_open_window_failed'), msg));
     }
   }
 
@@ -3008,7 +3034,7 @@ struct Index {
   private buildListPane(): void {
     Column() {
       Row() {
-        Text('连接管理')
+        Text($r('app.string.conn_manage'))
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.cTextPrimary)
@@ -3018,7 +3044,7 @@ struct Index {
           Text(`v${BUILD_VERSION}`)
             .fontSize(12)
             .fontColor(this.cTextSecondary);
-          Button('系统设置')
+          Button($r('app.string.settings_title'))
             .height(30)
             .fontSize(12)
             .fontColor(this.cPrimary)
@@ -3031,7 +3057,7 @@ struct Index {
               this.editEdgeClampEnabled = await this.loadEdgeClampEnabled();
               this.systemSettingsOpen = true;
             });
-          Button('关于')
+          Button($r('app.string.about_title'))
             .height(30)
             .fontSize(12)
             .fontColor(this.cPrimary)
@@ -3048,7 +3074,7 @@ struct Index {
       .padding({ left: 16, right: 16, top: 12, bottom: 8 });
 
       Row() {
-        TextInput({ text: this.keyword, placeholder: '搜索：名称 / 地址 / 账号' })
+        TextInput({ text: this.keyword, placeholder: $r('app.string.conn_search_placeholder_detailed') })
           .onChange((v: string) => this.keyword = v)
           .height(40)
           .fontSize(14)
@@ -3058,7 +3084,7 @@ struct Index {
           .padding({ left: 12, right: 12 })
           .layoutWeight(1);
         if ((this.keyword ?? '').trim()) {
-          Button('清除')
+          Button($r('app.string.conn_search_clear'))
             .height(36)
             .fontSize(12)
             .margin({ left: 10 })
@@ -3086,7 +3112,7 @@ struct Index {
 
       if (this.getFilteredConnections().length === 0) {
         Column() {
-          Text(this.connections.length === 0 ? '暂无连接配置' : '未找到匹配的连接')
+          Text(this.connections.length === 0 ? this.s($r('app.string.conn_no_connections_yet')) : this.s($r('app.string.conn_no_matching_connections')))
             .fontSize(14)
             .fontColor(this.cTextSecondary)
             .margin({ bottom: 6 });
@@ -3099,7 +3125,7 @@ struct Index {
                   .objectFit(ImageFit.Contain)
                   .fillColor(this.cPrimaryFg)
                   .margin({ right: 8 });
-                Text('新增连接')
+                Text($r('app.string.conn_new_connection'))
                   .fontColor(this.cPrimaryFg)
                   .fontSize(14)
                   .fontWeight(FontWeight.Medium);
@@ -3246,7 +3272,7 @@ struct Index {
         this.buildDetailContent();
       } else {
         Column() {
-          Text('未选择连接')
+          Text($r('app.string.conn_not_selected'))
             .fontSize(14)
             .fontColor(this.cTextSecondary)
             .margin({ bottom: 6 });
@@ -3267,7 +3293,7 @@ struct Index {
   private buildDetailContent(): void {
     Column() {
       if (this.getSelectedConnection()) {
-        Text('当前选中')
+        Text($r('app.string.conn_currently_selected'))
           .fontSize(14)
           .fontColor(this.cTextSecondary)
           .margin({ bottom: 8 });
@@ -3278,19 +3304,19 @@ struct Index {
           .margin({ bottom: 16 });
 
         this.buildDetailLine({
-          label: '地址',
+          label: $r('app.string.conn_detail_address'),
           value: this.getSelectedConnection()?.address ?? ''
         });
         this.buildDetailLine({
-          label: '账号',
-          value: this.getSelectedConnection()?.user ?? '未提供'
+          label: $r('app.string.conn_detail_user'),
+          value: this.getSelectedConnection()?.user ?? $r('app.string.conn_not_provided')
         });
         this.buildDetailLine({
-          label: '密码保存',
-          value: this.getSelectedConnection()?.storePassword ? '已开启' : '未开启'
+          label: $r('app.string.conn_detail_password_save'),
+          value: this.getSelectedConnection()?.storePassword ? $r('app.string.status_on') : $r('app.string.status_off')
         });
         this.buildDetailLine({
-          label: '触控滚动步长',
+          label: $r('app.string.conn_detail_touch_scroll'),
           value: this.getSelectedConnection()?.touchScrollStep === 1
             ? '慢 (1px)'
             : (this.getSelectedConnection()?.touchScrollStep === 8
@@ -3298,7 +3324,7 @@ struct Index {
               : `${this.getSelectedConnection()?.touchScrollStep ?? 0}px`)
         });
         this.buildDetailLine({
-          label: '最近使用',
+          label: $r('app.string.conn_detail_last_used'),
           value: this.formatLastUsed(this.getSelectedConnection()?.lastUsedAt ?? 0)
         });
       }
@@ -3368,7 +3394,7 @@ struct Index {
                   .fontSize(32)
                   .margin({ right: 12 });
                 Column() {
-                  Text('翠虎远程桌面')
+                  Text($r('app.string.app_name'))
                     .fontSize(22)
                     .fontWeight(FontWeight.Bold)
                     .fontColor(this.cTextPrimary);
@@ -3415,7 +3441,7 @@ struct Index {
                     .objectFit(ImageFit.Contain)
                     .opacity(0.92)
                     .margin({ right: 8 });
-                  Text('公司信息')
+                  Text($r('app.string.about_company_info'))
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
                     .fontColor(this.cTextPrimary);
@@ -3425,11 +3451,11 @@ struct Index {
 
                 Column() {
                   Row() {
-                    Text('开发团队')
+                    Text($r('app.string.about_team'))
                       .fontSize(13)
                       .fontColor(this.cTextSecondary)
                       .width(80);
-                    Text('横渠天地（北京）科技有限公司')
+                    Text($r('app.string.about_developer_name'))
                       .fontSize(15)
                       .lineHeight(22)
                       .fontWeight(FontWeight.Medium)
@@ -3440,21 +3466,21 @@ struct Index {
                   .margin({ bottom: 14 });
 
                   this.buildAboutActionRow(
-                    '商务合作',
+                    this.s($r('app.string.about_business_label')),
                     PROJECT_CONTACT_EMAIL,
-                    '写邮件',
+                    this.s($r('app.string.about_email_action')),
                     `mailto:${PROJECT_CONTACT_EMAIL}`,
-                    '邮箱已复制'
+                    this.s($r('app.string.about_email_copied'))
                   );
 
                   Blank().height(14);
 
                   this.buildAboutActionRow(
-                    '官方网站',
+                    this.s($r('app.string.about_website')),
                     PROJECT_HOMEPAGE_URL,
-                    '访问',
+                    this.s($r('app.string.about_visit')),
                     PROJECT_HOMEPAGE_URL,
-                    '网址已复制'
+                    this.s($r('app.string.url_copied'))
                   );
                 }
                 .width('100%')
@@ -3473,7 +3499,7 @@ struct Index {
                     .objectFit(ImageFit.Contain)
                     .opacity(0.92)
                     .margin({ right: 8 });
-                  Text('协议与隐私')
+                  Text($r('app.string.about_agreements'))
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
                     .fontColor(this.cTextPrimary);
@@ -3482,9 +3508,9 @@ struct Index {
                 .margin({ bottom: 16 });
 
                 Column() {
-                  this.buildAboutAgreementRow('隐私协议', '查看隐私协议', AGREEMENT_DIALOG_PRIVACY);
+                  this.buildAboutAgreementRow(this.s($r('app.string.about_privacy_label')), this.s($r('app.string.about_privacy_title')), AGREEMENT_DIALOG_PRIVACY);
                   Blank().height(14);
-                  this.buildAboutAgreementRow('用户协议', '查看用户协议', AGREEMENT_DIALOG_USER);
+                  this.buildAboutAgreementRow(this.s($r('app.string.about_user_label')), this.s($r('app.string.about_user_title')), AGREEMENT_DIALOG_USER);
                 }
                 .width('100%')
                 .padding(18)
@@ -3502,7 +3528,7 @@ struct Index {
                     .objectFit(ImageFit.Contain)
                     .opacity(0.92)
                     .margin({ right: 8 });
-                  Text('开源许可')
+                  Text($r('app.string.about_open_source'))
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
                     .fontColor(this.cTextPrimary);
@@ -3512,11 +3538,11 @@ struct Index {
 
                 Column() {
                   Row() {
-                    Text('开源许可')
+                    Text($r('app.string.about_license_label'))
                       .fontSize(13)
                       .fontColor(this.cTextSecondary)
                       .width(80);
-                    Text('本应用采用 GPL-2.0 许可发布，并包含多个第三方开源组件。')
+                    Text($r('app.string.about_license_text'))
                       .fontSize(14)
                       .lineHeight(21)
                       .fontColor(this.cTextPrimary)
@@ -3526,17 +3552,17 @@ struct Index {
                   .margin({ bottom: 14 });
 
                   this.buildAboutActionRow(
-                    '源码获取',
+                    this.s($r('app.string.about_source_label')),
                     PROJECT_SOURCE_URL,
-                    '访问',
+                    this.s($r('app.string.about_visit')),
                     PROJECT_SOURCE_URL,
-                    '网址已复制'
+                    this.s($r('app.string.url_copied'))
                   );
 
                   Blank().height(14);
 
                   Row() {
-                    Text('第三方组件')
+                    Text($r('app.string.about_third_party_label'))
                       .fontSize(13)
                       .fontColor(this.cTextSecondary)
                       .width(80);
@@ -3550,11 +3576,11 @@ struct Index {
                   .margin({ bottom: 14 });
 
                   Row() {
-                    Text('免责声明')
+                    Text($r('app.string.about_disclaimer_label'))
                       .fontSize(13)
                       .fontColor(this.cTextSecondary)
                       .width(80);
-                    Text('本软件按“现状”提供，不附带任何明示或暗示担保。详见各许可证全文。')
+                    Text($r('app.string.about_disclaimer_text'))
                       .fontSize(14)
                       .lineHeight(21)
                       .fontColor(this.cTextPrimary)
@@ -3611,8 +3637,8 @@ struct Index {
                 .fontWeight(FontWeight.Bold)
                 .fontColor(this.cTextPrimary);
               Text(this.isLaunchAgreementDialog()
-                ? '首次使用前，请完整阅读并确认《翠虎远程桌面隐私协议》与《翠虎远程桌面用户协议》，同意后方可继续使用应用。'
-                : '以下内容与首启展示保持一致，支持在应用内随时查看完整文本。')
+                ? this.s($r('app.string.agreement_launch_desc'))
+                : this.s($r('app.string.agreement_normal_desc')))
                 .fontSize(13)
                 .lineHeight(20)
                 .fontColor(this.cTextSecondary)
@@ -3647,13 +3673,13 @@ struct Index {
           Scroll() {
             Column({ space: 20 }) {
               if (this.agreementDialogMode === AGREEMENT_DIALOG_LAUNCH) {
-                this.buildAgreementSection('隐私协议', this.privacyPolicyBlocks);
+                this.buildAgreementSection($r('app.string.agreement_privacy_policy'), this.privacyPolicyBlocks);
                 Blank().height(1).color(this.cBorder).width('100%');
-                this.buildAgreementSection('用户协议', this.userAgreementBlocks);
+                this.buildAgreementSection($r('app.string.agreement_user_agreement'), this.userAgreementBlocks);
               } else if (this.agreementDialogMode === AGREEMENT_DIALOG_PRIVACY) {
-                this.buildAgreementSection('隐私协议', this.privacyPolicyBlocks);
+                this.buildAgreementSection($r('app.string.agreement_privacy_policy'), this.privacyPolicyBlocks);
               } else {
-                this.buildAgreementSection('用户协议', this.userAgreementBlocks);
+                this.buildAgreementSection($r('app.string.agreement_user_agreement'), this.userAgreementBlocks);
               }
             }
             .width('100%')
@@ -3671,7 +3697,7 @@ struct Index {
 
           Row() {
             if (this.isLaunchAgreementDialog()) {
-              Button('退出应用')
+              Button($r('app.string.agreement_exit_app'))
                 .layoutWeight(1)
                 .height(44)
                 .fontSize(15)
@@ -3686,7 +3712,7 @@ struct Index {
 
               Blank().width(12);
 
-              Button('同意并继续')
+              Button($r('app.string.agreement_accept'))
                 .layoutWeight(1)
                 .height(44)
                 .fontSize(15)
@@ -3698,7 +3724,7 @@ struct Index {
                   void this.acceptLaunchAgreements();
                 });
             } else {
-              Button('关闭')
+              Button($r('app.string.action_close'))
                 .width('100%')
                 .height(44)
                 .fontSize(15)
@@ -3738,7 +3764,7 @@ struct Index {
 
         Column() {
           Row() {
-            Text('系统设置')
+            Text($r('app.string.settings_title'))
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.cTextPrimary);
@@ -3768,20 +3794,20 @@ struct Index {
           Scroll() {
             Column() {
               Column() {
-                Text('触摸边缘吸附')
+                Text($r('app.string.settings_edge_clamp'))
                   .fontSize(14)
                   .fontWeight(FontWeight.Medium)
                   .fontColor(this.cTextPrimary)
                   .width('100%')
                   .margin({ bottom: 4 });
-                Text('触摸屏幕黑边区域时，将鼠标定位到远程桌面边缘，便于触发系统工具栏或菜单栏')
+                Text($r('app.string.settings_edge_clamp_desc'))
                   .fontSize(11)
                   .lineHeight(16)
                   .fontColor(this.cTextSecondary)
                   .width('100%')
                   .margin({ bottom: 12 });
                 Row() {
-                  Text(this.editEdgeClampEnabled ? '已开启' : '已关闭')
+                  Text(this.editEdgeClampEnabled ? $r('app.string.status_on') : $r('app.string.status_off'))
                     .fontSize(13)
                     .fontColor(this.cTextSecondary)
                     .layoutWeight(1);

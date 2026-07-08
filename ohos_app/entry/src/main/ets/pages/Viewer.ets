@@ -200,20 +200,20 @@ class RemotePoint {
 }
 
 class TopActionButtonParams {
-  label: string = '';
+  label: ResourceStr = '';
   active: boolean = false;
   onClick: () => void = () => {};
 }
 
 class DockButtonParams {
-  label: string = '';
+  label: ResourceStr = '';
   active: boolean = false;
   enabled: boolean = false;
   onClick: () => void = () => {};
 }
 
 class PanelActionParams {
-  label: string = '';
+  label: ResourceStr = '';
   primary: boolean = false;
   onClick: () => void = () => {};
 }
@@ -437,6 +437,14 @@ struct Viewer {
       return this.getUIContext()?.getHostContext?.() as common.UIAbilityContext;
     } catch (e) {
       return undefined;
+    }
+  }
+
+  private s(res: Resource, ...args: (string | number)[]): string {
+    try {
+      return getContext(this).resourceManager.getStringSync(res, ...args);
+    } catch (e) {
+      return '';
     }
   }
 
@@ -674,7 +682,7 @@ struct Viewer {
   }
 
   private getMonitorWindowTitle(index: number): string {
-    return `${this.getWindowTitleText()} - 屏幕 ${index + 1}`;
+    return this.getWindowTitleText() + ' - ' + this.s($r('app.string.viewer_screen_label'), index + 1);
   }
 
   private estimateMonitorWindowSize(rect: VncRect): WindowSizeLike {
@@ -756,18 +764,18 @@ struct Viewer {
     }
     this.refreshMonitorWindowsState();
     if (showStatus && names.length > 0) {
-      this.showStatusBanner('已关闭显示窗口');
+      this.showStatusBanner(this.s($r('app.string.viewer_monitor_windows_closed')));
     }
   }
 
   private async openMonitorWindows(): Promise<void> {
     if (!this.connected) {
-      this.toast('请先建立连接');
+      this.toast(this.s($r('app.string.viewer_please_connect_first')));
       return;
     }
     const rects = this.getDisplayPreviewMonitorRects();
     if (rects.length <= 1) {
-      this.toast('当前至少需要检测到两个远端屏幕');
+      this.toast(this.s($r('app.string.viewer_need_two_screens')));
       return;
     }
     this.syncSharedSessionSnapshot();
@@ -779,9 +787,9 @@ struct Viewer {
     }
     this.refreshMonitorWindowsState();
     if (opened > 0) {
-      this.showStatusBanner(`已打开 ${opened} 个显示窗口`);
+      this.showStatusBanner(this.s($r('app.string.viewer_monitor_windows_opened'), opened));
     } else {
-      this.toast('打开显示窗口失败');
+      this.toast(this.s($r('app.string.viewer_open_monitor_failed')));
     }
   }
 
@@ -1005,25 +1013,25 @@ struct Viewer {
   private beginManualMonitorLayout(count: number): void {
     const seed = this.createManualMonitorSeedRects(count);
     if (seed.length <= 0) {
-      this.showStatusBanner('当前还没有可编辑的画布尺寸');
+      this.showStatusBanner(this.s($r('app.string.monitor_no_monitors_detected')));
       return;
     }
     this.manualMonitorRects = seed;
     this.syncManualMonitorDrafts();
     this.monitorLayoutLocked = false;
-    this.showStatusBanner(`已切换到手动${seed.length}屏编辑`);
+    this.showStatusBanner(this.s($r('app.string.monitor_manual_layout')));
   }
 
   private copyPreviewToManualMonitorLayout(): void {
     const preview = this.sanitizeManualMonitorRects(this.getDisplayPreviewMonitorRects());
     if (preview.length <= 0) {
-      this.showStatusBanner('当前没有可复制的屏幕坐标');
+      this.showStatusBanner(this.s($r('app.string.monitor_manual_input_hint')));
       return;
     }
     this.manualMonitorRects = preview;
     this.syncManualMonitorDrafts();
     this.monitorLayoutLocked = false;
-    this.showStatusBanner(`已复制 ${preview.length} 个屏幕坐标，可手动微调`);
+    this.showStatusBanner(this.s($r('app.string.monitor_current_rect')));
   }
 
   private parseManualMonitorDraft(text: string): VncRect | null {
@@ -1163,7 +1171,7 @@ struct Viewer {
     if (this.manualDragMonitorIndex >= 0) {
       this.setViewportMode('all');
       this.closePanel();
-      this.showStatusBanner(`请在全屏视图里拖拽定义屏幕 ${index + 1}`);
+      this.showStatusBanner(this.s($r('app.string.monitor_drag_define_screen'), index + 1));
     }
   }
 
@@ -1199,7 +1207,7 @@ struct Viewer {
           y: this.manualDragStartY
         }, fbPoint);
         this.finalizeManualMonitorDrag(this.manualDragMonitorIndex);
-        this.showStatusBanner(`已更新屏幕 ${this.manualDragMonitorIndex + 1} 的拖拽矩形`);
+        this.showStatusBanner(this.s($r('app.string.monitor_end_drag_screen'), this.manualDragMonitorIndex + 1));
       }
       this.manualDragActive = false;
       return;
@@ -1285,7 +1293,7 @@ struct Viewer {
           }, fbPoint);
         }
         this.finalizeManualMonitorDrag(this.manualDragMonitorIndex);
-        this.showStatusBanner(`已更新屏幕 ${this.manualDragMonitorIndex + 1}`);
+        this.showStatusBanner(this.s($r('app.string.monitor_end_drag_screen'), this.manualDragMonitorIndex + 1));
       }
       this.manualDragActive = false;
       this.manualDragAction = 'none';
@@ -1403,7 +1411,7 @@ struct Viewer {
   private confirmMonitorLayout(): void {
     const rects = this.sanitizeManualMonitorRects(this.getDisplayPreviewMonitorRects());
     if (rects.length <= 0) {
-      this.showStatusBanner('当前没有可记住的屏幕坐标');
+      this.showStatusBanner(this.s($r('app.string.monitor_no_monitors_detected')));
       return;
     }
     this.clearManualMonitorLayout();
@@ -1411,10 +1419,10 @@ struct Viewer {
     this.monitorLayoutLocked = rects.length > 1;
     if (rects.length > 1) {
       void this.persistConfirmedMonitorLayout();
-      this.showStatusBanner(`已记住 ${rects.length} 个屏幕坐标`);
+      this.showStatusBanner(this.s($r('app.string.monitor_reset_layout')));
       return;
     }
-    this.showStatusBanner('当前只检测到一个屏幕');
+    this.showStatusBanner(this.s($r('app.string.monitor_only_one_detected')));
   }
 
   private redetectMonitorLayout(): void {
@@ -1424,7 +1432,7 @@ struct Viewer {
     this.beginDisplayDetectionRetry();
     this.requestDisplayFullRefresh();
     this.prepareDisplayPanel();
-    this.showStatusBanner('正在重新检测屏幕布局');
+    this.showStatusBanner(this.s($r('app.string.monitor_detecting')));
   }
 
   private applyFullscreenToWindow(): void {
@@ -1482,7 +1490,7 @@ struct Viewer {
     setTimeout(() => this.applyFullscreenToWindow(), 240);
     setTimeout(() => this.applyFullscreenToWindow(), 600);
     this.revealChrome();
-    this.showStatusBanner(this.isFullscreen ? '已进入全屏' : '已退出全屏');
+    this.showStatusBanner(this.s($r(this.isFullscreen ? 'app.string.viewer_enter_fullscreen' : 'app.string.viewer_exit_fullscreen')));
   }
 
   private ensureFsBtnPosition(): void {
@@ -1511,22 +1519,22 @@ struct Viewer {
     if (server) return server;
     const addr = (this.address ?? '').trim();
     if (addr) return addr;
-    return '远程桌面';
+    return this.s($r('app.string.viewer_session_title'));
   }
 
   private getSessionSubtitle(): string {
     const addr = (this.address ?? '').trim();
-    if (!addr) return '输入地址后即可建立远程桌面连接';
+    if (!addr) return this.s($r('app.string.viewer_enter_address_hint'));
     if (this.connected && this.fbW > 0 && this.fbH > 0) return `${addr}  ·  ${this.fbW}x${this.fbH}`;
     return addr;
   }
 
   private getConnectionStateText(): string {
-    if (this.connecting) return '连接中';
-    if (this.lastError) return '连接失败';
-    if (this.connected && !this.pm) return '等待首帧';
-    if (this.connected) return '已连接';
-    return '未连接';
+    if (this.connecting) return this.s($r('app.string.conn_connecting'));
+    if (this.lastError) return this.s($r('app.string.conn_failed'));
+    if (this.connected && !this.pm) return this.s($r('app.string.conn_waiting_first_frame'));
+    if (this.connected) return this.s($r('app.string.conn_connected'));
+    return this.s($r('app.string.conn_not_connected'));
   }
 
   private getConnectionStateColor(): string {
@@ -1537,17 +1545,17 @@ struct Viewer {
   }
 
   private getSecurityLabel(): string {
-    if (!this.connected) return '未连接';
-    if (this.securityLevel === 0) return '不安全';
-    if (this.securityLevel === 1) return '认证安全';
-    return '安全';
+    if (!this.connected) return this.s($r('app.string.security_not_connected'));
+    if (this.securityLevel === 0) return this.s($r('app.string.security_insecure'));
+    if (this.securityLevel === 1) return this.s($r('app.string.security_auth_safe'));
+    return this.s($r('app.string.security_safe'));
   }
 
   private getSecurityDescription(): string {
-    if (!this.connected) return '建立连接后会显示当前会话的安全级别。';
-    if (this.securityLevel === 0) return '当前连接未加密，请注意数据安全。';
-    if (this.securityLevel === 1) return '当前连接仅保护认证过程，桌面数据传输未加密。';
-    return '当前连接已启用端到端加密，适合生产场景。';
+    if (!this.connected) return this.s($r('app.string.security_desc_not_connected'));
+    if (this.securityLevel === 0) return this.s($r('app.string.security_desc_insecure'));
+    if (this.securityLevel === 1) return this.s($r('app.string.security_desc_auth_safe'));
+    return this.s($r('app.string.security_desc_safe'));
   }
 
   private getSecurityBadgeColor(): string {
@@ -1951,14 +1959,14 @@ struct Viewer {
     if (mode === 'tile') {
       this.interactionMode = 'control';
       this.resetViewerZoom();
-      this.showStatusBanner('已切换为分屏概览');
+      this.showStatusBanner(this.s($r('app.string.monitor_split_overview')));
       return;
     }
     this.clampZoomOffset();
     if (mode === 'all') {
-      this.showStatusBanner('已切换为全部屏幕');
+      this.showStatusBanner(this.s($r('app.string.monitor_all_screens')));
     } else {
-      this.showStatusBanner(`已切换到屏幕 ${monitorIndex + 1}`);
+      this.showStatusBanner(this.s($r('app.string.monitor_switch_to'), monitorIndex + 1));
     }
   }
 
@@ -1966,19 +1974,19 @@ struct Viewer {
     if (this.interactionMode === mode) return;
     if (mode === 'inspect' && this.viewportMode === 'tile') {
       this.setViewportMode('all', this.currentMonitorIndex);
-      this.showStatusBanner('已切换到全部屏幕，便于缩放查看');
+      this.showStatusBanner(this.s($r('app.string.monitor_all_screens')));
     }
     this.interactionMode = mode;
     if (mode === 'inspect') {
       this.requestInputFocus();
       this.revealChrome();
-      this.showStatusBanner('查看模式：双指缩放，单指拖动，双击切换 1x/2x');
+      this.showStatusBanner(this.s($r('app.string.viewer_inspect_mode')));
       return;
     }
     this.pinchActive = false;
     this.inspectTouchMoved = false;
     this.revealChrome();
-    this.showStatusBanner('已回到控制模式');
+    this.showStatusBanner(this.s($r('app.string.viewer_control_mode')));
   }
 
   private getZoomButtonLabel(): string {
@@ -1999,14 +2007,14 @@ struct Viewer {
     const center = this.getViewerCenter();
     if (this.zoomScale > 1.05) {
       this.resetViewerZoom();
-      this.showStatusBanner('缩放已重置为 1x');
+      this.showStatusBanner(this.s($r('app.string.zoom_toggle_fit')));
       return;
     }
     if (this.interactionMode !== 'inspect') {
       this.setInteractionMode('inspect');
     }
     this.setViewerZoom(2, center.x, center.y);
-    this.showStatusBanner('已缩放到 2x');
+    this.showStatusBanner(this.s($r('app.string.zoom_toggle_fit')));
   }
 
   private getTouchDistance(ev: TouchEvent): number {
@@ -2234,7 +2242,7 @@ struct Viewer {
     if (!changed) return;
     this.connections = next;
     void this.saveConnections();
-    this.toast('名称已保存');
+    this.toast(this.s($r('app.string.conn_saved')));
   }
 
   private selectConnection(id: string): void {
@@ -2290,7 +2298,7 @@ struct Viewer {
       return;
     }
     if (!runtimePassword.length) {
-      this.toast('请输入密码');
+      this.toast(this.s($r('app.string.viewer_please_connect_first')));
       return;
     }
     const curr = this.connections ?? [];
@@ -2378,14 +2386,14 @@ struct Viewer {
     }
     this.connections = next;
     void this.saveConnections();
-    this.toast(enable ? '已开启保存密码' : '已关闭保存密码');
+    this.toast(this.s($r(enable ? 'app.string.clipboard_sent_success' : 'app.string.action_close')));
   }
 
   private saveCurrentFieldsToSelected(): void {
     if (this.connected || !this.selectedConnId) return;
     const addr = (this.address ?? '').trim();
     if (addr && !parseAddress(addr)) {
-      this.toast('地址格式不正确，例如 192.168.1.2:5900 或 [::1]:5900');
+      this.toast(this.s($r('app.string.viewer_only_address_or_ssh_hint')));
       return;
     }
 
@@ -2393,7 +2401,7 @@ struct Viewer {
     const selected = curr.find(it => it.id === this.selectedConnId);
     const sshTunnel = normalizeSshTunnelConfigForAddress(selected?.sshTunnel, addr);
     if (!parseAddress(resolveConnectionAddress(addr, sshTunnel))) {
-      this.toast('请填写地址，或在开启 SSH 隧道时提供有效的转发目标');
+      this.toast(this.s($r('app.string.viewer_only_address_or_ssh_hint')));
       return;
     }
     const next: ConnectionItem[] = [];
@@ -2421,7 +2429,7 @@ struct Viewer {
     }
     this.connections = next;
     void this.saveConnections();
-    this.toast('已保存');
+    this.toast(this.s($r('app.string.conn_saved')));
   }
 
   private openCreateDialog(): void {
@@ -2463,9 +2471,9 @@ struct Viewer {
         title: normalizeConnName(c.name, c.address, c.sshTunnel),
         message: resolveConnectionAddress(c.address, c.sshTunnel),
         buttons: [
-          { text: '取消', color: this.cTextSecondary },
-          { text: '编辑', color: this.cPrimary },
-          { text: '删除', color: this.cError }
+          { text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary },
+          { text: this.s($r('app.string.action_edit')), color: this.cPrimary },
+          { text: this.s($r('app.string.action_delete')), color: this.cError }
         ]
       });
       if (res.index === 1) {
@@ -2527,11 +2535,11 @@ struct Viewer {
 
         Column() {
           Row() {
-            Text('输入连接密码')
+            Text($r('app.string.conn_enter_password'))
               .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .layoutWeight(1);
-            Button('关闭')
+            Button($r('app.string.action_close'))
               .height(28)
               .fontSize(12)
               .fontColor(this.cPrimary)
@@ -2543,7 +2551,7 @@ struct Viewer {
           .padding({ left: 14, right: 14, top: 14, bottom: 10 });
 
           Column() {
-            Text(`“${this.connectPromptName || '未命名连接'}”未保存密码`)
+            Text(`"${this.connectPromptName || this.s($r('app.string.conn_unnamed'))}" ${this.s($r('app.string.viewer_password_not_saved'))}`)
               .fontSize(14)
               .fontColor(this.cTextPrimary)
               .width('100%');
@@ -2556,17 +2564,17 @@ struct Viewer {
             } else {
               Blank().height(10);
             }
-            Text('密码')
+            Text($r('app.string.conn_password_label'))
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .width('100%')
               .padding({ bottom: 4 });
-            TextInput({ text: this.connectPromptPassword, placeholder: '请输入密码' })
+            TextInput({ text: this.connectPromptPassword, placeholder: $r('app.string.enter_password_placeholder') })
               .type(InputType.Password)
               .onChange((v: string) => this.connectPromptPassword = v)
               .padding({ bottom: 8 });
             Row() {
-              Text('保存密码')
+              Text($r('app.string.conn_save_password'))
                 .fontSize(12)
                 .fontColor(this.cTextSecondary)
                 .layoutWeight(1);
@@ -2579,7 +2587,7 @@ struct Viewer {
           .padding({ left: 14, right: 14, bottom: 14 });
 
           Row() {
-            Button('取消')
+            Button($r('app.string.action_cancel'))
               .layoutWeight(1)
               .height(36)
               .fontColor(this.cPrimary)
@@ -2587,7 +2595,7 @@ struct Viewer {
               .border({ width: 1, color: this.cBorder })
               .borderRadius(14)
               .onClick(() => this.closeConnectPasswordPrompt());
-            Button('连接')
+            Button($r('app.string.conn_connect'))
               .layoutWeight(1)
               .height(36)
               .margin({ left: 10 })
@@ -2624,13 +2632,13 @@ struct Viewer {
   private async saveEditDialog(): Promise<void> {
     const addr = (this.editAddress ?? '').trim();
     if (addr && !parseAddress(addr)) {
-      this.toast('地址格式不正确，例如 192.168.1.2:5900 或 [::1]:5900');
+      this.toast(this.s($r('app.string.viewer_only_address_or_ssh_hint')));
       return;
     }
     const previousSshTunnel = (this.connections ?? []).find(it => it.id === this.editId)?.sshTunnel;
     const sshTunnel = normalizeSshTunnelConfigForAddress(previousSshTunnel, addr);
     if (!parseAddress(resolveConnectionAddress(addr, sshTunnel))) {
-      this.toast('请填写地址，或在开启 SSH 隧道时提供有效的转发目标');
+      this.toast(this.s($r('app.string.viewer_only_address_or_ssh_hint')));
       return;
     }
 
@@ -2673,16 +2681,16 @@ struct Viewer {
     const c = (this.connections ?? []).find(it => it.id === id);
     if (!c) return;
     if (this.connected) {
-      this.toast('已连接时不能删除连接配置');
+      this.toast(this.s($r('app.string.viewer_session_not_connected')));
       return;
     }
     try {
       const pa = this.getUIContext()?.getPromptAction?.();
       if (!pa?.showDialog) return;
       const res = await pa.showDialog({
-        title: '删除连接',
-        message: `确认删除“${normalizeConnName(c.name, c.address, c.sshTunnel)}”？`,
-        buttons: [{ text: '取消', color: this.cTextSecondary }, { text: '删除', color: this.cError }]
+        title: this.s($r('app.string.action_delete')),
+        message: this.s($r('app.string.action_confirm')) + ` "${normalizeConnName(c.name, c.address, c.sshTunnel)}"？`,
+        buttons: [{ text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary }, { text: this.s($r('app.string.action_delete')), color: this.cError }]
       });
       if (res.index !== 1) return;
     } catch (e) {
@@ -3683,7 +3691,7 @@ struct Viewer {
         if (prc !== 0) {
           this.lastError = (this.vncClient.getLastError() as string) ?? '';
           this.disconnect(true);
-          this.toast(this.lastError || '连接失败');
+          this.toast(this.lastError || this.s($r('app.string.conn_failed')));
           return;
         }
         const dmg = this.vncClient.consumeDamage?.();
@@ -3709,7 +3717,7 @@ struct Viewer {
       } catch (e) {
         this.lastError = (this.vncClient.getLastError() as string) ?? '';
         this.disconnect(true);
-        this.toast(this.lastError || '连接失败');
+        this.toast(this.lastError || this.s($r('app.string.conn_failed')));
         return;
       }
     }
@@ -3806,7 +3814,7 @@ struct Viewer {
       if (prc !== 0) {
         this.lastError = (this.vncClient.getLastError() as string) ?? '';
         this.disconnect(true);
-        this.toast(this.lastError || '连接已断开');
+        this.toast(this.lastError || this.s($r('app.string.conn_disconnected')));
         return;
       }
 
@@ -3915,7 +3923,7 @@ struct Viewer {
 
   private showSoftKeyboard(): void {
     if (!this.connected) {
-      this.toast('请先连接到 VNC 服务器');
+      this.toast(this.s($r('app.string.viewer_please_connect_first')));
       return;
     }
     this.revealChrome();
@@ -4020,14 +4028,14 @@ struct Viewer {
       const sshConfig = this.getEffectiveSshConfig();
       const parsed = parseAddress(resolveConnectionAddress(this.address, sshConfig ?? undefined));
       if (!parsed) {
-        this.lastError = '请填写地址，或在开启 SSH 隧道时提供有效的转发目标';
+        this.lastError = this.s($r('app.string.conn_fill_address_or_ssh'));
         this.toast(this.lastError);
         return;
       }
       if (sshConfig?.enabled) {
         const sshRc = (this.vncClient.setSshTunnel?.(sshConfig) as number) ?? 0;
         if (sshRc !== 0) {
-          this.lastError = (this.vncClient.getLastError() as string) ?? 'SSH 隧道配置失败';
+          this.lastError = (this.vncClient.getLastError() as string) ?? this.s($r('app.string.ssh_tunnel_config_failed'));
           this.toast(this.lastError);
           return;
         }
@@ -4053,7 +4061,7 @@ struct Viewer {
       this.maybeAdoptServerNameAsConnName();
       this.lastError = (this.vncClient.getLastError() as string) ?? '';
       if (!this.connected) {
-        this.toast(this.lastError || '连接失败');
+        this.toast(this.lastError || this.s($r('app.string.conn_failed')));
         return;
       }
       this.lastRemoteClipboardText = '';
@@ -4070,7 +4078,7 @@ struct Viewer {
       this.requestRemoteClipboard();
       this.startLoop();
       setTimeout(() => this.requestInputFocus(), 0);
-      this.showStatusBanner('已连接，当前为控制模式');
+      this.showStatusBanner(this.s($r('app.string.conn_connected')));
     } catch (e) {
       this.connected = false;
       viewerMultiWindowStore.updateSessionConnectionState(this.sharedSessionId, false);
@@ -4081,7 +4089,7 @@ struct Viewer {
       this.lastFramebufferUpdateTs = 0;
       this.lastServerRefreshRequestTs = 0;
       const msg = (e as Error)?.message;
-      this.lastError = msg ?? '连接失败';
+      this.lastError = msg ?? this.s($r('app.string.conn_failed'));
       this.toast(this.lastError);
     } finally {
       this.connecting = false;
@@ -4104,9 +4112,9 @@ struct Viewer {
   }
 
   private getPanelBarTitle(): string {
-    if (this.connected) return '已连接';
+    if (this.connected) return this.s($r('app.string.conn_connected'));
     const c = this.getSelectedConnection();
-    if (!c) return '快速连接';
+    if (!c) return this.s($r('app.string.viewer_free_connect_hint_short'));
     return normalizeConnName(c.name, c.address, c.sshTunnel);
   }
 
@@ -4114,7 +4122,7 @@ struct Viewer {
     const addr = resolveConnectionAddress(this.address, this.getEffectiveSshConfig() ?? undefined);
     if (addr) return addr;
     const c = this.getSelectedConnection();
-    return resolveConnectionAddress(c?.address ?? '', c?.sshTunnel) || '填写地址并连接，例如 192.168.1.2:5900';
+    return resolveConnectionAddress(c?.address ?? '', c?.sshTunnel) || this.s($r('app.string.viewer_enter_address_hint'));
   }
 
   private disconnect(preserveError: boolean = false): void {
@@ -4234,29 +4242,29 @@ struct Viewer {
   private async onPasteButtonClickedAsync(): Promise<void> {
     this.requestInputFocus();
     if (!this.connected) {
-      this.toast('请先连接到 VNC 服务器');
+      this.toast(this.s($r('app.string.viewer_please_connect_first')));
       return;
     }
 
     const text = await this.readSystemClipboardTextAsync();
     if (!text) {
-      this.toast('剪贴板为空或不是文本');
+      this.toast(this.s($r('app.string.clipboard_no_content')));
       return;
     }
 
     if (text === this.lastLocalClipboardText) {
-      this.toast('剪贴板内容未变化');
+      this.toast(this.s($r('app.string.clipboard_no_content')));
       return;
     }
 
     try {
       this.vncClient.setClipboardText(text);
       this.lastLocalClipboardText = text;
-      this.toast(`已同步剪贴板 (${text.length} 字符)`);
+      this.toast(this.s($r('app.string.clipboard_sent_success_count'), text.length));
     } catch (e) {
       const err = e as ClipboardErrorLike;
       console.error(`clipboard sync failed code=${err?.code ?? -1} message=${err?.message ?? ''}`);
-      this.toast('同步失败');
+      this.toast(this.s($r('app.string.clipboard_fetch_success')));
     }
   }
 
@@ -4445,7 +4453,7 @@ struct Viewer {
 
   private async saveImage(): Promise<void> {
     if (!this.pm) {
-      this.toast('没有图像数据');
+      this.toast(this.s($r('app.string.viewer_save_image_no_data')));
       return;
     }
     try {
@@ -4467,10 +4475,10 @@ struct Viewer {
       const file = fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
       fs.writeSync(file.fd, data);
       fs.closeSync(file);
-      this.toast(`已保存: ${path}`);
+      this.toast(this.s($r('app.string.viewer_save_image_saved')));
     } catch (e) {
       console.error('Failed to save image', e);
-      this.toast(`保存失败: ${e}`);
+      this.toast(this.s($r('app.string.viewer_save_image_failed')));
     }
   }
 
@@ -4478,11 +4486,11 @@ struct Viewer {
   private buildControls(): void {
     Column() {
       Row() {
-        Text(this.connected ? '会话' : '连接')
+        Text(this.connected ? $r('app.string.viewer_session_title') : $r('app.string.conn_connect'))
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .layoutWeight(1);
-        Button('新增')
+        Button($r('app.string.conn_new'))
           .height(32)
           .fontSize(12)
           .fontColor(this.cPrimary)
@@ -4492,7 +4500,7 @@ struct Viewer {
           .enabled(!this.connected)
           .onClick(() => this.openCreateDialog());
         if (this.connected) {
-          Text('收起')
+          Text($r('app.string.conn_collapse'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .margin({ left: 12 })
@@ -4502,7 +4510,7 @@ struct Viewer {
       .padding({ left: 12, right: 12, top: 12, bottom: 8 });
 
       if (this.connections.length === 0) {
-        Text('暂无已保存连接。点击“新增连接”添加，或直接在下方输入地址连接。')
+        Text($r('app.string.conn_no_saved'))
           .fontSize(13)
           .fontColor(this.cTextSecondary)
           .padding({ left: 12, right: 12, bottom: 10 });
@@ -4526,15 +4534,15 @@ struct Viewer {
                           .layoutWeight(1);
                       }
                       if ((c.user ?? '').trim()) {
-                        Text(`账号: ${(c.user ?? '').trim()}`).fontSize(12).fontColor(this.cTextSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
+                        Text($r('app.string.conn_user_prefix', (c.user ?? '').trim())).fontSize(12).fontColor(this.cTextSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
                       }
                       if (c.storePassword && (c.password ?? '').length > 0) {
-                        Text('已保存密码').fontSize(12).fontColor(this.cTextSecondary).margin({ left: 8 });
+                        Text($r('app.string.conn_password_saved')).fontSize(12).fontColor(this.cTextSecondary).margin({ left: 8 });
                       }
                     }.margin({ top: 2 });
                   }.layoutWeight(1);
                   if (!this.connected && c.id === this.selectedConnId) {
-                    Text('编辑/删除')
+                    Text($r('app.string.conn_edit_delete'))
                       .fontSize(12)
                       .fontColor(this.cTextSecondary)
                       .margin({ left: 12 })
@@ -4552,11 +4560,11 @@ struct Viewer {
       }
 
       Row() {
-        Text('快速连接')
+        Text($r('app.string.conn_quick_connect'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .layoutWeight(1);
-        Button(this.authOpen ? '收起认证' : '连接认证')
+        Button(this.authOpen ? $r('app.string.conn_collapse_auth') : $r('app.string.conn_open_auth'))
           .height(32)
           .fontSize(12)
           .fontColor(this.cPrimary)
@@ -4569,40 +4577,40 @@ struct Viewer {
       .padding({ left: 12, right: 12, top: 8, bottom: 6 });
 
       Column() {
-        Text('地址（直连时填写）')
+        Text($r('app.string.conn_address_label'))
           .fontSize(12)
           .fontColor(this.cTextSecondary)
           .width('100%')
           .padding({ bottom: 4 });
-        TextInput({ text: this.address, placeholder: '例如 192.168.1.2:5900；SSH 隧道时可留空' })
+        TextInput({ text: this.address, placeholder: $r('app.string.conn_address_placeholder') })
           .onChange((v: string) => this.address = v)
           .enabled(!this.connected)
           .padding({ bottom: 8 });
 
         if (this.authOpen) {
-          Text('账号（可选）')
+          Text($r('app.string.conn_user_optional'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .width('100%')
             .padding({ bottom: 4 });
-          TextInput({ text: this.user, placeholder: '账号' })
+          TextInput({ text: this.user, placeholder: $r('app.string.conn_user_placeholder') })
             .onChange((v: string) => this.user = v)
             .enabled(!this.connected)
             .padding({ bottom: 8 });
 
-          Text('密码（可选）')
+          Text($r('app.string.conn_password_optional'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .width('100%')
             .padding({ bottom: 4 });
-          TextInput({ text: this.password, placeholder: '密码' })
+          TextInput({ text: this.password, placeholder: $r('app.string.conn_password_placeholder') })
             .type(InputType.Password)
             .onChange((v: string) => this.password = v)
             .enabled(!this.connected)
             .padding({ bottom: 8 });
           if (this.selectedConnId) {
             Row() {
-              Text('记住密码')
+              Text($r('app.string.conn_remember_password'))
                 .fontSize(12)
                 .fontColor(this.cTextSecondary)
                 .layoutWeight(1);
@@ -4624,7 +4632,7 @@ struct Viewer {
       }
 
       Row() {
-        Button(this.connected ? '断开连接' : (this.connecting ? '连接中…' : '连接'))
+        Button(this.connected ? $r('app.string.conn_disconnect') : (this.connecting ? $r('app.string.conn_connecting') : $r('app.string.conn_connect')))
           .layoutWeight(1)
           .height(44)
           .fontSize(15)
@@ -4642,11 +4650,11 @@ struct Viewer {
 
       if (this.connected) {
         Row() {
-          Text(`已连接 ${this.fbW}x${this.fbH}`)
+          Text(this.s($r('app.string.viewer_connected_size'), this.fbW, this.fbH))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .layoutWeight(1);
-          Button(this.devToolsEnabled ? '开发者工具:开' : '开发者工具:关')
+          Button(this.devToolsEnabled ? $r('app.string.viewer_devtools_on') : $r('app.string.viewer_devtools_off'))
             .fontSize(12)
             .height(28)
             .fontColor(this.cPrimary)
@@ -4658,7 +4666,7 @@ struct Viewer {
 
         if (this.devToolsEnabled) {
           Row() {
-            Button(this.debugEnabled ? '调试:开' : '调试:关')
+            Button(this.debugEnabled ? $r('app.string.viewer_debug_on') : $r('app.string.viewer_debug_off'))
               .fontSize(12)
               .height(28)
               .fontColor(this.cPrimary)
@@ -4674,7 +4682,7 @@ struct Viewer {
                   this.firstPixel = '';
                 }
               });
-            Button(`格式:${this.debugPmFormat === 0 ? 'RGBA' : 'ARGB'}`)
+            Button(this.s($r('app.string.devtools_pixel_format'), this.debugPmFormat === 0 ? 'RGBA' : 'ARGB'))
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
@@ -4688,7 +4696,7 @@ struct Viewer {
                 this.pm = undefined;
                 void this.ensurePixelMap();
               });
-            Button(`顺序:${this.debugByteOrder}`)
+            Button(this.s($r('app.string.devtools_byte_order'), this.debugByteOrder))
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
@@ -4705,7 +4713,7 @@ struct Viewer {
           }.padding({ left: 12, right: 12, bottom: 8 });
 
           Row() {
-            Button('刷新画面')
+            Button($r('app.string.viewer_refresh_frame'))
               .fontSize(12)
               .height(28)
               .layoutWeight(1)
@@ -4714,7 +4722,7 @@ struct Viewer {
               .border({ width: 1, color: this.cBorder })
               .borderRadius(12)
               .onClick(() => this.vncClient.refresh());
-            Button('存图')
+            Button($r('app.string.viewer_save_frame'))
               .fontSize(12)
               .height(28)
               .layoutWeight(1)
@@ -4781,11 +4789,11 @@ struct Viewer {
 
         Column() {
           Row() {
-            Text(this.editId ? '编辑连接' : '新增连接')
+            Text(this.editId ? this.s($r('app.string.conn_edit_connection')) : this.s($r('app.string.conn_new_connection')))
               .fontSize(16)
               .fontWeight(FontWeight.Medium)
               .layoutWeight(1);
-            Button('关闭')
+            Button($r('app.string.action_close'))
               .height(28)
               .fontSize(12)
               .fontColor(this.cPrimary)
@@ -4797,44 +4805,44 @@ struct Viewer {
           .padding({ left: 14, right: 14, top: 14, bottom: 10 });
 
           Column() {
-            Text('名称（可选）')
+            Text($r('app.string.conn_name_optional'))
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .width('100%')
               .padding({ bottom: 4 });
-            TextInput({ text: this.editName, placeholder: '例如 办公室电脑' })
+            TextInput({ text: this.editName, placeholder: $r('app.string.conn_name_placeholder') })
               .onChange((v: string) => this.editName = v)
               .padding({ bottom: 10 });
 
-            Text('地址（直连时填写）')
+            Text($r('app.string.conn_address_label'))
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .width('100%')
               .padding({ bottom: 4 });
-            TextInput({ text: this.editAddress, placeholder: '例如 192.168.1.2:5900；SSH 隧道时可留空' })
+            TextInput({ text: this.editAddress, placeholder: $r('app.string.conn_address_placeholder') })
               .onChange((v: string) => this.editAddress = v)
               .padding({ bottom: 10 });
 
-            Text('账号（可选）')
+            Text($r('app.string.conn_user_optional'))
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .width('100%')
               .padding({ bottom: 4 });
-            TextInput({ text: this.editUser, placeholder: '账号' })
+            TextInput({ text: this.editUser, placeholder: $r('app.string.conn_user_placeholder') })
               .onChange((v: string) => this.editUser = v)
               .padding({ bottom: 10 });
 
-            Text('密码（可选）')
+            Text($r('app.string.conn_password_optional'))
               .fontSize(12)
               .fontColor(this.cTextSecondary)
               .width('100%')
               .padding({ bottom: 4 });
-            TextInput({ text: this.editPassword, placeholder: '密码(可选)' })
+            TextInput({ text: this.editPassword, placeholder: $r('app.string.password_optional_short') })
               .type(InputType.Password)
               .onChange((v: string) => this.editPassword = v)
               .padding({ bottom: 8 });
             Row() {
-              Text('记住密码')
+              Text($r('app.string.conn_remember_password'))
                 .fontSize(12)
                 .fontColor(this.cTextSecondary)
                 .layoutWeight(1);
@@ -4842,13 +4850,13 @@ struct Viewer {
             }
             .padding({ bottom: 8 });
             Column() {
-              Text('触摸滚动步长')
+              Text($r('app.string.conn_touch_scroll_step'))
                 .fontSize(12)
                 .fontColor(this.cTextSecondary)
                 .width('100%')
                 .padding({ bottom: 6 });
               Row() {
-                Button('自动')
+                Button($r('app.string.button_auto'))
                   .height(28)
                   .fontSize(12)
                   .fontColor(this.editTouchScrollStep <= 0 ? this.cPrimaryFg : this.cPrimary)
@@ -4856,7 +4864,7 @@ struct Viewer {
                   .border({ width: 1, color: this.cBorder })
                   .borderRadius(12)
                   .onClick(() => this.updateEditTouchScrollStep(0));
-                Button('慢')
+                Button($r('app.string.tool_scroll_slow'))
                   .height(28)
                   .fontSize(12)
                   .margin({ left: 6 })
@@ -4865,7 +4873,7 @@ struct Viewer {
                   .border({ width: 1, color: this.cBorder })
                   .borderRadius(12)
                   .onClick(() => this.updateEditTouchScrollStep(18));
-                Button('中')
+                Button($r('app.string.tool_scroll_medium'))
                   .height(28)
                   .fontSize(12)
                   .margin({ left: 6 })
@@ -4874,7 +4882,7 @@ struct Viewer {
                   .border({ width: 1, color: this.cBorder })
                   .borderRadius(12)
                   .onClick(() => this.updateEditTouchScrollStep(12));
-                Button('快')
+                Button($r('app.string.tool_scroll_fast'))
                   .height(28)
                   .fontSize(12)
                   .margin({ left: 6 })
@@ -4885,7 +4893,9 @@ struct Viewer {
                   .onClick(() => this.updateEditTouchScrollStep(8));
               }
               .width('100%');
-              Text(this.editTouchScrollStep <= 0 ? '当前：自动（按系统自适应）' : `当前：${this.editTouchScrollStep}px`)
+              Text(this.editTouchScrollStep <= 0
+                ? this.s($r('app.string.conn_touch_scroll_auto_current'))
+                : this.s($r('app.string.conn_touch_scroll_value_current'), this.editTouchScrollStep))
                 .fontSize(11)
                 .fontColor(this.cTextTertiary)
                 .width('100%')
@@ -4895,7 +4905,7 @@ struct Viewer {
           .padding({ left: 14, right: 14, bottom: 14 });
 
           Row() {
-            Button('取消')
+            Button($r('app.string.action_cancel'))
               .layoutWeight(1)
               .height(36)
               .fontColor(this.cPrimary)
@@ -4903,7 +4913,7 @@ struct Viewer {
               .border({ width: 1, color: this.cBorder })
               .borderRadius(14)
               .onClick(() => this.closeEditDialog());
-            Button('保存')
+            Button($r('app.string.action_save'))
               .layoutWeight(1)
               .height(36)
               .margin({ left: 10 })
@@ -4938,7 +4948,7 @@ struct Viewer {
         }
       } else {
         Column() {
-          Text(this.connecting ? '连接中…' : (this.lastError ? this.lastError : (this.connected ? '正在等待首帧…' : '未连接')))
+          Text(this.connecting ? this.s($r('app.string.conn_connecting')) : (this.lastError ? this.lastError : (this.connected ? this.s($r('app.string.viewer_waiting_first_frame_state')) : this.s($r('app.string.conn_disconnected_state')))))
             .fontSize(14)
             .fontColor(this.lastError ? this.cError : this.cOnInk);
         }
@@ -4950,7 +4960,7 @@ struct Viewer {
       if (this.shouldShowMonitorLayoutOverlay()) {
         ForEach(this.getDisplayPreviewMonitorRects(), (m: VncRect, index: number) => {
           Stack() {
-            Text(`屏幕 ${index + 1}`)
+            Text(this.s($r('app.string.viewer_screen_label'), index + 1))
               .fontSize(11)
               .fontColor('#ffffff')
               .padding({ left: 6, right: 6, top: 3, bottom: 3 })
@@ -5253,7 +5263,7 @@ struct Viewer {
 
       if (this.manualDragMonitorIndex >= 0 && this.manualMonitorRects.length > 0) {
         Row({ space: 8 }) {
-          Text('全屏框选')
+          Text($r('app.string.viewer_fullscreen_frame_select'))
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor('#ffffff');
@@ -5268,13 +5278,13 @@ struct Viewer {
               .borderRadius(14)
               .onClick(() => {
                 this.manualDragMonitorIndex = index;
-                this.showStatusBanner(`请框选屏幕 ${index + 1}`);
+                this.showStatusBanner(this.s($r('app.string.monitor_drag_select_screen'), index + 1));
               });
           }, (m: VncRect, index: number) => `drag-btn-${index}`);
 
           Blank().layoutWeight(1);
 
-          Button('完成')
+          Button($r('app.string.button_done'))
             .fontSize(12)
             .height(28)
             .fontColor(this.cTextPrimary)
@@ -5286,7 +5296,7 @@ struct Viewer {
               this.togglePanel('display');
             });
 
-          Button('直接保存')
+          Button($r('app.string.action_save'))
             .fontSize(12)
             .height(28)
             .fontColor('#ffffff')
@@ -5478,7 +5488,7 @@ struct Viewer {
           this.buildTopActionButton({ label: this.getSecurityLabel(), active: this.panelMode === 'security', onClick: () => {
             this.togglePanel('security');
           }});
-          this.buildTopActionButton({ label: this.isFullscreen ? '退出全屏' : '全屏', active: false, onClick: () => {
+          this.buildTopActionButton({ label: this.isFullscreen ? $r('app.string.viewer_exit_fullscreen') : $r('app.string.viewer_enter_fullscreen'), active: false, onClick: () => {
             this.toggleFullscreen();
           }});
         }
@@ -5502,14 +5512,14 @@ struct Viewer {
   private buildBottomDock(): void {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
-        this.buildDockButton({ label: '控制模式', active: this.interactionMode === 'control', enabled: true, onClick: () => this.setInteractionMode('control') });
-        this.buildDockButton({ label: '查看模式', active: this.interactionMode === 'inspect', enabled: this.viewportMode !== 'tile', onClick: () => this.setInteractionMode('inspect') });
-        this.buildDockButton({ label: '键盘', active: false, enabled: true, onClick: () => this.showSoftKeyboard() });
-        this.buildDockButton({ label: '导航', active: this.showNavigationPad, enabled: true, onClick: () => {
+        this.buildDockButton({ label: this.s($r('app.string.dock_control_mode')), active: this.interactionMode === 'control', enabled: true, onClick: () => this.setInteractionMode('control') });
+        this.buildDockButton({ label: this.s($r('app.string.dock_inspect_mode')), active: this.interactionMode === 'inspect', enabled: this.viewportMode !== 'tile', onClick: () => this.setInteractionMode('inspect') });
+        this.buildDockButton({ label: this.s($r('app.string.dock_keyboard')), active: false, enabled: true, onClick: () => this.showSoftKeyboard() });
+        this.buildDockButton({ label: this.s($r('app.string.dock_nav')), active: this.showNavigationPad, enabled: true, onClick: () => {
           this.showNavigationPad = !this.showNavigationPad;
           this.pulseChromeInteraction();
         }});
-        this.buildDockButton({ label: '更多', active: this.panelMode === 'more' || this.panelMode === 'connection' || this.panelMode === 'developer' || this.panelMode === 'clipboard', enabled: true, onClick: () => this.togglePanel('more') });
+        this.buildDockButton({ label: this.s($r('app.string.dock_more')), active: this.panelMode === 'more' || this.panelMode === 'connection' || this.panelMode === 'developer' || this.panelMode === 'clipboard', enabled: true, onClick: () => this.togglePanel('more') });
       }
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })
       .backgroundColor('rgba(12,20,22,0.82)')
@@ -5520,11 +5530,11 @@ struct Viewer {
 
       if (this.canUseZoomViewer()) {
         Row({ space: 8 }) {
-          this.buildDockButton({ label: '缩小', active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(-this.zoomStepScale) });
-          this.buildDockButton({ label: `倍率 ${this.getZoomButtonLabel()}`, active: this.zoomScale > 1.05, enabled: this.viewportMode !== 'tile', onClick: () => this.quickToggleViewerZoom() });
-          this.buildDockButton({ label: '放大', active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(this.zoomStepScale) });
+          this.buildDockButton({ label: this.s($r('app.string.dock_zoom_out')), active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(-this.zoomStepScale) });
+          this.buildDockButton({ label: this.s($r('app.string.dock_magnification')) + ' ' + this.getZoomButtonLabel(), active: this.zoomScale > 1.05, enabled: this.viewportMode !== 'tile', onClick: () => this.quickToggleViewerZoom() });
+          this.buildDockButton({ label: this.s($r('app.string.dock_zoom_in')), active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(this.zoomStepScale) });
           if (this.canOpenDisplayPanel()) {
-            this.buildDockButton({ label: '屏幕', active: this.panelMode === 'display', enabled: true, onClick: () => this.togglePanel('display') });
+            this.buildDockButton({ label: this.s($r('app.string.dock_screen')), active: this.panelMode === 'display', enabled: true, onClick: () => this.togglePanel('display') });
           }
         }
         .padding({ left: 10, right: 10, top: 10, bottom: 10 })
@@ -5549,13 +5559,13 @@ struct Viewer {
       Column() {
         Blank().layoutWeight(1);
         Column() {
-          Text('会话准备')
+          Text($r('app.string.panel_session_setup'))
             .fontSize(18)
             .fontWeight(FontWeight.Medium)
             .fontColor(this.cTextPrimary)
             .width('100%')
             .padding({ left: 12, right: 12, top: 12 });
-          Text('连接参数、最近会话和认证信息都收纳在这里。连接成功后会自动收起，不遮挡远程画布。')
+          Text($r('app.string.panel_session_setup_desc'))
             .fontSize(12)
             .fontColor(this.cTextSecondary)
             .width('100%')
@@ -5577,15 +5587,25 @@ struct Viewer {
   @Builder
   private buildClipboardPanelBody(): void {
     Column({ space: 10 }) {
-      Text('将本地文本发送到远端，或主动请求远端剪贴板同步到系统。')
+      Text($r('app.string.clipboard_panel_action_desc'))
         .fontSize(12)
         .fontColor(this.cTextSecondary)
         .width('100%');
-      Text(`本地缓存：${this.lastLocalClipboardText ? `${this.lastLocalClipboardText.length} 字符` : '暂无'}`)
+      Text(this.s(
+        $r('app.string.clipboard_local_cache_label'),
+        this.lastLocalClipboardText
+          ? this.s($r('app.string.clipboard_chars_count'), this.lastLocalClipboardText.length)
+          : this.s($r('app.string.clipboard_none'))
+      ))
         .fontSize(12)
         .fontColor(this.cTextPrimary)
         .width('100%');
-      Text(`远端缓存：${this.lastRemoteClipboardText ? `${this.lastRemoteClipboardText.length} 字符` : '暂无'}`)
+      Text(this.s(
+        $r('app.string.clipboard_remote_cache_label'),
+        this.lastRemoteClipboardText
+          ? this.s($r('app.string.clipboard_chars_count'), this.lastRemoteClipboardText.length)
+          : this.s($r('app.string.clipboard_none'))
+      ))
         .fontSize(12)
         .fontColor(this.cTextPrimary)
         .width('100%');
@@ -5597,15 +5617,15 @@ struct Viewer {
         .onClick((event: ClickEvent, result: PasteButtonOnClickResult) => {
           if (result === PasteButtonOnClickResult.SUCCESS) {
             void this.onPasteButtonClickedAsync();
-            this.showStatusBanner('已尝试发送本地剪贴板');
+            this.showStatusBanner(this.s($r('app.string.clipboard_send_attempted')));
             this.closePanel();
           } else {
-            this.toast('剪贴板授权失败');
+            this.toast(this.s($r('app.string.clipboard_auth_failed')));
           }
         });
-      this.buildPanelAction({ label: '读取远端剪贴板', primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.s($r('app.string.clipboard_fetch_label')), primary: false, onClick: () => {
         this.requestRemoteClipboard();
-        this.showStatusBanner('已请求远端剪贴板');
+        this.showStatusBanner(this.s($r('app.string.clipboard_fetch_attempted')));
         this.closePanel();
       }});
     }
@@ -5615,7 +5635,7 @@ struct Viewer {
   @Builder
   private buildDisplayPanelBody(): void {
     Column({ space: 10 }) {
-      Text('切换到全部屏幕、单独屏幕或分屏概览。分屏概览下会自动保持控制模式。')
+      Text($r('app.string.display_panel_switch_desc'))
         .fontSize(12)
         .fontColor(this.cTextSecondary)
         .width('100%');
@@ -5631,7 +5651,7 @@ struct Viewer {
             .interpolation(ImageInterpolation.High)
           ForEach(this.getDisplayPreviewMonitorRects(), (m: VncRect, index: number) => {
             Stack() {
-              Text(`屏幕 ${index + 1}`)
+              Text(this.s($r('app.string.viewer_screen_label'), index + 1))
                 .fontSize(10)
                 .fontColor('#ffffff')
                 .padding({ left: 6, right: 6, top: 3, bottom: 3 })
@@ -5657,7 +5677,7 @@ struct Viewer {
             .borderRadius(10)
           }, (m: VncRect, index: number) => `${index}:${m.x},${m.y},${m.w},${m.h}:preview`);
           if (this.manualDragMonitorIndex >= 0) {
-            Text(`正在拖拽定义屏幕 ${this.manualDragMonitorIndex + 1}`)
+            Text(this.s($r('app.string.display_dragging_screen_n'), this.manualDragMonitorIndex + 1))
               .fontSize(11)
               .fontColor('#ffffff')
               .padding({ left: 10, right: 10, top: 5, bottom: 5 })
@@ -5678,22 +5698,22 @@ struct Viewer {
       if (this.getDisplayPreviewMonitorRects().length > 0) {
         Text(
           this.isUsingManualMonitorLayout()
-            ? `当前正在手动微调 ${this.getDisplayPreviewMonitorRects().length} 个屏幕，可直接记住这组坐标`
+            ? this.s($r('app.string.display_manual_tuning_count'), this.getDisplayPreviewMonitorRects().length)
             : this.monitorLayoutLocked && this.monitors.length > 1
-            ? `当前已记住 ${this.monitors.length} 个屏幕坐标，可重新检测后覆盖`
-            : `当前检测到 ${this.getDisplayPreviewMonitorRects().length} 个屏幕，请先核对标注再记住坐标`
+            ? this.s($r('app.string.display_saved_layout_count'), this.monitors.length)
+            : this.s($r('app.string.display_detected_screens_count'), this.getDisplayPreviewMonitorRects().length)
         )
           .fontSize(12)
           .fontColor(this.cTextSecondary)
           .width('100%');
         ForEach(this.getDisplayPreviewMonitorRects(), (m: VncRect, index: number) => {
-          Text(`屏幕 ${index + 1}：${this.formatMonitorRectLabel(m)}`)
+          Text(this.s($r('app.string.display_screen_n_with_rect'), index + 1, this.formatMonitorRectLabel(m)))
             .fontSize(11)
             .fontColor(this.cTextMuted)
             .width('100%');
         }, (m: VncRect, index: number) => `${index}:${m.x},${m.y},${m.w},${m.h}:label`);
         Row({ space: 8 }) {
-          Button('重新检测')
+          Button($r('app.string.display_redetect'))
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
@@ -5706,7 +5726,7 @@ struct Viewer {
               this.pulseChromeInteraction();
               this.redetectMonitorLayout();
             });
-          Button('记住当前布局')
+          Button($r('app.string.display_remember_layout'))
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
@@ -5723,14 +5743,14 @@ struct Viewer {
         }
         .width('100%');
         Text(this.monitorWindowsOpenCount > 0
-          ? `已打开 ${this.monitorWindowsOpenCount} 个显示窗口，可拖到本地不同显示器上。`
-          : '可将每个远端屏幕拆成独立窗口，便于拖到本地不同显示器。')
+          ? this.s($r('app.string.display_monitor_windows_opened_count'), this.monitorWindowsOpenCount)
+          : this.s($r('app.string.display_monitor_window_desc')))
           .fontSize(11)
           .lineHeight(16)
           .fontColor(this.cTextSecondary)
           .width('100%');
         Row({ space: 8 }) {
-          Button('拆分多窗口显示')
+          Button($r('app.string.display_split_to_windows'))
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
@@ -5744,7 +5764,7 @@ struct Viewer {
               this.pulseChromeInteraction();
               void this.openMonitorWindows();
             });
-          Button('关闭显示窗口')
+          Button($r('app.string.display_close_windows_button'))
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
@@ -5763,20 +5783,20 @@ struct Viewer {
         .width('100%');
       }
       if (this.fbW > 0 && this.fbH > 0) {
-        Text(`远端总画布：${this.fbW}×${this.fbH}。自动检测容易被壁纸、纯色背景、空白区域误导，不对时可直接手动改。`)
+        Text($r('app.string.display_total_canvas_desc', this.fbW, this.fbH))
           .fontSize(11)
           .lineHeight(16)
           .fontColor(this.cTextMuted)
           .width('100%');
         if (this.monitorLayoutLocked && this.monitors.length > 1) {
-          Text('已确认布局会优先保持不变；只有你重新检测、切换比例候选或手动编辑后才会覆盖。')
+          Text($r('app.string.display_layout_locked_hint'))
             .fontSize(11)
             .lineHeight(16)
             .fontColor(this.cTextSecondary)
             .width('100%');
         }
         Row({ space: 8 }) {
-          Button('复制当前结果')
+          Button($r('app.string.display_copy_result'))
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
@@ -5791,7 +5811,7 @@ struct Viewer {
               this.pulseChromeInteraction();
               this.copyPreviewToManualMonitorLayout();
             });
-          Button('新建双屏')
+          Button($r('app.string.display_new_dual'))
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
@@ -5804,7 +5824,7 @@ struct Viewer {
               this.pulseChromeInteraction();
               this.beginManualMonitorLayout(2);
             });
-          Button('新建三屏')
+          Button($r('app.string.monitor_new_three'))
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
@@ -5822,27 +5842,27 @@ struct Viewer {
       }
       if (this.isUsingManualMonitorLayout()) {
         Text(this.manualDragMonitorIndex >= 0
-          ? '拖拽模式已开启：请直接在全屏视图中拖出矩形框或移动提手；也可继续改 x,y,w,h。'
-          : '手动输入格式：x,y,w,h。这里使用远端总画布坐标，例如 0,0,3840,2400。')
+          ? this.s($r('app.string.monitor_drag_mode_on'))
+          : this.s($r('app.string.monitor_manual_input_hint')))
           .fontSize(11)
           .lineHeight(16)
           .fontColor(this.cTextSecondary)
           .width('100%');
         ForEach(this.manualMonitorDrafts, (draft: string, index: number) => {
           Column({ space: 6 }) {
-            Text(`屏幕 ${index + 1}`)
+            Text($r('app.string.viewer_screen_label', index + 1))
               .fontSize(11)
               .fontColor(this.cTextSecondary)
               .width('100%');
-            TextInput({ text: draft, placeholder: 'x,y,w,h' })
+            TextInput({ text: draft, placeholder: $r('app.string.monitor_coords_placeholder') })
               .onChange((value: string) => this.updateManualMonitorDraft(index, value))
               .width('100%');
-            Text(`当前生效：${this.formatMonitorRectLabel(this.manualMonitorRects[index])}`)
+            Text($r('app.string.monitor_current_rect', this.formatMonitorRectLabel(this.manualMonitorRects[index])))
               .fontSize(10)
               .fontColor(this.cTextMuted)
               .width('100%');
             Row({ space: 8 }) {
-              Button(this.manualDragMonitorIndex === index ? '结束拖拽' : '拖拽定义')
+              Button(this.manualDragMonitorIndex === index ? this.s($r('app.string.monitor_end_drag')) : this.s($r('app.string.monitor_drag_define')))
                 .layoutWeight(1)
                 .height(32)
                 .fontSize(11)
@@ -5864,7 +5884,7 @@ struct Viewer {
           .border({ width: 1, color: this.cBorder })
           .borderRadius(12);
         }, (draft: string, index: number) => `manual:${index}:${draft}`);
-        Button('清除手动编辑')
+        Button($r('app.string.monitor_clear_manual'))
           .width('100%')
           .height(34)
           .fontSize(12)
@@ -5876,31 +5896,31 @@ struct Viewer {
           .onClick(() => {
             this.pulseChromeInteraction();
             this.clearManualMonitorLayout();
-            this.showStatusBanner('已退出手动布局编辑');
+            this.showStatusBanner(this.s($r('app.string.monitor_exit_manual')));
           });
       }
-      this.buildPanelAction({ label: '全部屏幕', primary: this.viewportMode === 'all', onClick: () => {
+      this.buildPanelAction({ label: this.s($r('app.string.monitor_all_screens')), primary: this.viewportMode === 'all', onClick: () => {
         this.setViewportMode('all');
         this.closePanel();
       }});
       if (this.monitors.length > 1) {
         ForEach(this.monitors, (m: VncRect, index: number) => {
-          this.buildPanelAction({ label: `屏幕 ${index + 1}`, primary: this.viewportMode === 'single' && this.currentMonitorIndex === index, onClick: () => {
+          this.buildPanelAction({ label: this.s($r('app.string.viewer_screen_label'), index + 1), primary: this.viewportMode === 'single' && this.currentMonitorIndex === index, onClick: () => {
             this.setViewportMode('single', index);
             this.closePanel();
           }});
         }, (m: VncRect, index: number) => `${index}:${m.x},${m.y},${m.w},${m.h}`);
-        this.buildPanelAction({ label: '分屏概览', primary: this.viewportMode === 'tile', onClick: () => {
+        this.buildPanelAction({ label: this.s($r('app.string.monitor_split_overview')), primary: this.viewportMode === 'tile', onClick: () => {
           this.setViewportMode('tile');
           this.closePanel();
         }});
       } else if (this.detectingDisplayLayout) {
-        Text('正在检测远端屏幕布局…')
+        Text($r('app.string.monitor_detecting'))
           .fontSize(12)
           .fontColor(this.cTextSecondary)
           .width('100%');
       } else {
-        Text('当前远端只检测到一个屏幕。')
+        Text($r('app.string.monitor_only_one_detected'))
           .fontSize(12)
           .fontColor(this.cTextSecondary)
           .width('100%');
@@ -5912,19 +5932,19 @@ struct Viewer {
   @Builder
   private buildMorePanelBody(): void {
     Column({ space: 10 }) {
-      Text('低频操作收纳在这里，避免长期占据主画布。')
+      Text($r('app.string.more_panel_desc'))
         .fontSize(12)
         .fontColor(this.cTextSecondary)
         .width('100%');
-      this.buildPanelAction({ label: '剪贴板', primary: false, onClick: () => this.togglePanel('clipboard') });
+      this.buildPanelAction({ label: this.s($r('app.string.more_clipboard_label')), primary: false, onClick: () => this.togglePanel('clipboard') });
       if (this.runtimeMacMode) {
         Row() {
           Column() {
-            Text('Ctrl 直通')
+            Text($r('app.string.keyboard_ctrl_passthrough'))
               .fontSize(13)
               .fontColor(this.cTextPrimary)
               .maxLines(1);
-            Text('Ctrl+C/V 等组合键直接发送到远端')
+            Text($r('app.string.keyboard_ctrl_passthrough_desc'))
               .fontSize(11)
               .fontColor(this.cTextSecondary)
               .maxLines(2);
@@ -5957,17 +5977,17 @@ struct Viewer {
         .border({ width: 1, color: this.cBorder })
         .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev));
       }
-      this.buildPanelAction({ label: '打开会话面板', primary: false, onClick: () => this.togglePanel('connection') });
-      this.buildPanelAction({ label: this.isFullscreen ? '退出全屏' : '进入全屏', primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.s($r('app.string.more_open_session_panel')), primary: false, onClick: () => this.togglePanel('connection') });
+      this.buildPanelAction({ label: this.isFullscreen ? this.s($r('app.string.viewer_exit_fullscreen')) : this.s($r('app.string.viewer_enter_fullscreen')), primary: false, onClick: () => {
         this.toggleFullscreen();
         this.closePanel();
       }});
-      this.buildPanelAction({ label: '保存当前画面', primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.s($r('app.string.viewer_save_current_frame')), primary: false, onClick: () => {
         void this.saveImage();
         this.closePanel();
       }});
-      this.buildPanelAction({ label: this.devToolsEnabled ? '开发者工具' : '打开开发者工具', primary: false, onClick: () => this.togglePanel('developer') });
-      this.buildPanelAction({ label: this.connected ? '断开连接' : '重新连接', primary: true, onClick: () => {
+      this.buildPanelAction({ label: this.devToolsEnabled ? this.s($r('app.string.more_developer_tools')) : this.s($r('app.string.more_open_developer_tools')), primary: false, onClick: () => this.togglePanel('developer') });
+      this.buildPanelAction({ label: this.connected ? this.s($r('app.string.conn_disconnect')) : this.s($r('app.string.viewer_reconnect')), primary: true, onClick: () => {
         if (this.connected) this.disconnect();
         else this.prepareConnect();
         this.closePanel();
@@ -5989,7 +6009,7 @@ struct Viewer {
         .lineHeight(20)
         .fontColor(this.cTextPrimary)
         .width('100%');
-      Text('连接安全等级综合底层 VNC 会话能力与 SSH 隧道状态，页面只负责展示与提醒。')
+      Text($r('app.string.security_panel_desc'))
         .fontSize(12)
         .fontColor(this.cTextSecondary)
         .width('100%');
@@ -6000,31 +6020,31 @@ struct Viewer {
   @Builder
   private buildDeveloperPanelBody(): void {
     Column({ space: 10 }) {
-      Text('开发者工具只在诊断画面刷新、像素格式和原生桥接问题时使用。')
+      Text($r('app.string.devtools_desc'))
         .fontSize(12)
         .fontColor(this.cTextSecondary)
         .width('100%');
-      this.buildPanelAction({ label: this.debugEnabled ? '关闭调试' : '开启调试', primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.debugEnabled ? this.s($r('app.string.debug_turn_off')) : this.s($r('app.string.debug_turn_on')), primary: false, onClick: () => {
         this.debugEnabled = !this.debugEnabled;
         this.vncClient.setDebugOptions(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
       }});
-      this.buildPanelAction({ label: `像素格式：${this.debugPmFormat === 0 ? 'RGBA' : 'ARGB'}`, primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.s($r('app.string.devtools_pixel_format'), this.debugPmFormat === 0 ? 'RGBA' : 'ARGB'), primary: false, onClick: () => {
         this.debugPmFormat = (this.debugPmFormat + 1) % 2;
         this.vncClient.setDebugOptions(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
         this.pm = undefined;
         void this.ensurePixelMap();
       }});
-      this.buildPanelAction({ label: `字节顺序：${this.debugByteOrder}`, primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.s($r('app.string.devtools_byte_order'), this.debugByteOrder), primary: false, onClick: () => {
         this.debugByteOrder = (this.debugByteOrder + 1) % 4;
         this.vncClient.setDebugOptions(this.debugEnabled, this.debugLevel, this.debugByteOrder, this.debugPmFormat);
         this.pm = undefined;
         void this.ensurePixelMap();
       }});
-      this.buildPanelAction({ label: '刷新画面', primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.s($r('app.string.viewer_refresh_frame')), primary: false, onClick: () => {
         this.vncClient.refresh();
-        this.showStatusBanner('已请求刷新画面');
+        this.showStatusBanner(this.s($r('app.string.devtools_refresh_attempted')));
       }});
-      this.buildPanelAction({ label: this.devToolsEnabled ? '收起开发者工具入口' : '保留开发者工具入口', primary: false, onClick: () => {
+      this.buildPanelAction({ label: this.devToolsEnabled ? this.s($r('app.string.devtools_hide_entry')) : this.s($r('app.string.devtools_keep_entry')), primary: false, onClick: () => {
         this.setDevToolsEnabled(!this.devToolsEnabled);
       }});
       if (this.firstPixel) {
@@ -6073,17 +6093,17 @@ struct Viewer {
           Column() {
             Row() {
               Text(
-                this.panelMode === 'clipboard' ? '剪贴板' :
-                this.panelMode === 'display' ? '屏幕布局' :
-                this.panelMode === 'security' ? '连接安全' :
-                this.panelMode === 'developer' ? '开发者工具' :
-                this.panelMode === 'connection' ? '会话面板' : '更多操作'
+                this.panelMode === 'clipboard' ? this.s($r('app.string.panel_clipboard_title')) :
+                this.panelMode === 'display' ? this.s($r('app.string.panel_display_screen_layout')) :
+                this.panelMode === 'security' ? this.s($r('app.string.security_title')) :
+                this.panelMode === 'developer' ? this.s($r('app.string.devtools_title')) :
+                this.panelMode === 'connection' ? this.s($r('app.string.panel_connection_session')) : this.s($r('app.string.panel_more_operations'))
               )
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.cTextPrimary)
                 .layoutWeight(1);
-              Button('关闭')
+              Button($r('app.string.action_close'))
                 .height(30)
                 .fontSize(12)
                 .fontColor(this.cPrimary)
@@ -6187,7 +6207,7 @@ struct Viewer {
     }
     if (this.bootstrapping && this.pm) {
       Column() {
-        Text('正在加载桌面画面...')
+        Text($r('app.string.display_bootstrapping'))
           .fontSize(12)
           .fontColor('#ffffff')
           .padding({ left: 14, right: 14, top: 8, bottom: 8 })

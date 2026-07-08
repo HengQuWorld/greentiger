@@ -37,7 +37,7 @@ export default class DisplayAbility extends UIAbility {
       const params = want?.parameters ?? {};
       const sessionId = paramStr(params, 'sessionId');
       const monitorIndex = paramNum(params, 'monitorIndex');
-      const title = paramStr(params, 'title', '显示窗口');
+      const title = paramStr(params, 'title', this.context.resourceManager.getStringSync($r('app.string.viewer_display_window_title')));
       const macMode = paramBool(params, 'macMode');
       const launchParams: DisplayLaunchParams = { sessionId, monitorIndex, title, macMode };
       console.info(`DisplayAbility onWindowStageCreate: sessionId=${sessionId}, monitorIndex=${monitorIndex}, title=${title}, macMode=${macMode}`);

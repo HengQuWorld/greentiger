@@ -31,15 +31,15 @@ export interface DisplayLaunchParams {
 const DEFAULT_PARAMS: DisplayLaunchParams = {
   sessionId: '',
   monitorIndex: 0,
-  title: '显示窗口'
+  title: ''
 };
 
 @Entry
 @Component
 struct DisplayPage {
   @StorageLink('__display_launch_bridge__') private bridgeParams: DisplayLaunchParams = DEFAULT_PARAMS;
-  @State private title: string = '显示窗口';
-  @State private statusText: string = '正在初始化...';
+  @State private title: string = '';
+  @State private statusText: string = '';
   @State private pm: image.PixelMap | undefined = undefined;
   @State private pmVersion: number = 0;
   @State private connected: boolean = false;
@@ -106,6 +106,7 @@ struct DisplayPage {
   private pendingVersion: number = -1;
 
   aboutToAppear(): void {
+    this.statusText = this.s($r('app.string.viewer_initializing'));
     void this.initialize();
   }
 
@@ -115,6 +116,14 @@ struct DisplayPage {
     this.pm = undefined;
     this.pmVersion = 0;
     AppStorage.setOrCreate<DisplayLaunchParams>('__display_launch_bridge__', DEFAULT_PARAMS);
+  }
+
+  private s(res: Resource, ...args: (string | number)[]): string {
+    try {
+      return getContext(this).resourceManager.getStringSync(res, ...args);
+    } catch (e) {
+      return '';
+    }
   }
 
   private getHostContext(): common.UIAbilityContext | undefined {
@@ -148,10 +157,10 @@ struct DisplayPage {
     const params = this.getLaunchParams();
     this.sessionId = params.sessionId;
     this.monitorIndex = Math.max(0, Math.floor(params.monitorIndex));
-    this.title = params.title || `屏幕 ${this.monitorIndex + 1}`;
+    this.title = params.title || this.s($r('app.string.viewer_screen_label'), this.monitorIndex + 1);
     this.macMode = !!params.macMode;
     if (!this.sessionId) {
-      this.statusText = '缺少会话标识，请在主窗口重新打开';
+      this.statusText = this.s($r('app.string.viewer_missing_session'));
       return;
     }
     try {
@@ -208,7 +217,7 @@ struct DisplayPage {
       }
     }
     console.warn('DisplayPage could not get any launch params, using defaults');
-    return { sessionId: '', monitorIndex: 0, title: '显示窗口' };
+    return { sessionId: '', monitorIndex: 0, title: this.s($r('app.string.viewer_display_window_title')) };
   }
 
   private startLoop(): void {
@@ -244,7 +253,7 @@ struct DisplayPage {
     if (!snapshot) {
       if (!this.isInteracting) {
         this.connected = false;
-        this.statusText = '主会话不存在或已结束';
+        this.statusText = this.s($r('app.string.viewer_session_ended'));
       }
       return;
     }
@@ -300,12 +309,12 @@ struct DisplayPage {
       };
     }
     if (!snapshot.connected) {
-      this.statusText = '会话未连接';
+      this.statusText = this.s($r('app.string.viewer_session_not_connected'));
       this.macAutoChecked = false;
       return;
     }
     if (!snapshot.frame || snapshot.fbW <= 0 || snapshot.fbH <= 0) {
-      this.statusText = '正在等待画面...';
+      this.statusText = this.s($r('app.string.viewer_waiting_for_frame'));
       return;
     }
     if (snapshot.frameVersion === this.lastFrameVersion && this.pm) {
@@ -682,7 +691,7 @@ struct DisplayPage {
             .fontSize(16)
             .fontColor('#ffffff')
             .fontWeight(FontWeight.Medium);
-          Text(this.statusText || '正在等待画面...')
+          Text(this.statusText || this.s($r('app.string.viewer_waiting_for_frame')))
             .fontSize(12)
             .fontColor('#d6d3d1');
         }

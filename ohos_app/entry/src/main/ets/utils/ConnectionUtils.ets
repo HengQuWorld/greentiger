@@ -220,7 +220,7 @@ export function resolveConnectionAddress(address: string, sshTunnel?: SshTunnelC
 export function normalizeConnName(name: string, address: string, sshTunnel?: SshTunnelConfig): string {
   const normalizedName = (name ?? '').trim();
   if (normalizedName) return normalizedName;
-  return resolveConnectionAddress(address, sshTunnel) || '未命名连接';
+  return resolveConnectionAddress(address, sshTunnel) || '';
 }
 
 export function parseConnectionsJson(text: string): ConnectionItem[] {
