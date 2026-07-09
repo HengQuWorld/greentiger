@@ -105,12 +105,25 @@ main() {
   hvigor_bin="$(resolve_hvigor_bin "${sdk_dir}")"
   stop_daemon_once_per_sdk "${sdk_dir}" "${hvigor_bin}"
 
+  # Default to --no-daemon to avoid hvigor daemon IPC deadlock issues.
+  # If the caller explicitly passes --daemon or --no-daemon, respect that choice.
+  local hvigor_args=("$@")
+  local has_daemon_flag="false"
+  for arg in "${hvigor_args[@]}"; do
+    case "${arg}" in
+      --daemon|--no-daemon) has_daemon_flag="true" ;;
+    esac
+  done
+  if [[ "${has_daemon_flag}" == "false" ]]; then
+    hvigor_args=("--no-daemon" "${hvigor_args[@]}")
+  fi
+
   (
     cd "${OHOS_DIR}"
     env -u DEVECO_SDK_HOME -u HOS_SDK_HOME -u OHOS_SDK_HOME -u OHOS_BASE_SDK_HOME \
       DEVECO_SDK_HOME="${sdk_dir}" \
       SIGN_ACTIVE="${SIGN_ACTIVE:-}" \
-      "${hvigor_bin}" "$@"
+      "${hvigor_bin}" "${hvigor_args[@]}"
   )
 }
 
