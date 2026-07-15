@@ -1,0 +1,1868 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "翠虎遠端桌面"
+    },
+    {
+      "name": "module_desc",
+      "value": "翠虎遠端桌面"
+    },
+    {
+      "name": "ability_desc",
+      "value": "翠虎遠端桌面"
+    },
+    {
+      "name": "conn_manage",
+      "value": "連線管理"
+    },
+    {
+      "name": "conn_connect",
+      "value": "連線"
+    },
+    {
+      "name": "conn_new",
+      "value": "新增"
+    },
+    {
+      "name": "conn_new_connection",
+      "value": "新增連線"
+    },
+    {
+      "name": "conn_collapse",
+      "value": "收起"
+    },
+    {
+      "name": "conn_edit_delete",
+      "value": "編輯/刪除"
+    },
+    {
+      "name": "conn_quick_connect",
+      "value": "快速連線"
+    },
+    {
+      "name": "conn_collapse_auth",
+      "value": "收起認證"
+    },
+    {
+      "name": "conn_open_auth",
+      "value": "連線認證"
+    },
+    {
+      "name": "conn_no_saved",
+      "value": "暫無已儲存連線。點選“新增連線”新增，或直接在下方輸入地址連線。"
+    },
+    {
+      "name": "conn_search_placeholder",
+      "value": "搜尋連線..."
+    },
+    {
+      "name": "conn_address_label",
+      "value": "地址（直連時填寫）"
+    },
+    {
+      "name": "conn_address_placeholder",
+      "value": "例如 192.168.1.2:5900；SSH 隧道時可留空"
+    },
+    {
+      "name": "conn_address_placeholder_simple",
+      "value": "例如 192.168.1.2:5900"
+    },
+    {
+      "name": "conn_user_optional",
+      "value": "賬號（可選）"
+    },
+    {
+      "name": "conn_user_placeholder",
+      "value": "賬號"
+    },
+    {
+      "name": "conn_not_provided",
+      "value": "未提供"
+    },
+    {
+      "name": "conn_password_optional",
+      "value": "密碼（可選）"
+    },
+    {
+      "name": "conn_password_placeholder",
+      "value": "密碼"
+    },
+    {
+      "name": "conn_remember_password",
+      "value": "記住密碼"
+    },
+    {
+      "name": "conn_disconnect",
+      "value": "斷開連線"
+    },
+    {
+      "name": "conn_connecting",
+      "value": "連線中…"
+    },
+    {
+      "name": "conn_saved",
+      "value": "已儲存"
+    },
+    {
+      "name": "conn_connected",
+      "value": "已連線"
+    },
+    {
+      "name": "conn_not_connected",
+      "value": "未連線"
+    },
+    {
+      "name": "conn_connecting_status",
+      "value": "連線中"
+    },
+    {
+      "name": "conn_failed",
+      "value": "連線失敗"
+    },
+    {
+      "name": "conn_disconnected",
+      "value": "連線已斷開"
+    },
+    {
+      "name": "conn_waiting_first_frame",
+      "value": "等待首幀"
+    },
+    {
+      "name": "conn_disconnected_state",
+      "value": "未連線"
+    },
+    {
+      "name": "conn_address_hint",
+      "value": "填寫地址並連線，例如 192.168.1.2:5900"
+    },
+    {
+      "name": "conn_address_format_error",
+      "value": "地址格式不正確，例如 192.168.1.2:5900 或 [::1]:5900"
+    },
+    {
+      "name": "conn_fill_address_or_ssh",
+      "value": "請填寫地址，或在開啟 SSH 隧道時提供有效的轉發目標"
+    },
+    {
+      "name": "conn_name_saved",
+      "value": "名稱已儲存"
+    },
+    {
+      "name": "conn_password_save_on",
+      "value": "已開啟儲存密碼"
+    },
+    {
+      "name": "conn_password_save_off",
+      "value": "已關閉儲存密碼"
+    },
+    {
+      "name": "conn_password_saved",
+      "value": "已儲存密碼"
+    },
+    {
+      "name": "conn_user_prefix",
+      "value": "賬號: %1$s"
+    },
+    {
+      "name": "conn_cannot_delete_while_connected",
+      "value": "已連線時不能刪除連線配置"
+    },
+    {
+      "name": "conn_delete_title",
+      "value": "刪除連線"
+    },
+    {
+      "name": "conn_delete_confirm",
+      "value": "確定刪除連線“%1$s”嗎？"
+    },
+    {
+      "name": "conn_not_selected",
+      "value": "未選擇連線"
+    },
+    {
+      "name": "conn_unnamed",
+      "value": "未命名連線"
+    },
+    {
+      "name": "conn_currently_selected",
+      "value": "當前選中"
+    },
+    {
+      "name": "conn_detail_address",
+      "value": "地址"
+    },
+    {
+      "name": "conn_detail_user",
+      "value": "賬號"
+    },
+    {
+      "name": "conn_detail_password_save",
+      "value": "密碼儲存"
+    },
+    {
+      "name": "conn_detail_touch_scroll",
+      "value": "觸控滾動步長"
+    },
+    {
+      "name": "conn_detail_mac_mode",
+      "value": "Mac 模式"
+    },
+    {
+      "name": "conn_detail_ssh_tunnel",
+      "value": "SSH 隧道"
+    },
+    {
+      "name": "conn_detail_ssh_not_configured",
+      "value": "未配置"
+    },
+    {
+      "name": "conn_last_used_never",
+      "value": "從未連線"
+    },
+    {
+      "name": "conn_last_used_template",
+      "value": "上次連線 %1$s %2$s"
+    },
+    {
+      "name": "conn_last_used_unknown",
+      "value": "上次連線 -"
+    },
+    {
+      "name": "conn_detail_last_used",
+      "value": "最近使用"
+    },
+    {
+      "name": "conn_no_advanced_features",
+      "value": "當前連線未啟用任何高階功能"
+    },
+    {
+      "name": "conn_route_direct",
+      "value": "直接連線"
+    },
+    {
+      "name": "conn_route_ssh_tunnel",
+      "value": "SSH 隧道"
+    },
+    {
+      "name": "conn_route_ssh_secure",
+      "value": "經 SSH 安全連線"
+    },
+    {
+      "name": "conn_route_ssh_via",
+      "value": "先連線 SSH %1$s，再透過隧道訪問 %2$s"
+    },
+    {
+      "name": "conn_route_direct_access",
+      "value": "本機直接訪問 %1$s"
+    },
+    {
+      "name": "conn_current_route",
+      "value": "當前連線方式"
+    },
+    {
+      "name": "conn_panel_swipe_hint",
+      "value": "從左側邊緣右滑可開啟連線面板"
+    },
+    {
+      "name": "conn_edit_title",
+      "value": "編輯連線"
+    },
+    {
+      "name": "conn_create_title",
+      "value": "新增連線"
+    },
+    {
+      "name": "conn_basic_tab",
+      "value": "基本"
+    },
+    {
+      "name": "conn_advanced_tab",
+      "value": "高階"
+    },
+    {
+      "name": "conn_advanced_tab_configured",
+      "value": "高階（已配置）"
+    },
+    {
+      "name": "conn_remote_desktop",
+      "value": "遠端桌面"
+    },
+    {
+      "name": "conn_name_optional",
+      "value": "連線名稱（可選）"
+    },
+    {
+      "name": "conn_name_placeholder",
+      "value": "例如 辦公室電腦"
+    },
+    {
+      "name": "conn_desktop_address",
+      "value": "桌面地址"
+    },
+    {
+      "name": "conn_user_label",
+      "value": "賬號"
+    },
+    {
+      "name": "conn_password_label",
+      "value": "密碼"
+    },
+    {
+      "name": "conn_save_password",
+      "value": "儲存密碼"
+    },
+    {
+      "name": "conn_touch_scroll_step",
+      "value": "觸控滾動步長"
+    },
+    {
+      "name": "conn_mac_mode",
+      "value": "Mac 模式"
+    },
+    {
+      "name": "conn_mac_mode_switch",
+      "value": "設為 Mac 模式"
+    },
+    {
+      "name": "conn_mac_mode_desc",
+      "value": "連線 Mac 時將 Ctrl 組合鍵對映為 ⌘，修復複製(Cmd+C)/貼上(Cmd+V)等快捷鍵。連線後支援自動檢測伺服器型別。"
+    },
+    {
+      "name": "conn_mac_mode_short",
+      "value": "連線 Mac 時將 Ctrl 對映為 ⌘，修復剪貼簿快捷鍵等問題。"
+    },
+    {
+      "name": "conn_ssh_enabled",
+      "value": "已開啟 SSH 隧道"
+    },
+    {
+      "name": "conn_ssh_disabled",
+      "value": "直接連線"
+    },
+    {
+      "name": "conn_ssh_enabled_desc",
+      "value": "先連線 SSH 伺服器，再轉發到目標桌面。"
+    },
+    {
+      "name": "conn_ssh_disabled_desc",
+      "value": "預設直接連線目標桌面，需要時再開啟 SSH。"
+    },
+    {
+      "name": "conn_ssh_host_placeholder",
+      "value": "SSH 伺服器，例如 bastion.example.com"
+    },
+    {
+      "name": "conn_ssh_username",
+      "value": "SSH 使用者名稱"
+    },
+    {
+      "name": "conn_ssh_username_placeholder",
+      "value": "SSH 使用者名稱"
+    },
+    {
+      "name": "conn_ssh_reuse_creds",
+      "value": "重用桌面賬號密碼"
+    },
+    {
+      "name": "conn_ssh_own_creds",
+      "value": "單獨填寫 SSH 賬號資訊"
+    },
+    {
+      "name": "conn_ssh_following_user",
+      "value": "跟隨基本頁賬號：%1$s"
+    },
+    {
+      "name": "conn_ssh_awaiting_user",
+      "value": "等待複用基本頁中的桌面使用者名稱"
+    },
+    {
+      "name": "conn_ssh_taken_over_by_basic",
+      "value": "當前欄位由基本頁“賬號”接管；關閉上方複用開關後可單獨填寫。"
+    },
+    {
+      "name": "conn_ssh_auto_sync_basic",
+      "value": "當前欄位由基本頁“賬號”接管；先在基本頁填寫後，這裡會自動同步。"
+    },
+    {
+      "name": "conn_ssh_reusing_user_desc",
+      "value": "當前複用基本頁中的桌面使用者名稱：%1$s"
+    },
+    {
+      "name": "conn_ssh_reusing_creds_desc",
+      "value": "當前複用基本頁中的桌面賬號；使用者名稱：%1$s"
+    },
+    {
+      "name": "conn_ssh_fill_basic_first",
+      "value": "請先在基本頁填寫桌面使用者名稱。"
+    },
+    {
+      "name": "conn_ssh_fill_basic_user_pass",
+      "value": "請先在基本頁填寫桌面使用者名稱和密碼。"
+    },
+    {
+      "name": "conn_ssh_different_creds",
+      "value": "SSH 賬號資訊可以與桌面賬號不同。"
+    },
+    {
+      "name": "conn_ssh_auth_method",
+      "value": "登入方式"
+    },
+    {
+      "name": "conn_ssh_auth_password",
+      "value": "密碼登入"
+    },
+    {
+      "name": "conn_ssh_auth_pubkey",
+      "value": "公鑰登入"
+    },
+    {
+      "name": "conn_ssh_server_addr",
+      "value": "SSH 伺服器"
+    },
+    {
+      "name": "conn_ssh_advanced_options",
+      "value": "高階 SSH 選項"
+    },
+    {
+      "name": "conn_ssh_port_placeholder",
+      "value": "埠"
+    },
+    {
+      "name": "conn_ssh_pubkey_path_placeholder",
+      "value": "公鑰路徑"
+    },
+    {
+      "name": "conn_ssh_pvtkey_path_placeholder",
+      "value": "私鑰路徑"
+    },
+    {
+      "name": "conn_ssh_pvtkey_passphrase_placeholder",
+      "value": "私鑰口令"
+    },
+    {
+      "name": "conn_ssh_known_hosts_placeholder",
+      "value": "known_hosts 路徑"
+    },
+    {
+      "name": "conn_ssh_strict_host_key",
+      "value": "嚴格主機校驗"
+    },
+    {
+      "name": "conn_ssh_remote_host_placeholder",
+      "value": "轉發目標"
+    },
+    {
+      "name": "conn_ssh_remote_port_placeholder",
+      "value": "目標埠"
+    },
+    {
+      "name": "conn_ssh_more_options_label",
+      "value": "更多選項"
+    },
+    {
+      "name": "conn_ssh_less_options_label",
+      "value": "收起選項"
+    },
+    {
+      "name": "conn_ssh_touch_scroll_desc",
+      "value": "每次滾動產生的滑鼠滾輪步數（0 代表不處理觸控滾動）。"
+    },
+    {
+      "name": "conn_ssh_touch_scroll_title",
+      "value": "觸控滾動"
+    },
+    {
+      "name": "conn_touch_scroll_default_label",
+      "value": "關閉"
+    },
+    {
+      "name": "conn_touch_scroll_light",
+      "value": "輕量 (1步)"
+    },
+    {
+      "name": "conn_touch_scroll_moderate",
+      "value": "適中 (3步)"
+    },
+    {
+      "name": "conn_touch_scroll_full",
+      "value": "完整 (8步)"
+    },
+    {
+      "name": "conn_desktop_addr_ssh_hint",
+      "value": "這裡填寫最終要訪問的桌面地址。啟用 SSH 時，如果不單獨覆蓋目標，會預設使用這裡的地址。"
+    },
+    {
+      "name": "conn_desktop_addr_hint",
+      "value": "填寫要連線的桌面地址和常用登入資訊。"
+    },
+    {
+      "name": "conn_edit_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "conn_edit_save",
+      "value": "儲存"
+    },
+    {
+      "name": "conn_edit_more_options",
+      "value": "更多選項"
+    },
+    {
+      "name": "conn_enabled",
+      "value": "已開啟"
+    },
+    {
+      "name": "conn_disabled",
+      "value": "未開啟"
+    },
+    {
+      "name": "conn_disabled_status",
+      "value": "已關閉"
+    },
+    {
+      "name": "conn_free_connect_hint",
+      "value": "免費使用，填寫右側配置即可連線"
+    },
+    {
+      "name": "conn_fullscreen_entered",
+      "value": "已進入全屏檢視，從底部上滑可喚出控制欄。"
+    },
+    {
+      "name": "conn_only_input_address_and_connect",
+      "value": "只需填寫地址即可連線，密碼可稍後在會話頁填寫"
+    },
+    {
+      "name": "ssh_server_required",
+      "value": "SSH 伺服器不能為空"
+    },
+    {
+      "name": "ssh_user_required",
+      "value": "SSH 使用者名稱不能為空"
+    },
+    {
+      "name": "ssh_port_invalid",
+      "value": "SSH 埠必須在 1 到 65535 之間"
+    },
+    {
+      "name": "ssh_remote_host_required",
+      "value": "SSH 轉發目標不能為空"
+    },
+    {
+      "name": "ssh_remote_port_invalid",
+      "value": "SSH 轉發目標埠必須在 1 到 65535 之間"
+    },
+    {
+      "name": "ssh_private_key_required",
+      "value": "SSH 私鑰路徑不能為空"
+    },
+    {
+      "name": "ssh_password_required",
+      "value": "SSH 密碼不能為空"
+    },
+    {
+      "name": "ssh_known_hosts_required",
+      "value": "開啟嚴格主機校驗時必須提供 known_hosts 路徑"
+    },
+    {
+      "name": "viewer_session_title",
+      "value": "遠端桌面"
+    },
+    {
+      "name": "viewer_enter_address_hint",
+      "value": "輸入地址後即可建立遠端桌面連線"
+    },
+    {
+      "name": "viewer_please_connect_first",
+      "value": "請先建立連線"
+    },
+    {
+      "name": "viewer_need_two_screens",
+      "value": "當前至少需要檢測到兩個遠端螢幕"
+    },
+    {
+      "name": "viewer_monitor_windows_opened",
+      "value": "已開啟 %1$d 個顯示視窗"
+    },
+    {
+      "name": "viewer_monitor_windows_closed",
+      "value": "已關閉顯示視窗"
+    },
+    {
+      "name": "viewer_open_monitor_failed",
+      "value": "開啟顯示視窗失敗"
+    },
+    {
+      "name": "viewer_connection_failed",
+      "value": "連線失敗"
+    },
+    {
+      "name": "viewer_connecting_failed",
+      "value": "連線失敗: %1$s"
+    },
+    {
+      "name": "viewer_open_window_failed",
+      "value": "開啟連線視窗失敗: %1$s"
+    },
+    {
+      "name": "viewer_save_image_no_data",
+      "value": "沒有影象資料"
+    },
+    {
+      "name": "viewer_save_image_saved",
+      "value": "已儲存: %1$s"
+    },
+    {
+      "name": "viewer_save_image_failed",
+      "value": "儲存失敗: %1$s"
+    },
+    {
+      "name": "viewer_free_connect_hint_short",
+      "value": "填寫地址並連線，例如 192.168.1.2:5900"
+    },
+    {
+      "name": "viewer_only_address_or_ssh_hint",
+      "value": "輸入地址以完成連線；SSH 隧道資訊從主頁面傳入"
+    },
+    {
+      "name": "viewer_debug_on",
+      "value": "除錯:開"
+    },
+    {
+      "name": "viewer_debug_off",
+      "value": "除錯:關"
+    },
+    {
+      "name": "viewer_devtools_on",
+      "value": "開發者工具:開"
+    },
+    {
+      "name": "viewer_devtools_off",
+      "value": "開發者工具:關"
+    },
+    {
+      "name": "viewer_refresh_frame",
+      "value": "重新整理畫面"
+    },
+    {
+      "name": "viewer_save_frame",
+      "value": "存圖"
+    },
+    {
+      "name": "viewer_connected_size",
+      "value": "已連線 %1$dx%2$d"
+    },
+    {
+      "name": "viewer_waiting_for_frame",
+      "value": "正在等待畫面..."
+    },
+    {
+      "name": "viewer_waiting_first_frame_state",
+      "value": "正在等待首幀…"
+    },
+    {
+      "name": "viewer_inspect_mode",
+      "value": "檢視模式"
+    },
+    {
+      "name": "viewer_control_mode",
+      "value": "控制模式"
+    },
+    {
+      "name": "viewer_mac_mode_on",
+      "value": "Mac 鍵盤模式:開"
+    },
+    {
+      "name": "viewer_mac_mode_off",
+      "value": "Mac 鍵盤模式:關"
+    },
+    {
+      "name": "viewer_enter_fullscreen",
+      "value": "進入全屏"
+    },
+    {
+      "name": "viewer_exit_fullscreen",
+      "value": "退出全屏"
+    },
+    {
+      "name": "viewer_reconnect",
+      "value": "重新連線"
+    },
+    {
+      "name": "viewer_save_current_frame",
+      "value": "儲存當前畫面"
+    },
+    {
+      "name": "viewer_edit_connection",
+      "value": "編輯當前連線"
+    },
+    {
+      "name": "viewer_screen_label",
+      "value": "螢幕 %1$d"
+    },
+    {
+      "name": "viewer_display_window_title",
+      "value": "顯示視窗"
+    },
+    {
+      "name": "viewer_initializing",
+      "value": "正在初始化..."
+    },
+    {
+      "name": "viewer_missing_session",
+      "value": "缺少會話標識，請在主視窗重新開啟"
+    },
+    {
+      "name": "viewer_session_ended",
+      "value": "主會話不存在或已結束"
+    },
+    {
+      "name": "viewer_session_not_connected",
+      "value": "會話未連線"
+    },
+    {
+      "name": "security_not_connected",
+      "value": "未連線"
+    },
+    {
+      "name": "security_insecure",
+      "value": "不安全"
+    },
+    {
+      "name": "security_auth_safe",
+      "value": "認證安全"
+    },
+    {
+      "name": "security_safe",
+      "value": "安全"
+    },
+    {
+      "name": "security_desc_not_connected",
+      "value": "建立連線後會顯示當前會話的安全級別。"
+    },
+    {
+      "name": "security_desc_insecure",
+      "value": "當前連線未加密，請注意資料安全。"
+    },
+    {
+      "name": "security_desc_auth_safe",
+      "value": "當前連線僅保護認證過程，桌面資料傳輸未加密。"
+    },
+    {
+      "name": "security_desc_safe",
+      "value": "當前連線已啟用端到端加密，適合生產場景。"
+    },
+    {
+      "name": "clipboard_title",
+      "value": "剪貼簿"
+    },
+    {
+      "name": "clipboard_send_to_remote",
+      "value": "傳送到遠端"
+    },
+    {
+      "name": "clipboard_placeholder",
+      "value": "輸入要傳送的文字"
+    },
+    {
+      "name": "clipboard_received_from_remote",
+      "value": "來自遠端"
+    },
+    {
+      "name": "clipboard_no_content",
+      "value": "無剪貼簿內容"
+    },
+    {
+      "name": "clipboard_sent",
+      "value": "已傳送"
+    },
+    {
+      "name": "clipboard_refresh",
+      "value": "重新整理"
+    },
+    {
+      "name": "clipboard_fetch_from_remote",
+      "value": "從遠端獲取"
+    },
+    {
+      "name": "clipboard_paste_to_local",
+      "value": "貼上到本地"
+    },
+    {
+      "name": "clipboard_sync_title",
+      "value": "剪貼簿同步"
+    },
+    {
+      "name": "clipboard_sync_desc",
+      "value": "剪貼簿同步需要客戶端和遠端桌面雙向配合。輸入文字後點選“傳送到遠端”可推送到遠端；點選“從遠端獲取”可拉取遠端剪貼簿。"
+    },
+    {
+      "name": "clipboard_sent_success",
+      "value": "剪貼簿已傳送"
+    },
+    {
+      "name": "clipboard_sent_success_count",
+      "value": "剪貼簿已傳送（%1$d 字元）"
+    },
+    {
+      "name": "clipboard_fetch_success",
+      "value": "已顯示最新內容"
+    },
+    {
+      "name": "monitor_title",
+      "value": "螢幕"
+    },
+    {
+      "name": "monitor_all_screens",
+      "value": "全部螢幕"
+    },
+    {
+      "name": "monitor_split_overview",
+      "value": "分屏概覽"
+    },
+    {
+      "name": "monitor_detecting",
+      "value": "正在檢測遠端螢幕布局…"
+    },
+    {
+      "name": "monitor_only_one_detected",
+      "value": "當前遠端只檢測到一個螢幕。"
+    },
+    {
+      "name": "monitor_no_monitors_detected",
+      "value": "暫無檢測到遠端多屏資訊，請等待首次完整幀到達。"
+    },
+    {
+      "name": "monitor_open_windows",
+      "value": "開啟顯示視窗"
+    },
+    {
+      "name": "monitor_close_windows",
+      "value": "關閉顯示視窗"
+    },
+    {
+      "name": "monitor_manual_layout",
+      "value": "手動編輯螢幕布局"
+    },
+    {
+      "name": "monitor_drag_mode_on",
+      "value": "拖拽模式已開啟：請直接在全屏檢視中拖出矩形框或移動提手；也可繼續改 x,y,w,h。"
+    },
+    {
+      "name": "monitor_manual_input_hint",
+      "value": "手動輸入格式：x,y,w,h。這裡使用遠端總畫布座標，例如 0,0,3840,2400。"
+    },
+    {
+      "name": "monitor_clear_manual",
+      "value": "清除手動編輯"
+    },
+    {
+      "name": "monitor_exit_manual",
+      "value": "已退出手動佈局編輯"
+    },
+    {
+      "name": "monitor_current_rect",
+      "value": "當前生效：%1$s"
+    },
+    {
+      "name": "monitor_drag_define",
+      "value": "拖拽定義"
+    },
+    {
+      "name": "monitor_drag_define_screen",
+      "value": "開始拖拽定義螢幕 %1$d"
+    },
+    {
+      "name": "monitor_end_drag",
+      "value": "結束拖拽"
+    },
+    {
+      "name": "monitor_end_drag_screen",
+      "value": "結束拖拽定義螢幕 %1$d"
+    },
+    {
+      "name": "monitor_new_three",
+      "value": "新建三屏"
+    },
+    {
+      "name": "monitor_reset_layout",
+      "value": "恢復預設佈局"
+    },
+    {
+      "name": "monitor_switch_to",
+      "value": "切換到 %1$s"
+    },
+    {
+      "name": "monitor_currently_viewing",
+      "value": "當前正在檢視 %1$s"
+    },
+    {
+      "name": "keyboard_title",
+      "value": "鍵盤"
+    },
+    {
+      "name": "keyboard_ctrl",
+      "value": "Ctrl"
+    },
+    {
+      "name": "keyboard_alt",
+      "value": "Alt"
+    },
+    {
+      "name": "keyboard_shift",
+      "value": "Shift"
+    },
+    {
+      "name": "keyboard_meta",
+      "value": "Meta"
+    },
+    {
+      "name": "keyboard_escape",
+      "value": "Esc"
+    },
+    {
+      "name": "keyboard_tab",
+      "value": "Tab"
+    },
+    {
+      "name": "keyboard_enter",
+      "value": "Enter"
+    },
+    {
+      "name": "keyboard_backspace",
+      "value": "Backspace"
+    },
+    {
+      "name": "keyboard_delete",
+      "value": "Del"
+    },
+    {
+      "name": "keyboard_space",
+      "value": "空格"
+    },
+    {
+      "name": "keyboard_up",
+      "value": "↑"
+    },
+    {
+      "name": "keyboard_down",
+      "value": "↓"
+    },
+    {
+      "name": "keyboard_left",
+      "value": "←"
+    },
+    {
+      "name": "keyboard_right",
+      "value": "→"
+    },
+    {
+      "name": "keyboard_fkeys",
+      "value": "F鍵"
+    },
+    {
+      "name": "keyboard_ctrl_passthrough",
+      "value": "Ctrl 直通"
+    },
+    {
+      "name": "keyboard_ctrl_passthrough_desc",
+      "value": "Ctrl+C/V 等組合鍵直接傳送到遠端"
+    },
+    {
+      "name": "keyboard_show_key_bar",
+      "value": "顯示鍵盤欄"
+    },
+    {
+      "name": "keyboard_hide_key_bar",
+      "value": "隱藏鍵盤欄"
+    },
+    {
+      "name": "keyboard_f1",
+      "value": "F1"
+    },
+    {
+      "name": "keyboard_f2",
+      "value": "F2"
+    },
+    {
+      "name": "keyboard_f3",
+      "value": "F3"
+    },
+    {
+      "name": "keyboard_f4",
+      "value": "F4"
+    },
+    {
+      "name": "keyboard_f5",
+      "value": "F5"
+    },
+    {
+      "name": "keyboard_f6",
+      "value": "F6"
+    },
+    {
+      "name": "keyboard_f7",
+      "value": "F7"
+    },
+    {
+      "name": "keyboard_f8",
+      "value": "F8"
+    },
+    {
+      "name": "keyboard_f9",
+      "value": "F9"
+    },
+    {
+      "name": "keyboard_f10",
+      "value": "F10"
+    },
+    {
+      "name": "keyboard_f11",
+      "value": "F11"
+    },
+    {
+      "name": "keyboard_f12",
+      "value": "F12"
+    },
+    {
+      "name": "nav_title",
+      "value": "導航"
+    },
+    {
+      "name": "nav_pan_left",
+      "value": "左移"
+    },
+    {
+      "name": "nav_pan_right",
+      "value": "右移"
+    },
+    {
+      "name": "nav_pan_up",
+      "value": "上移"
+    },
+    {
+      "name": "nav_pan_down",
+      "value": "下移"
+    },
+    {
+      "name": "more_open_session_panel",
+      "value": "開啟會話面板"
+    },
+    {
+      "name": "more_developer_tools",
+      "value": "開發者工具"
+    },
+    {
+      "name": "more_open_developer_tools",
+      "value": "開啟開發者工具"
+    },
+    {
+      "name": "more_title",
+      "value": "更多"
+    },
+    {
+      "name": "more_low_freq_actions",
+      "value": "低頻操作收納在這裡，避免長期佔據主畫布。"
+    },
+    {
+      "name": "devtools_title",
+      "value": "開發者工具"
+    },
+    {
+      "name": "devtools_toggle_debug_on",
+      "value": "開啟除錯"
+    },
+    {
+      "name": "devtools_toggle_debug_off",
+      "value": "關閉除錯"
+    },
+    {
+      "name": "devtools_collapse_entry",
+      "value": "收起開發者工具入口"
+    },
+    {
+      "name": "devtools_keep_entry",
+      "value": "保留開發者工具入口"
+    },
+    {
+      "name": "devtools_desc",
+      "value": "開發者工具只在診斷畫面重新整理、畫素格式和原生橋接問題時使用。"
+    },
+    {
+      "name": "security_title",
+      "value": "安全與加密"
+    },
+    {
+      "name": "security_panel_desc",
+      "value": "連線安全等級綜合底層 VNC 會話能力與 SSH 隧道狀態，頁面只負責展示與提醒。"
+    },
+    {
+      "name": "dock_control_mode",
+      "value": "控制模式"
+    },
+    {
+      "name": "dock_inspect_mode",
+      "value": "檢視模式"
+    },
+    {
+      "name": "dock_keyboard",
+      "value": "鍵盤"
+    },
+    {
+      "name": "dock_nav",
+      "value": "導航"
+    },
+    {
+      "name": "dock_more",
+      "value": "更多"
+    },
+    {
+      "name": "dock_zoom_out",
+      "value": "縮小"
+    },
+    {
+      "name": "dock_zoom_in",
+      "value": "放大"
+    },
+    {
+      "name": "dock_magnification",
+      "value": "倍率"
+    },
+    {
+      "name": "dock_screen",
+      "value": "螢幕"
+    },
+    {
+      "name": "zoom_toggle_fit",
+      "value": "自適應"
+    },
+    {
+      "name": "about_title",
+      "value": "關於"
+    },
+    {
+      "name": "about_version",
+      "value": "版本"
+    },
+    {
+      "name": "about_developer",
+      "value": "開發者"
+    },
+    {
+      "name": "about_developer_name",
+      "value": "橫渠天地（北京）科技有限公司"
+    },
+    {
+      "name": "about_email",
+      "value": "電子郵箱"
+    },
+    {
+      "name": "about_email_copied",
+      "value": "郵箱已複製"
+    },
+    {
+      "name": "about_website",
+      "value": "官方網站"
+    },
+    {
+      "name": "about_visit",
+      "value": "訪問"
+    },
+    {
+      "name": "about_url_copied",
+      "value": "網址已複製"
+    },
+    {
+      "name": "about_agreements",
+      "value": "協議與隱私"
+    },
+    {
+      "name": "about_privacy_label",
+      "value": "隱私協議"
+    },
+    {
+      "name": "about_privacy_title",
+      "value": "檢視隱私協議"
+    },
+    {
+      "name": "about_user_label",
+      "value": "使用者協議"
+    },
+    {
+      "name": "about_user_title",
+      "value": "檢視使用者協議"
+    },
+    {
+      "name": "about_view_in_app",
+      "value": "應用內完整檢視"
+    },
+    {
+      "name": "about_open_source",
+      "value": "開源許可"
+    },
+    {
+      "name": "about_license_label",
+      "value": "開源許可"
+    },
+    {
+      "name": "about_license_text",
+      "value": "本應用採用 GPL-2.0 許可釋出，並包含多個第三方開源元件。"
+    },
+    {
+      "name": "about_source_label",
+      "value": "原始碼獲取"
+    },
+    {
+      "name": "about_third_party_label",
+      "value": "第三方元件"
+    },
+    {
+      "name": "about_third_party_text",
+      "value": "• TigerVNC (GPL-2.0)\n• libssh2 (BSD-3-Clause)\n• mbedTLS (Apache-2.0 / GPL-2.0)\n• GnuTLS (LGPL-2.1+)\n• Nettle (GPL-2.0+ / LGPL-3.0+)"
+    },
+    {
+      "name": "about_disclaimer_label",
+      "value": "免責宣告"
+    },
+    {
+      "name": "about_disclaimer_text",
+      "value": "本軟體按“現狀”提供，不附帶任何明示或暗示擔保。詳見各許可證全文。"
+    },
+    {
+      "name": "agreement_privacy",
+      "value": "隱私協議"
+    },
+    {
+      "name": "agreement_user",
+      "value": "使用者協議"
+    },
+    {
+      "name": "agreement_read_confirm",
+      "value": "協議閱讀與確認"
+    },
+    {
+      "name": "agreement_privacy_full",
+      "value": "翠虎遠端桌面隱私協議"
+    },
+    {
+      "name": "agreement_user_full",
+      "value": "翠虎遠端桌面使用者協議"
+    },
+    {
+      "name": "agreement_launch_desc",
+      "value": "首次使用前，請完整閱讀並確認《翠虎遠端桌面隱私協議》與《翠虎遠端桌面使用者協議》，同意後方可繼續使用應用。"
+    },
+    {
+      "name": "agreement_normal_desc",
+      "value": "以下內容與首啟展示保持一致，支援在應用內隨時檢視完整文字。"
+    },
+    {
+      "name": "agreement_loading",
+      "value": "協議內容載入中..."
+    },
+    {
+      "name": "agreement_load_failed",
+      "value": "協議內容載入失敗，請稍後重試。"
+    },
+    {
+      "name": "agreement_save_failed",
+      "value": "儲存協議確認狀態失敗"
+    },
+    {
+      "name": "agreement_exit_app",
+      "value": "退出應用"
+    },
+    {
+      "name": "agreement_accept",
+      "value": "同意並繼續"
+    },
+    {
+      "name": "agreement_close",
+      "value": "關閉"
+    },
+    {
+      "name": "agreement_cannot_exit",
+      "value": "無法退出應用"
+    },
+    {
+      "name": "settings_title",
+      "value": "系統設定"
+    },
+    {
+      "name": "settings_edge_clamp",
+      "value": "觸控邊緣吸附"
+    },
+    {
+      "name": "settings_edge_clamp_desc",
+      "value": "觸控式螢幕黑邊區域時，將滑鼠定位到遠端桌面邊緣，便於觸發系統工具欄或選單欄"
+    },
+    {
+      "name": "action_copy",
+      "value": "複製"
+    },
+    {
+      "name": "action_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "action_edit",
+      "value": "編輯"
+    },
+    {
+      "name": "action_delete",
+      "value": "刪除"
+    },
+    {
+      "name": "action_close",
+      "value": "關閉"
+    },
+    {
+      "name": "action_save",
+      "value": "儲存"
+    },
+    {
+      "name": "action_confirm",
+      "value": "確定"
+    },
+    {
+      "name": "action_open_link",
+      "value": "開啟連結"
+    },
+    {
+      "name": "action_retry",
+      "value": "重試"
+    },
+    {
+      "name": "copy_failed",
+      "value": "複製失敗"
+    },
+    {
+      "name": "cannot_open_link",
+      "value": "無法開啟連結"
+    },
+    {
+      "name": "url_copied",
+      "value": "網址已複製"
+    },
+    {
+      "name": "conn_enter_password",
+      "value": "輸入連線密碼"
+    },
+    {
+      "name": "enter_password_placeholder",
+      "value": "請輸入密碼"
+    },
+    {
+      "name": "password_optional_short",
+      "value": "密碼(可選)"
+    },
+    {
+      "name": "button_auto",
+      "value": "自動"
+    },
+    {
+      "name": "button_done",
+      "value": "完成"
+    },
+    {
+      "name": "viewer_fullscreen_frame_select",
+      "value": "全屏框選"
+    },
+    {
+      "name": "conn_lock_scroll",
+      "value": "鎖定滾動"
+    },
+    {
+      "name": "conn_touch_scroll_auto_current",
+      "value": "當前：自動（按系統自適應）"
+    },
+    {
+      "name": "conn_touch_scroll_value_current",
+      "value": "當前：%1$dpx"
+    },
+    {
+      "name": "conn_path_direct",
+      "value": "本機 -> VNC %1$s"
+    },
+    {
+      "name": "conn_path_ssh",
+      "value": "本機 -> SSH %1$s -> VNC %2$s"
+    },
+    {
+      "name": "conn_no_connections_yet",
+      "value": "暫無連線配置"
+    },
+    {
+      "name": "conn_no_matching_connections",
+      "value": "未找到匹配的連線"
+    },
+    {
+      "name": "conn_search_clear",
+      "value": "清除"
+    },
+    {
+      "name": "conn_search_placeholder_detailed",
+      "value": "搜尋：名稱 / 地址 / 賬號"
+    },
+    {
+      "name": "conn_edit_connection",
+      "value": "編輯連線"
+    },
+    {
+      "name": "conn_desktop_title",
+      "value": "遠端桌面"
+    },
+    {
+      "name": "conn_desktop_address_label",
+      "value": "桌面地址"
+    },
+    {
+      "name": "conn_desktop_address_hint_with_ssh",
+      "value": "這裡填寫最終要訪問的桌面地址。啟用 SSH 時，如果不單獨覆蓋目標，會預設使用這裡的地址。"
+    },
+    {
+      "name": "conn_desktop_address_hint_simple",
+      "value": "填寫要連線的桌面地址和常用登入資訊。"
+    },
+    {
+      "name": "conn_desktop_user_label",
+      "value": "桌面使用者名稱（可選）"
+    },
+    {
+      "name": "conn_desktop_user_placeholder",
+      "value": "桌面使用者名稱"
+    },
+    {
+      "name": "conn_desktop_password_label",
+      "value": "桌面密碼（可選）"
+    },
+    {
+      "name": "conn_desktop_password_placeholder",
+      "value": "桌面密碼（可選）"
+    },
+    {
+      "name": "conn_save_desktop_password",
+      "value": "儲存桌面密碼"
+    },
+    {
+      "name": "conn_edit_tab_basic",
+      "value": "基本"
+    },
+    {
+      "name": "conn_mac_mode_title",
+      "value": "Mac 鍵盤模式"
+    },
+    {
+      "name": "conn_mac_mode_label",
+      "value": "Mac 鍵盤模式"
+    },
+    {
+      "name": "conn_ssh_title",
+      "value": "SSH 隧道"
+    },
+    {
+      "name": "conn_ssh_enabled_hint",
+      "value": "透過 SSH 伺服器轉發到桌面時，在這裡配置。"
+    },
+    {
+      "name": "conn_ssh_disabled_hint",
+      "value": "需要透過 SSH 轉發建立連線時，在這裡配置 SSH 資訊。"
+    },
+    {
+      "name": "panel_session_setup",
+      "value": "會話準備"
+    },
+    {
+      "name": "panel_session_setup_desc",
+      "value": "連線引數、最近會話和認證資訊都收納在這裡。連線成功後會自動收起，不遮擋遠端畫布。"
+    },
+    {
+      "name": "panel_clipboard_title",
+      "value": "剪貼簿"
+    },
+    {
+      "name": "panel_display_screen_layout",
+      "value": "螢幕布局"
+    },
+    {
+      "name": "panel_connection_session",
+      "value": "會話面板"
+    },
+    {
+      "name": "panel_more_operations",
+      "value": "更多操作"
+    },
+    {
+      "name": "more_clipboard_label",
+      "value": "剪貼簿"
+    },
+    {
+      "name": "more_panel_desc",
+      "value": "低頻操作收納在這裡，避免長期佔據主畫布。"
+    },
+    {
+      "name": "clipboard_panel_action_desc",
+      "value": "將本地文字傳送到遠端，或主動請求遠端剪貼簿同步到系統。"
+    },
+    {
+      "name": "clipboard_local_cache_label",
+      "value": "本地快取：%1$s"
+    },
+    {
+      "name": "clipboard_remote_cache_label",
+      "value": "遠端快取：%1$s"
+    },
+    {
+      "name": "clipboard_none",
+      "value": "暫無"
+    },
+    {
+      "name": "clipboard_chars_count",
+      "value": "%1$d 字元"
+    },
+    {
+      "name": "clipboard_send_attempted",
+      "value": "已嘗試傳送本地剪貼簿"
+    },
+    {
+      "name": "clipboard_auth_failed",
+      "value": "剪貼簿授權失敗"
+    },
+    {
+      "name": "clipboard_fetch_label",
+      "value": "讀取遠端剪貼簿"
+    },
+    {
+      "name": "clipboard_fetch_attempted",
+      "value": "已請求遠端剪貼簿"
+    },
+    {
+      "name": "display_panel_switch_desc",
+      "value": "切換到全部螢幕、單獨螢幕或分屏概覽。分屏概覽下會自動保持控制模式。"
+    },
+    {
+      "name": "display_monitor_window_desc",
+      "value": "可將每個遠端螢幕拆成獨立視窗，便於拖到本地不同顯示器。"
+    },
+    {
+      "name": "display_monitor_windows_opened_count",
+      "value": "已開啟 %1$d 個顯示視窗，可拖到本地不同顯示器上。"
+    },
+    {
+      "name": "display_total_canvas_desc",
+      "value": "遠端總畫布：%1$d×%2$d。自動檢測容易被桌布、純色背景、空白區域誤導，不對時可直接手動改。"
+    },
+    {
+      "name": "display_layout_locked_hint",
+      "value": "已確認佈局會優先保持不變；只有你重新檢測、切換比例候選或手動編輯後才會覆蓋。"
+    },
+    {
+      "name": "display_redetect",
+      "value": "重新檢測"
+    },
+    {
+      "name": "display_remember_layout",
+      "value": "記住當前佈局"
+    },
+    {
+      "name": "display_split_to_windows",
+      "value": "拆分多視窗顯示"
+    },
+    {
+      "name": "display_close_windows_button",
+      "value": "關閉顯示視窗"
+    },
+    {
+      "name": "display_copy_result",
+      "value": "複製當前結果"
+    },
+    {
+      "name": "display_new_dual",
+      "value": "新建雙屏"
+    },
+    {
+      "name": "display_dragging_screen_n",
+      "value": "正在拖拽定義螢幕 %1$d"
+    },
+    {
+      "name": "display_manual_tuning_count",
+      "value": "當前正在手動微調 %1$d 個螢幕，可直接記住這組座標"
+    },
+    {
+      "name": "display_saved_layout_count",
+      "value": "當前已記住 %1$d 個螢幕座標，可重新檢測後覆蓋"
+    },
+    {
+      "name": "display_detected_screens_count",
+      "value": "當前檢測到 %1$d 個螢幕，請先核對標註再記住座標"
+    },
+    {
+      "name": "display_screen_n_with_rect",
+      "value": "螢幕 %1$d：%2$s"
+    },
+    {
+      "name": "display_bootstrapping",
+      "value": "正在載入桌面畫面..."
+    },
+    {
+      "name": "status_on",
+      "value": "已開啟"
+    },
+    {
+      "name": "status_off",
+      "value": "已關閉"
+    },
+    {
+      "name": "about_company_info",
+      "value": "公司資訊"
+    },
+    {
+      "name": "about_team",
+      "value": "開發團隊"
+    },
+    {
+      "name": "about_business_label",
+      "value": "商務合作"
+    },
+    {
+      "name": "about_email_action",
+      "value": "寫郵件"
+    },
+    {
+      "name": "ssh_auth_password_label",
+      "value": "密碼登入"
+    },
+    {
+      "name": "ssh_auth_key_label",
+      "value": "金鑰登入"
+    },
+    {
+      "name": "ssh_login_method",
+      "value": "登入方式"
+    },
+    {
+      "name": "ssh_private_key_passphrase_optional",
+      "value": "私鑰口令（可選）"
+    },
+    {
+      "name": "ssh_public_key_path_optional",
+      "value": "公鑰路徑（可選）"
+    },
+    {
+      "name": "ssh_remote_specify_target",
+      "value": "單獨指定桌面目標"
+    },
+    {
+      "name": "ssh_remote_default_hint",
+      "value": "預設預填為遠端 127.0.0.1。只有需要從 SSH 伺服器再轉發到其他內網主機時，才修改這裡。"
+    },
+    {
+      "name": "ssh_reuse_desktop_creds",
+      "value": "重用桌面賬號密碼"
+    },
+    {
+      "name": "ssh_separate_ssh_info",
+      "value": "單獨填寫 SSH 賬號資訊"
+    },
+    {
+      "name": "ssh_desc_separate",
+      "value": "SSH 賬號資訊可以與桌面賬號不同。"
+    },
+    {
+      "name": "ssh_reuse_user_prefix",
+      "value": "跟隨基本頁賬號：%1$s"
+    },
+    {
+      "name": "ssh_reuse_waiting_user",
+      "value": "等待複用基本頁中的桌面使用者名稱"
+    },
+    {
+      "name": "ssh_reuse_account_prefix",
+      "value": "當前複用基本頁中的桌面使用者名稱：%1$s"
+    },
+    {
+      "name": "ssh_reuse_waiting_user_password",
+      "value": "等待複用基本頁中的桌面使用者名稱和密碼"
+    },
+    {
+      "name": "ssh_inherited_user_prefix",
+      "value": "跟隨基本頁賬號：%1$s"
+    },
+    {
+      "name": "ssh_waiting_for_desktop_user",
+      "value": "等待複用基本頁中的桌面使用者名稱"
+    },
+    {
+      "name": "ssh_inherited_user_desc_ok",
+      "value": "當前欄位由基本頁\"賬號\"接管；關閉上方複用開關後可單獨填寫。"
+    },
+    {
+      "name": "ssh_inherited_user_desc_waiting",
+      "value": "當前欄位由基本頁\"賬號\"接管；先在基本頁填寫後，這裡會自動同步。"
+    },
+    {
+      "name": "ssh_inherited_field_ssh_user",
+      "value": "SSH 使用者名稱"
+    },
+    {
+      "name": "ssh_inherited_field_ssh_password",
+      "value": "SSH 密碼"
+    },
+    {
+      "name": "ssh_inherited_password_ok",
+      "value": "已複用基本頁中的桌面密碼"
+    },
+    {
+      "name": "ssh_inherited_password_waiting",
+      "value": "等待複用基本頁中的桌面密碼"
+    },
+    {
+      "name": "ssh_inherited_password_desc_ok",
+      "value": "當前欄位由基本頁\"密碼\"接管；關閉上方複用開關後可單獨填寫。"
+    },
+    {
+      "name": "ssh_inherited_password_desc_waiting",
+      "value": "當前欄位由基本頁\"密碼\"接管；先在基本頁填寫後，這裡會自動同步。"
+    },
+    {
+      "name": "ssh_reuse_password_msg_ok",
+      "value": "SSH 密碼跟隨基本頁中的桌面密碼。"
+    },
+    {
+      "name": "ssh_reuse_password_msg_waiting",
+      "value": "請先在基本頁填寫桌面密碼。"
+    },
+    {
+      "name": "ssh_separate_password_msg",
+      "value": "如果 SSH 使用獨立密碼，可單獨填寫。"
+    },
+    {
+      "name": "tool_scroll_slow",
+      "value": "慢"
+    },
+    {
+      "name": "tool_scroll_medium",
+      "value": "中"
+    },
+    {
+      "name": "tool_scroll_fast",
+      "value": "快"
+    },
+    {
+      "name": "devtools_pixel_format",
+      "value": "畫素格式：%1$s"
+    },
+    {
+      "name": "devtools_byte_order",
+      "value": "位元組順序：%1$d"
+    },
+    {
+      "name": "devtools_refresh_attempted",
+      "value": "已請求重新整理畫面"
+    },
+    {
+      "name": "ssh_strict_host_key_check",
+      "value": "嚴格校驗主機指紋"
+    },
+    {
+      "name": "ssh_placeholder_hint",
+      "value": "開啟 SSH 後，這裡會出現伺服器、認證方式、埠、安全校驗和目標覆蓋等設定。"
+    },
+    {
+      "name": "ssh_private_key_path_placeholder",
+      "value": "私鑰路徑，例如 /data/storage/el2/base/files/id_ed25519"
+    },
+    {
+      "name": "ssh_password_placeholder",
+      "value": "SSH 密碼"
+    },
+    {
+      "name": "ssh_port_placeholder",
+      "value": "SSH 埠"
+    },
+    {
+      "name": "ssh_known_hosts_path_placeholder",
+      "value": "known_hosts 路徑（開啟嚴格校驗時必填）"
+    },
+    {
+      "name": "ssh_remote_host_placeholder",
+      "value": "預設預填 127.0.0.1；需要其他內網主機時再修改"
+    },
+    {
+      "name": "ssh_remote_port_placeholder",
+      "value": "埠"
+    },
+    {
+      "name": "ssh_tunnel_config_failed",
+      "value": "SSH 隧道配置失敗"
+    },
+    {
+      "name": "conn_address_placeholder_with_ssh",
+      "value": "例如 192.168.1.2:5900；不單獨指定目標時會使用這裡"
+    },
+    {
+      "name": "monitor_coords_placeholder",
+      "value": "x,y,w,h"
+    },
+    {
+      "name": "monitor_drag_select_screen",
+      "value": "請框選螢幕 %1$d"
+    },
+    {
+      "name": "viewer_password_not_saved",
+      "value": "未儲存密碼"
+    },
+    {
+      "name": "debug_turn_on",
+      "value": "開啟除錯"
+    },
+    {
+      "name": "debug_turn_off",
+      "value": "關閉除錯"
+    },
+    {
+      "name": "devtools_hide_entry",
+      "value": "收起開發者工具入口"
+    },
+    {
+      "name": "conn_ssh_route_enabled_label",
+      "value": "已開啟 SSH 隧道"
+    },
+    {
+      "name": "conn_ssh_route_disabled_label",
+      "value": "直接連線"
+    },
+    {
+      "name": "conn_ssh_route_enabled_hint",
+      "value": "先連線 SSH 伺服器，再轉發到目標桌面。"
+    },
+    {
+      "name": "conn_ssh_route_disabled_hint",
+      "value": "預設直接連線目標桌面，需要時再開啟 SSH。"
+    },
+    {
+      "name": "conn_ssh_server_placeholder",
+      "value": "SSH 伺服器，例如 bastion.example.com"
+    },
+    {
+      "name": "agreement_content_load_failed",
+      "value": "協議內容載入失敗，請稍後重試。"
+    },
+    {
+      "name": "conn_route_dialog_ssh",
+      "value": "路徑：%1$s\nVNC：%2$s\nSSH：%3$s"
+    },
+    {
+      "name": "conn_route_dialog_direct",
+      "value": "路徑：%1$s\nVNC：%2$s\n%3$s"
+    },
+    {
+      "name": "agreement_privacy_policy",
+      "value": "隱私協議"
+    },
+    {
+      "name": "agreement_user_agreement",
+      "value": "使用者協議"
+    }
+  ]
+}
