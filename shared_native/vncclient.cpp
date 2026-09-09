@@ -717,6 +717,15 @@ int vncclient_disconnect(vncclient_handle* client)
   if (!client->impl.sock)
     return 0;
 
+  // 先立即双向关闭套接字，中断任何阻塞中的收发（如对端卡死时
+  // releaseAllKeys/flush 可能长时间阻塞在 send 上），保证断开流程快速返回。
+  try {
+    if (client->impl.sock) {
+      ::shutdown(client->impl.sock->getFd(), SHUT_RDWR);
+    }
+  } catch (std::exception&) {
+  }
+
   try {
     if (client->impl.conn) {
       client->impl.conn->releaseAllKeys();

@@ -152,6 +152,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -160,6 +161,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -205,15 +207,6 @@ internal class ViewerViewModel(application: android.app.Application) : androidx.
     override fun onCleared() {
         super.onCleared()
         session.close()
-    }
-}
-
-private fun Bitmap?.safeRecycle() {
-    if (this != null && !isRecycled) {
-        try {
-            recycle()
-        } catch (_: Throwable) {
-        }
     }
 }
 
@@ -725,6 +718,13 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     private val stepScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var stepJob: Job? = null
 
+    // 原生 disconnect/destroy 可能长时间阻塞（等互斥锁、网络发送缓冲），
+    // 必须在独立单线程上串行执行，绝不能占用主线程，否则按返回键会 ANR。
+    private val nativeTeardownExecutor = Executors.newSingleThreadExecutor()
+    private val nativeTeardownScope =
+        CoroutineScope(SupervisorJob() + nativeTeardownExecutor.asCoroutineDispatcher())
+    private var teardownJob: Job? = null
+
     // 连接断开时的回调（在 Main 线程调用）
     var onDisconnected: ((errorMsg: String) -> Unit)? = null
 
@@ -754,6 +754,8 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         if (connecting) {
             return false
         }
+        // 等待上一次异步断开彻底完成，避免残留的清理动作误杀新连接
+        teardownJob?.join()
         connecting = true
         lastError = ""
         serverName = ""
@@ -778,46 +780,10 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
             securityLevel = if (connected) client.getSecurityLevel() else 0
             lastError = client.getLastError()
             if (connected) {
-                val now = System.currentTimeMillis()
-                connectedAtTs = now
-                lastFramebufferUpdateTs = now
-                serverName = client.getServerName().trim()
-                publishState { bootstrapping = true }
-                client.requestUpdate(incremental = false)
-                val fbInfo = client.getFramebufferInfo()
-                var accLeft = Int.MAX_VALUE
-                var accTop = Int.MAX_VALUE
-                var accRight = 0
-                var accBottom = 0
-                var receivedFirstUpdate = false
-                var damageCoversFullFramebuffer = false
-                var attempts = 0
-                while (attempts < 256 && !(receivedFirstUpdate && damageCoversFullFramebuffer)) {
-                    val prc = client.process()
-                    if (prc != 0) {
-                        publishState { bootstrapping = false }
-                        return false
-                    }
-                    val dmg = client.consumeDamage()
-                    if (dmg != null) {
-                        updateFrame(forceFull = false)
-                        accLeft = minOf(accLeft, dmg.x)
-                        accTop = minOf(accTop, dmg.y)
-                        accRight = maxOf(accRight, dmg.x + dmg.width)
-                        accBottom = maxOf(accBottom, dmg.y + dmg.height)
-                    }
-                    receivedFirstUpdate = client.hasReceivedFirstUpdate()
-                    damageCoversFullFramebuffer =
-                        fbInfo.width > 0 && fbInfo.height > 0 &&
-                        accLeft <= 0 && accTop <= 0 &&
-                        accRight >= fbInfo.width && accBottom >= fbInfo.height
-                    if (!damageCoversFullFramebuffer) {
-                        attempts++
-                        delay(5)
-                    }
+                // 引导阶段的原生调用（首帧解码等）可能耗时，放到 IO 线程执行，避免阻塞主线程
+                if (!bootstrapFirstFrame()) {
+                    return false
                 }
-                updateFrame(forceFull = true)
-                publishState { bootstrapping = false }
                 startStepLoop()
             }
             connected
@@ -828,6 +794,51 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         } finally {
             connecting = false
         }
+    }
+
+    // 在 IO 线程等待并解码首帧完整更新，原生调用可能阻塞较久，绝不能放在主线程
+    private suspend fun bootstrapFirstFrame(): Boolean = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        connectedAtTs = now
+        lastFramebufferUpdateTs = now
+        serverName = client.getServerName().trim()
+        publishState { bootstrapping = true }
+        client.requestUpdate(incremental = false)
+        val fbInfo = client.getFramebufferInfo()
+        var accLeft = Int.MAX_VALUE
+        var accTop = Int.MAX_VALUE
+        var accRight = 0
+        var accBottom = 0
+        var receivedFirstUpdate = false
+        var damageCoversFullFramebuffer = false
+        var attempts = 0
+        while (attempts < 256 && !(receivedFirstUpdate && damageCoversFullFramebuffer)) {
+            val prc = client.process()
+            if (prc != 0) {
+                publishState { bootstrapping = false }
+                return@withContext false
+            }
+            val dmg = client.consumeDamage()
+            if (dmg != null) {
+                updateFrame(forceFull = false)
+                accLeft = minOf(accLeft, dmg.x)
+                accTop = minOf(accTop, dmg.y)
+                accRight = maxOf(accRight, dmg.x + dmg.width)
+                accBottom = maxOf(accBottom, dmg.y + dmg.height)
+            }
+            receivedFirstUpdate = client.hasReceivedFirstUpdate()
+            damageCoversFullFramebuffer =
+                fbInfo.width > 0 && fbInfo.height > 0 &&
+                accLeft <= 0 && accTop <= 0 &&
+                accRight >= fbInfo.width && accBottom >= fbInfo.height
+            if (!damageCoversFullFramebuffer) {
+                attempts++
+                delay(5)
+            }
+        }
+        updateFrame(forceFull = true)
+        publishState { bootstrapping = false }
+        true
     }
 
     private fun startStepLoop() {
@@ -979,13 +990,17 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     }
 
     fun disconnect() {
-        try {
-            client.disconnect()
-        } catch (_: Throwable) {
-        }
-        try {
-            client.clearSshTunnel()
-        } catch (_: Throwable) {
+        // 原生断开需要抢互斥锁（读线程可能正持有锁解码大帧）并向对端发送数据，
+        // 可能耗时数秒，必须在后台执行；主线程只同步更新 UI 状态。
+        teardownJob = nativeTeardownScope.launch {
+            try {
+                client.disconnect()
+            } catch (_: Throwable) {
+            }
+            try {
+                client.clearSshTunnel()
+            } catch (_: Throwable) {
+            }
         }
         val sid = multiWindowSessionId
         if (sid.isNotBlank()) {
@@ -1006,7 +1021,9 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         lastFramebufferUpdateTs = 0L
         lastServerRefreshRequestTs = 0L
         publishState {
-            bitmap?.safeRecycle()
+            // 只解除引用，不能 recycle：ImageView/RenderThread 可能仍在绘制该
+            // bitmap，recycle 会导致 "trying to use a recycled bitmap" 崩溃；
+            // 内存由 GC 通过 NativeAllocationRegistry 回收。
             bitmap = null
             frameVersion += 1
         }
@@ -1016,11 +1033,13 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
         stepJob?.cancel()
         stepScope.cancel()
         disconnect()
-        try {
-            client.close()
-        } catch (_: Throwable) {
+        // 原生销毁同样可能阻塞（等锁），放到与断开相同的串行队列，保证先断开后销毁
+        teardownJob = nativeTeardownScope.launch {
+            try {
+                client.close()
+            } catch (_: Throwable) {
+            }
         }
-        bitmap?.safeRecycle()
         bitmap = null
     }
 
@@ -1096,6 +1115,10 @@ internal class ViewerSession(storageRoot: String) : AutoCloseable, KeySender {
     }
 
     private suspend fun updateFrame(forceFull: Boolean = false) {
+        // 已断开时不再重建/刷新帧，避免断开后残留协程又生成新 bitmap
+        if (!connected) {
+            return
+        }
         val info = client.getFramebufferInfo()
         maybeRefreshMonitors(info, forceFull, System.currentTimeMillis())
         if (info.width <= 0 || info.height <= 0) {
