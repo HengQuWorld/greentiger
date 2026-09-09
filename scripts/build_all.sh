@@ -11,6 +11,9 @@ OHOS_HAP_SRC="${OHOS_DIR}/entry/build/default/outputs/default/entry-default-sign
 OHOS_HAP_SRC_UNSIGNED="${OHOS_DIR}/entry/build/default/outputs/default/entry-default-unsigned.hap"
 OHOS_APP_SRC="${OHOS_DIR}/build/outputs/default/ohos_app-default-signed.app"
 OHOS_APP_SRC_UNSIGNED="${OHOS_DIR}/build/outputs/default/ohos_app-default-unsigned.app"
+ANDROID_CXX_DIR="${ANDROID_DIR}/app/.cxx"
+ANDROID_NATIVE_CACHE_DIR="${ANDROID_DIR}/app/.native-libs-cache"
+OHOS_CXX_DIR="${OHOS_DIR}/entry/.cxx"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$1"
@@ -101,6 +104,11 @@ collect_native_changes() {
   } | awk 'NF && !seen[$0]++'
 }
 
+clean_native_build_cache() {
+  log "Cleaning native build cache (forcing full C++ rebuild)"
+  rm -rf "${ANDROID_CXX_DIR}" "${ANDROID_NATIVE_CACHE_DIR}" "${OHOS_CXX_DIR}"
+}
+
 run_android_build() {
   local mode="$1"
   local skip_native="$2"
@@ -135,6 +143,10 @@ run_ohos_build() {
   if [[ -n "${native_changes}" ]]; then
     log "Native or CMake changes detected, running HarmonyOS clean first"
     printf '%s\n' "${native_changes}"
+    # hvigor clean only removes hvigor's build/ output, not the CMake/Ninja
+    # intermediates under entry/.cxx. Drop that dir too so stale .o files are
+    # not reused and the C++ sources are actually recompiled.
+    rm -rf "${OHOS_CXX_DIR}"
     (
       cd "${OHOS_DIR}"
       "${SCRIPT_DIR}/hvigorw-ohos.sh" clean
@@ -187,6 +199,7 @@ main() {
   local build_mode="debug"
   local platform="all"
   local skip_native="auto"
+  local force_native="false"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -205,6 +218,9 @@ main() {
       --full|full)
         skip_native="false"
         ;;
+      --clean-native|--force-native|--force)
+        force_native="true"
+        ;;
       --help|-h)
         printf 'Usage: %s [OPTIONS]\n\n' "${BASH_SOURCE[0]}"
         printf 'Options:\n'
@@ -213,6 +229,7 @@ main() {
         printf '  --ohos        Build HarmonyOS only\n'
         printf '  --skip-native Skip native CMake build (requires prior full build)\n'
         printf '  --full        Force full build including native code\n'
+        printf '  --clean-native Clean native build cache and force full C++ rebuild\n'
         printf '  --help        Show this help\n'
         printf '\nAuto-detection (default):\n'
         printf '  If neither --skip-native nor --full is specified, the script\n'
@@ -245,6 +262,12 @@ main() {
       skip_native="true"
       log "Auto-detect: no native code changes, skipping CMake build"
     fi
+  fi
+
+  if [[ "${force_native}" == "true" ]]; then
+    clean_native_build_cache
+    skip_native="false"
+    log "Forced native rebuild: native cache cleared"
   fi
 
   log "Repository root: ${REPO_ROOT}"
