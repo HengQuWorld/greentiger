@@ -104,7 +104,11 @@ collect_native_changes() {
 run_android_build() {
   local mode="$1"
   local skip_native="$2"
-  log "Building Android ${mode} package${skip_native:+ (skipping native)}"
+  local native_note=""
+  if [[ "${skip_native}" == "true" ]]; then
+    native_note=" (skipping native)"
+  fi
+  log "Building Android ${mode} package${native_note}"
   (
     cd "${ANDROID_DIR}"
     local gradle_args=()
