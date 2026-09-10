@@ -60,3 +60,7 @@ android_app/app/.native-libs-cache/
 android_app/captures/
 certs/
 log/
+.ohos-compat-sdk/
+.claude/
+.codewhale/
+.deepseek/
