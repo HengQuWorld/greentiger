@@ -841,10 +841,6 @@
       "value": "關閉顯示視窗"
     },
     {
-      "name": "monitor_manual_layout",
-      "value": "手動編輯螢幕布局"
-    },
-    {
       "name": "monitor_drag_mode_on",
       "value": "拖拽模式已開啟：請直接在全屏檢視中拖出矩形框或移動提手；也可繼續改 x,y,w,h。"
     },
@@ -881,8 +877,44 @@
       "value": "結束拖拽定義螢幕 %1$d"
     },
     {
-      "name": "monitor_new_three",
-      "value": "新建三屏"
+      "name": "monitor_add_screen",
+      "value": "新增螢幕"
+    },
+    {
+      "name": "monitor_draw_add_screen",
+      "value": "拖拽加螢"
+    },
+    {
+      "name": "monitor_edit_screens",
+      "value": "編輯螢幕"
+    },
+    {
+      "name": "monitor_edit_done",
+      "value": "完成"
+    },
+    {
+      "name": "monitor_remove_screen",
+      "value": "刪除本螢幕"
+    },
+    {
+      "name": "monitor_added_screen_n",
+      "value": "已新增螢幕 %1$d，可在下方拖拽或輸入調整"
+    },
+    {
+      "name": "monitor_removed_screen_n",
+      "value": "已刪除螢幕 %1$d"
+    },
+    {
+      "name": "monitor_draw_new_screen_hint",
+      "value": "請在畫面上拖拽繪製螢幕 %1$d 的範圍"
+    },
+    {
+      "name": "monitor_keep_one_screen",
+      "value": "至少保留一塊螢幕"
+    },
+    {
+      "name": "monitor_max_screen_count",
+      "value": "最多支援 %1$d 塊螢幕"
     },
     {
       "name": "monitor_reset_layout",
@@ -1571,14 +1603,6 @@
     {
       "name": "display_close_windows_button",
       "value": "關閉顯示視窗"
-    },
-    {
-      "name": "display_copy_result",
-      "value": "複製當前結果"
-    },
-    {
-      "name": "display_new_dual",
-      "value": "新建雙屏"
     },
     {
       "name": "display_dragging_screen_n",

@@ -90,6 +90,8 @@ interface MonitorAspectOption {
   ratio: number;
 }
 
+const MAX_MANUAL_MONITOR_COUNT = 8;
+
 interface WindowLike {
   setWindowTitle?: (t: string) => void;
   setFullScreen?: (enable: boolean) => void;
@@ -314,11 +316,13 @@ struct Viewer {
   @State private detectingDisplayLayout: boolean = false;
   @State private monitorLayoutLocked: boolean = false;
   @State private monitorWindowsOpenCount: number = 0;
+  @State private displayEditingScreens: boolean = false;
   private monitorSlots: VncRect[] = [];
   private readonly sharedSessionId: string = generateId();
   private manualDragActive: boolean = false;
   private manualDragStartX: number = 0;
   private manualDragStartY: number = 0;
+  private manualDragNewScreen: boolean = false;
   private creatingPm: boolean = false;
   private pmW: number = 0;
   private pmH: number = 0;
@@ -986,52 +990,131 @@ struct Viewer {
     return next;
   }
 
-  private createManualMonitorSeedRects(count: number): VncRect[] {
-    const preview = this.cloneMonitorRects(this.getDisplayPreviewMonitorRects());
-    if (preview.length === count) {
-      return this.sanitizeManualMonitorRects(preview);
-    }
-    if (this.fbW <= 0 || this.fbH <= 0 || count <= 0) {
-      return [];
-    }
-    const seed: VncRect[] = [];
-    let left = 0;
-    for (let i = 0; i < count; i++) {
-      const remaining = count - i;
-      const width = i === count - 1 ? (this.fbW - left) : Math.max(1, Math.floor((this.fbW - left) / remaining));
-      seed.push({
-        x: left,
-        y: 0,
-        w: width,
-        h: this.fbH
-      });
-      left += width;
-    }
-    return this.sanitizeManualMonitorRects(seed);
-  }
-
-  private beginManualMonitorLayout(count: number): void {
-    const seed = this.createManualMonitorSeedRects(count);
-    if (seed.length <= 0) {
-      this.showStatusBanner(this.s($r('app.string.monitor_no_monitors_detected')));
+  private ensureManualMonitorBase(): void {
+    if (this.manualMonitorRects.length > 0) {
       return;
     }
-    this.manualMonitorRects = seed;
-    this.syncManualMonitorDrafts();
-    this.monitorLayoutLocked = false;
-    this.showStatusBanner(this.s($r('app.string.monitor_manual_layout')));
-  }
-
-  private copyPreviewToManualMonitorLayout(): void {
     const preview = this.sanitizeManualMonitorRects(this.getDisplayPreviewMonitorRects());
-    if (preview.length <= 0) {
-      this.showStatusBanner(this.s($r('app.string.monitor_manual_input_hint')));
+    this.manualMonitorRects = preview;
+    this.monitorLayoutLocked = false;
+  }
+
+  private beginDisplayScreenEditing(): void {
+    this.ensureManualMonitorBase();
+    this.syncManualMonitorDrafts();
+    this.displayEditingScreens = true;
+  }
+
+  private appendManualMonitorRect(compact: boolean): number {
+    if (this.fbW <= 0 || this.fbH <= 0) {
+      return -1;
+    }
+    this.ensureManualMonitorBase();
+    const rects = this.manualMonitorRects.slice();
+    if (rects.length >= MAX_MANUAL_MONITOR_COUNT) {
+      this.showStatusBanner(this.s($r('app.string.monitor_max_screen_count'), MAX_MANUAL_MONITOR_COUNT));
+      return -1;
+    }
+    if (compact) {
+      // 拖拽加屏：先放入最小占位矩形，等待用户在主画面上拖出实际范围
+      const seed = this.clampManualMonitorRect({ x: 0, y: 0, w: 1, h: 1 });
+      if (!seed) {
+        return -1;
+      }
+      rects.push(seed);
+    } else {
+      // 追加：优先放到已有屏幕右侧/下方的空位，尺寸参考现有屏幕并吸附常见规格
+      let preferW = Math.max(1, Math.floor(this.fbW / 2));
+      let preferH = Math.max(1, Math.floor(this.fbH / 2));
+      let x = 0;
+      let y = 0;
+      if (rects.length > 0) {
+        let sumW = 0;
+        let sumH = 0;
+        let maxRight = 0;
+        let maxBottom = 0;
+        for (let i = 0; i < rects.length; i++) {
+          sumW += rects[i].w;
+          sumH += rects[i].h;
+          maxRight = Math.max(maxRight, rects[i].x + rects[i].w);
+          maxBottom = Math.max(maxBottom, rects[i].y + rects[i].h);
+        }
+        const avgW = Math.floor(sumW / rects.length);
+        const avgH = Math.floor(sumH / rects.length);
+        if (avgW > 0) {
+          preferW = avgW;
+        }
+        if (avgH > 0) {
+          preferH = avgH;
+        }
+        if (maxRight < this.fbW) {
+          x = maxRight;
+          y = 0;
+          preferW = Math.min(preferW, this.fbW - maxRight);
+        } else if (maxBottom < this.fbH) {
+          x = 0;
+          y = maxBottom;
+          preferH = Math.min(preferH, this.fbH - maxBottom);
+        } else {
+          x = Math.max(0, Math.floor((this.fbW - preferW) / 2));
+          y = Math.max(0, Math.floor((this.fbH - preferH) / 2));
+        }
+      }
+      const candidate = this.clampManualMonitorRect({ x: x, y: y, w: preferW, h: preferH });
+      if (!candidate) {
+        return -1;
+      }
+      const rounded = this.roundManualMonitorRectToCommonSize(candidate, rects.length);
+      rects.push(rounded);
+    }
+    const sanitized = this.sanitizeManualMonitorRects(rects);
+    if (sanitized.length !== rects.length) {
+      return -1;
+    }
+    this.manualMonitorRects = sanitized;
+    this.syncManualMonitorDrafts();
+    return this.manualMonitorRects.length - 1;
+  }
+
+  private addManualMonitor(): void {
+    const index = this.appendManualMonitorRect(false);
+    if (index >= 0) {
+      this.showStatusBanner(this.s($r('app.string.monitor_added_screen_n'), index + 1));
+    }
+  }
+
+  private addManualMonitorByDraw(): void {
+    const index = this.appendManualMonitorRect(true);
+    if (index < 0) {
       return;
     }
-    this.manualMonitorRects = preview;
+    this.manualDragMonitorIndex = index;
+    this.manualDragActive = false;
+    this.manualDragNewScreen = true;
+    this.setViewportMode('all');
+    this.closePanel();
+    this.showStatusBanner(this.s($r('app.string.monitor_draw_new_screen_hint'), index + 1));
+  }
+
+  private removeManualMonitorRect(index: number): void {
+    if (index < 0 || index >= this.manualMonitorRects.length) {
+      return;
+    }
+    if (this.manualMonitorRects.length <= 1) {
+      this.showStatusBanner(this.s($r('app.string.monitor_keep_one_screen')));
+      return;
+    }
+    const rects = this.manualMonitorRects.slice();
+    rects.splice(index, 1);
+    this.manualMonitorRects = this.sanitizeManualMonitorRects(rects);
     this.syncManualMonitorDrafts();
-    this.monitorLayoutLocked = false;
-    this.showStatusBanner(this.s($r('app.string.monitor_current_rect')));
+    if (this.manualDragMonitorIndex === index) {
+      this.manualDragMonitorIndex = -1;
+      this.manualDragActive = false;
+    } else if (this.manualDragMonitorIndex > index) {
+      this.manualDragMonitorIndex -= 1;
+    }
+    this.showStatusBanner(this.s($r('app.string.monitor_removed_screen_n'), index + 1));
   }
 
   private parseManualMonitorDraft(text: string): VncRect | null {
@@ -1166,6 +1249,7 @@ struct Viewer {
     if (index < 0 || index >= this.manualMonitorRects.length) {
       return;
     }
+    this.manualDragNewScreen = false;
     this.manualDragMonitorIndex = this.manualDragMonitorIndex === index ? -1 : index;
     this.manualDragActive = false;
     if (this.manualDragMonitorIndex >= 0) {
@@ -1173,6 +1257,18 @@ struct Viewer {
       this.closePanel();
       this.showStatusBanner(this.s($r('app.string.monitor_drag_define_screen'), index + 1));
     }
+  }
+
+  private finishManualMonitorDragSession(index: number): void {
+    this.finalizeManualMonitorDrag(index);
+    this.showStatusBanner(this.s($r('app.string.monitor_end_drag_screen'), index + 1));
+    // 画完松手即结束本次拖拽定义，避免停留在拖拽态需要手动退出
+    this.manualDragMonitorIndex = -1;
+    this.manualDragActive = false;
+    this.manualDragAction = 'none';
+    this.moveStartRect = null;
+    this.chromeVisible = false;
+    this.clearChromeAutoHide();
   }
 
   private handleDisplayPreviewTouch(ev: TouchEvent): void {
@@ -1202,18 +1298,14 @@ struct Viewer {
     }
     if (type === TouchType.Up) {
       if (this.manualDragActive) {
-        this.updateManualMonitorRectFromDrag(this.manualDragMonitorIndex, {
-          x: this.manualDragStartX,
-          y: this.manualDragStartY
-        }, fbPoint);
-        this.finalizeManualMonitorDrag(this.manualDragMonitorIndex);
-        this.showStatusBanner(this.s($r('app.string.monitor_end_drag_screen'), this.manualDragMonitorIndex + 1));
+        this.finishManualMonitorDragSession(this.manualDragMonitorIndex);
       }
       this.manualDragActive = false;
       return;
     }
     if (type === TouchType.Cancel) {
       this.manualDragActive = false;
+      this.manualDragMonitorIndex = -1;
     }
   }
 
@@ -1230,7 +1322,11 @@ struct Viewer {
       const cy = overlayRect.y + overlayRect.h / 2;
       const dist = Math.hypot(localX - cx, localY - cy);
 
-      if (dist <= 44) {
+      if (this.manualDragNewScreen) {
+        // 拖拽加屏：首次按下强制进入画框，避免命中占位矩形中心被判定为移动
+        this.manualDragAction = 'draw';
+        this.manualDragNewScreen = false;
+      } else if (dist <= 44) {
         this.manualDragAction = 'move';
         this.moveStartRect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
       } else {
@@ -1292,8 +1388,7 @@ struct Viewer {
             y: this.manualDragStartY
           }, fbPoint);
         }
-        this.finalizeManualMonitorDrag(this.manualDragMonitorIndex);
-        this.showStatusBanner(this.s($r('app.string.monitor_end_drag_screen'), this.manualDragMonitorIndex + 1));
+        this.finishManualMonitorDragSession(this.manualDragMonitorIndex);
       }
       this.manualDragActive = false;
       this.manualDragAction = 'none';
@@ -1304,6 +1399,7 @@ struct Viewer {
       this.manualDragActive = false;
       this.manualDragAction = 'none';
       this.moveStartRect = null;
+      this.manualDragMonitorIndex = -1;
       return true;
     }
     return false;
@@ -1576,6 +1672,10 @@ struct Viewer {
   }
 
   private shouldRenderChrome(): boolean {
+    // 拖拽定义屏幕进行中：不显示导航工具栏，避免干扰画框操作与面板按钮
+    if (this.manualDragMonitorIndex >= 0) {
+      return false;
+    }
     return !this.connected ||
       this.panelMode !== 'none' ||
       this.editOpen ||
@@ -1623,6 +1723,7 @@ struct Viewer {
 
   private closePanel(): void {
     this.stopDisplayDetectionRetry();
+    this.displayEditingScreens = false;
     this.panelMode = 'none';
     this.scheduleChromeAutoHide();
   }
@@ -1632,10 +1733,15 @@ struct Viewer {
       this.closePanel();
       return;
     }
+    this.displayEditingScreens = false;
     this.panelMode = mode;
     if (mode === 'display') {
       this.beginDisplayDetectionRetry();
       this.prepareDisplayPanel();
+      // 拖拽定义进行中时直接回到编辑视图，方便点“结束拖拽”
+      if (this.manualDragMonitorIndex >= 0) {
+        this.displayEditingScreens = true;
+      }
     }
     this.revealChrome(true);
   }
@@ -1796,6 +1902,7 @@ struct Viewer {
   private shouldShowChromeHandle(): boolean {
     return this.connected &&
       this.panelMode === 'none' &&
+      this.manualDragMonitorIndex < 0 &&
       !this.editOpen &&
       !!this.pm &&
       !this.chromeVisible;
@@ -5635,66 +5742,198 @@ struct Viewer {
   @Builder
   private buildDisplayPanelBody(): void {
     Column({ space: 10 }) {
+      if (this.displayEditingScreens) {
+        this.buildDisplayScreenEditor();
+      } else {
+        this.buildDisplayPanelMainBody();
+      }
+    }
+    .width('100%');
+  }
+
+  @Builder
+  private buildDisplayPreviewImage(): void {
+    if (this.pm && this.getDisplayPreviewMonitorRects().length > 0 && this.fbW > 0 && this.fbH > 0) {
+      Stack() {
+        Image(this.pm)
+          .width(this.getDisplayPreviewImageMetrics().frame.w)
+          .height(this.getDisplayPreviewImageMetrics().frame.h)
+          .position({
+            x: this.getDisplayPreviewImageMetrics().frame.x,
+            y: this.getDisplayPreviewImageMetrics().frame.y
+          })
+          .interpolation(ImageInterpolation.High)
+        ForEach(this.getDisplayPreviewMonitorRects(), (m: VncRect, index: number) => {
+          Stack() {
+            Text(this.s($r('app.string.viewer_screen_label'), index + 1))
+              .fontSize(10)
+              .fontColor('#ffffff')
+              .padding({ left: 6, right: 6, top: 3, bottom: 3 })
+              .backgroundColor(this.manualDragMonitorIndex === index
+                ? 'rgba(239,68,68,0.92)'
+                : index === this.currentMonitorIndex
+                  ? 'rgba(20,184,166,0.92)'
+                  : 'rgba(245,158,11,0.92)')
+              .borderRadius(10)
+              .position({ x: 8, y: 8 })
+          }
+          .width(this.getDisplayPreviewRect(m).w)
+          .height(this.getDisplayPreviewRect(m).h)
+          .position({ x: this.getDisplayPreviewRect(m).x, y: this.getDisplayPreviewRect(m).y })
+          .border({
+            width: this.manualDragMonitorIndex === index ? 3 : 2,
+            color: this.manualDragMonitorIndex === index
+              ? '#ef4444'
+              : index === this.currentMonitorIndex
+                ? '#14b8a6'
+                : '#f59e0b'
+          })
+          .borderRadius(10)
+        }, (m: VncRect, index: number) => `${index}:${m.x},${m.y},${m.w},${m.h}:preview`);
+        if (this.manualDragMonitorIndex >= 0) {
+          Text(this.s($r('app.string.display_dragging_screen_n'), this.manualDragMonitorIndex + 1))
+            .fontSize(11)
+            .fontColor('#ffffff')
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .backgroundColor('rgba(239,68,68,0.92)')
+            .borderRadius(12)
+            .position({ x: 10, y: 10 });
+        }
+      }
+      .width(this.getDisplayPreviewContainer().w)
+      .height(this.getDisplayPreviewContainer().h)
+      .clip(true)
+      .backgroundColor('#000000')
+      .border({ width: 1, color: this.cBorder })
+      .borderRadius(14)
+      .onTouch((ev: TouchEvent) => this.handleDisplayPreviewTouch(ev))
+      .alignSelf(ItemAlign.Center);
+    }
+  }
+
+  @Builder
+  private buildDisplayScreenEditor(): void {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        Text($r('app.string.monitor_edit_screens'))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.cTextPrimary)
+          .layoutWeight(1);
+        Button($r('app.string.monitor_edit_done'))
+          .height(32)
+          .fontSize(12)
+          .fontColor(this.cPrimary)
+          .backgroundColor(this.cSurfaceAlt)
+          .border({ width: 1, color: this.cBorder })
+          .borderRadius(14)
+          .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+          .onClick(() => {
+            this.pulseChromeInteraction();
+            this.displayEditingScreens = false;
+          });
+      }
+      .width('100%');
+      this.buildDisplayPreviewImage();
+      Text(this.manualDragMonitorIndex >= 0
+        ? this.s($r('app.string.monitor_drag_mode_on'))
+        : this.s($r('app.string.monitor_manual_input_hint')))
+        .fontSize(11)
+        .lineHeight(16)
+        .fontColor(this.cTextSecondary)
+        .width('100%');
+      ForEach(this.manualMonitorDrafts, (draft: string, index: number) => {
+        Column({ space: 6 }) {
+          Text($r('app.string.viewer_screen_label', index + 1))
+            .fontSize(11)
+            .fontColor(this.cTextSecondary)
+            .width('100%');
+          TextInput({ text: draft, placeholder: $r('app.string.monitor_coords_placeholder') })
+            .onChange((value: string) => this.updateManualMonitorDraft(index, value))
+            .width('100%');
+          Text($r('app.string.monitor_current_rect', this.formatMonitorRectLabel(this.manualMonitorRects[index])))
+            .fontSize(10)
+            .fontColor(this.cTextMuted)
+            .width('100%');
+          Row({ space: 8 }) {
+            Button(this.manualDragMonitorIndex === index ? this.s($r('app.string.monitor_end_drag')) : this.s($r('app.string.monitor_drag_define')))
+              .layoutWeight(1)
+              .height(32)
+              .fontSize(11)
+              .fontColor(this.manualDragMonitorIndex === index ? '#ffffff' : this.cPrimary)
+              .backgroundColor(this.manualDragMonitorIndex === index ? '#ef4444' : this.cSurfaceAlt)
+              .border({ width: this.manualDragMonitorIndex === index ? 0 : 1, color: this.cBorder })
+              .borderRadius(10)
+              .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+              .onClick(() => {
+                this.pulseChromeInteraction();
+                this.beginManualMonitorRectDrag(index);
+              });
+            Button($r('app.string.monitor_remove_screen'))
+              .layoutWeight(1)
+              .height(32)
+              .fontSize(11)
+              .fontColor('#ef4444')
+              .backgroundColor(this.cSurfaceAlt)
+              .border({ width: 1, color: 'rgba(239,68,68,0.55)' })
+              .borderRadius(10)
+              .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+              .onClick(() => {
+                this.pulseChromeInteraction();
+                this.removeManualMonitorRect(index);
+              });
+          }
+          .width('100%');
+        }
+        .width('100%')
+        .padding(10)
+        .backgroundColor(this.cSurfaceAlt)
+        .border({ width: 1, color: this.cBorder })
+        .borderRadius(12);
+      }, (draft: string, index: number) => `manual:${index}:${draft}`);
+      Row({ space: 8 }) {
+        Button($r('app.string.monitor_add_screen'))
+          .layoutWeight(1)
+          .height(34)
+          .fontSize(12)
+          .fontColor(this.cPrimary)
+          .backgroundColor(this.cSurfaceAlt)
+          .border({ width: 1, color: this.cBorder })
+          .borderRadius(12)
+          .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+          .onClick(() => {
+            this.pulseChromeInteraction();
+            this.addManualMonitor();
+          });
+        Button($r('app.string.monitor_clear_manual'))
+          .layoutWeight(1)
+          .height(34)
+          .fontSize(12)
+          .fontColor('#ef4444')
+          .backgroundColor(this.cSurfaceAlt)
+          .border({ width: 1, color: 'rgba(239,68,68,0.55)' })
+          .borderRadius(12)
+          .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+          .onClick(() => {
+            this.pulseChromeInteraction();
+            this.clearManualMonitorLayout();
+            this.displayEditingScreens = false;
+            this.showStatusBanner(this.s($r('app.string.monitor_exit_manual')));
+          });
+      }
+      .width('100%');
+    }
+    .width('100%');
+  }
+
+  @Builder
+  private buildDisplayPanelMainBody(): void {
+    Column({ space: 10 }) {
       Text($r('app.string.display_panel_switch_desc'))
         .fontSize(12)
         .fontColor(this.cTextSecondary)
         .width('100%');
-      if (this.pm && this.getDisplayPreviewMonitorRects().length > 0 && this.fbW > 0 && this.fbH > 0) {
-        Stack() {
-          Image(this.pm)
-            .width(this.getDisplayPreviewImageMetrics().frame.w)
-            .height(this.getDisplayPreviewImageMetrics().frame.h)
-            .position({
-              x: this.getDisplayPreviewImageMetrics().frame.x,
-              y: this.getDisplayPreviewImageMetrics().frame.y
-            })
-            .interpolation(ImageInterpolation.High)
-          ForEach(this.getDisplayPreviewMonitorRects(), (m: VncRect, index: number) => {
-            Stack() {
-              Text(this.s($r('app.string.viewer_screen_label'), index + 1))
-                .fontSize(10)
-                .fontColor('#ffffff')
-                .padding({ left: 6, right: 6, top: 3, bottom: 3 })
-                .backgroundColor(this.manualDragMonitorIndex === index
-                  ? 'rgba(239,68,68,0.92)'
-                  : index === this.currentMonitorIndex
-                    ? 'rgba(20,184,166,0.92)'
-                    : 'rgba(245,158,11,0.92)')
-                .borderRadius(10)
-                .position({ x: 8, y: 8 })
-            }
-            .width(this.getDisplayPreviewRect(m).w)
-            .height(this.getDisplayPreviewRect(m).h)
-            .position({ x: this.getDisplayPreviewRect(m).x, y: this.getDisplayPreviewRect(m).y })
-            .border({
-              width: this.manualDragMonitorIndex === index ? 3 : 2,
-              color: this.manualDragMonitorIndex === index
-                ? '#ef4444'
-                : index === this.currentMonitorIndex
-                  ? '#14b8a6'
-                  : '#f59e0b'
-            })
-            .borderRadius(10)
-          }, (m: VncRect, index: number) => `${index}:${m.x},${m.y},${m.w},${m.h}:preview`);
-          if (this.manualDragMonitorIndex >= 0) {
-            Text(this.s($r('app.string.display_dragging_screen_n'), this.manualDragMonitorIndex + 1))
-              .fontSize(11)
-              .fontColor('#ffffff')
-              .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-              .backgroundColor('rgba(239,68,68,0.92)')
-              .borderRadius(12)
-              .position({ x: 10, y: 10 });
-          }
-        }
-        .width(this.getDisplayPreviewContainer().w)
-        .height(this.getDisplayPreviewContainer().h)
-        .clip(true)
-        .backgroundColor('#000000')
-        .border({ width: 1, color: this.cBorder })
-        .borderRadius(14)
-        .onTouch((ev: TouchEvent) => this.handleDisplayPreviewTouch(ev))
-        .alignSelf(ItemAlign.Center);
-      }
+      this.buildDisplayPreviewImage();
       if (this.getDisplayPreviewMonitorRects().length > 0) {
         Text(
           this.isUsingManualMonitorLayout()
@@ -5730,8 +5969,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
-            .fontColor(this.cPrimaryFg)
-            .backgroundColor(this.cPrimary)
+            .fontColor(this.cPrimary)
+            .backgroundColor(this.cSurfaceAlt)
+            .border({ width: 1, color: this.cBorder })
             .borderRadius(14)
             .enabled(this.getDisplayPreviewMonitorRects().length > 1)
             .opacity(this.getDisplayPreviewMonitorRects().length > 1 ? 1 : 0.5)
@@ -5754,8 +5994,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
-            .fontColor(this.cPrimaryFg)
-            .backgroundColor(this.cPrimary)
+            .fontColor(this.cPrimary)
+            .backgroundColor(this.cSurfaceAlt)
+            .border({ width: 1, color: this.cBorder })
             .borderRadius(14)
             .enabled(this.getDisplayPreviewMonitorRects().length > 1 && this.connected)
             .opacity(this.getDisplayPreviewMonitorRects().length > 1 && this.connected ? 1 : 0.5)
@@ -5796,7 +6037,7 @@ struct Viewer {
             .width('100%');
         }
         Row({ space: 8 }) {
-          Button($r('app.string.display_copy_result'))
+          Button($r('app.string.monitor_add_screen'))
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
@@ -5804,14 +6045,12 @@ struct Viewer {
             .backgroundColor(this.cSurfaceAlt)
             .border({ width: 1, color: this.cBorder })
             .borderRadius(12)
-            .enabled(this.getDisplayPreviewMonitorRects().length > 0)
-            .opacity(this.getDisplayPreviewMonitorRects().length > 0 ? 1 : 0.5)
             .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
             .onClick(() => {
               this.pulseChromeInteraction();
-              this.copyPreviewToManualMonitorLayout();
+              this.addManualMonitor();
             });
-          Button($r('app.string.display_new_dual'))
+          Button($r('app.string.monitor_draw_add_screen'))
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
@@ -5822,9 +6061,9 @@ struct Viewer {
             .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
             .onClick(() => {
               this.pulseChromeInteraction();
-              this.beginManualMonitorLayout(2);
+              this.addManualMonitorByDraw();
             });
-          Button($r('app.string.monitor_new_three'))
+          Button($r('app.string.monitor_edit_screens'))
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
@@ -5835,69 +6074,10 @@ struct Viewer {
             .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
             .onClick(() => {
               this.pulseChromeInteraction();
-              this.beginManualMonitorLayout(3);
+              this.beginDisplayScreenEditing();
             });
         }
         .width('100%');
-      }
-      if (this.isUsingManualMonitorLayout()) {
-        Text(this.manualDragMonitorIndex >= 0
-          ? this.s($r('app.string.monitor_drag_mode_on'))
-          : this.s($r('app.string.monitor_manual_input_hint')))
-          .fontSize(11)
-          .lineHeight(16)
-          .fontColor(this.cTextSecondary)
-          .width('100%');
-        ForEach(this.manualMonitorDrafts, (draft: string, index: number) => {
-          Column({ space: 6 }) {
-            Text($r('app.string.viewer_screen_label', index + 1))
-              .fontSize(11)
-              .fontColor(this.cTextSecondary)
-              .width('100%');
-            TextInput({ text: draft, placeholder: $r('app.string.monitor_coords_placeholder') })
-              .onChange((value: string) => this.updateManualMonitorDraft(index, value))
-              .width('100%');
-            Text($r('app.string.monitor_current_rect', this.formatMonitorRectLabel(this.manualMonitorRects[index])))
-              .fontSize(10)
-              .fontColor(this.cTextMuted)
-              .width('100%');
-            Row({ space: 8 }) {
-              Button(this.manualDragMonitorIndex === index ? this.s($r('app.string.monitor_end_drag')) : this.s($r('app.string.monitor_drag_define')))
-                .layoutWeight(1)
-                .height(32)
-                .fontSize(11)
-                .fontColor(this.manualDragMonitorIndex === index ? this.cPrimaryFg : this.cPrimary)
-                .backgroundColor(this.manualDragMonitorIndex === index ? this.cPrimary : this.cSurfaceAlt)
-                .border({ width: this.manualDragMonitorIndex === index ? 0 : 1, color: this.cBorder })
-                .borderRadius(10)
-                .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
-                .onClick(() => {
-                  this.pulseChromeInteraction();
-                  this.beginManualMonitorRectDrag(index);
-                });
-            }
-            .width('100%');
-          }
-          .width('100%')
-          .padding(10)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
-          .borderRadius(12);
-        }, (draft: string, index: number) => `manual:${index}:${draft}`);
-        Button($r('app.string.monitor_clear_manual'))
-          .width('100%')
-          .height(34)
-          .fontSize(12)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
-          .borderRadius(12)
-          .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
-          .onClick(() => {
-            this.pulseChromeInteraction();
-            this.clearManualMonitorLayout();
-            this.showStatusBanner(this.s($r('app.string.monitor_exit_manual')));
-          });
       }
       this.buildPanelAction({ label: this.s($r('app.string.monitor_all_screens')), primary: this.viewportMode === 'all', onClick: () => {
         this.setViewportMode('all');
@@ -6115,25 +6295,33 @@ struct Viewer {
             .width('100%')
             .padding({ left: 16, right: 16, top: 16, bottom: 12 });
 
-            Column() {
-              if (this.panelMode === 'clipboard') {
-                this.buildClipboardPanelBody();
-              } else if (this.panelMode === 'display') {
-                this.buildDisplayPanelBody();
-              } else if (this.panelMode === 'security') {
-                this.buildSecurityPanelBody();
-              } else if (this.panelMode === 'developer') {
-                this.buildDeveloperPanelBody();
-              } else if (this.panelMode === 'connection') {
-                this.buildControls();
-              } else {
-                this.buildMorePanelBody();
+            Scroll() {
+              Column() {
+                if (this.panelMode === 'clipboard') {
+                  this.buildClipboardPanelBody();
+                } else if (this.panelMode === 'display') {
+                  this.buildDisplayPanelBody();
+                } else if (this.panelMode === 'security') {
+                  this.buildSecurityPanelBody();
+                } else if (this.panelMode === 'developer') {
+                  this.buildDeveloperPanelBody();
+                } else if (this.panelMode === 'connection') {
+                  this.buildControls();
+                } else {
+                  this.buildMorePanelBody();
+                }
               }
+              .width('100%')
+              .padding({ left: 16, right: 16, bottom: 16 });
             }
             .width('100%')
-            .padding({ left: 16, right: 16, bottom: 16 });
+            .layoutWeight(1)
+            .scrollable(this.manualDragMonitorIndex >= 0 ? ScrollDirection.None : ScrollDirection.Vertical)
+            .scrollBar(BarState.Auto)
+            .edgeEffect(EdgeEffect.Spring);
           }
           .width(Math.max(320, Math.min(560, this.windowW > 0 ? this.windowW - 24 : 560)))
+          .constraintSize({ maxHeight: '86%' })
           .backgroundColor(this.panelMode === 'connection' ? this.cSurface : this.cSurfaceAlt)
           .border({ width: 1, color: this.cBorder })
           .borderRadius(22)
@@ -6292,7 +6480,8 @@ struct Viewer {
 
   @Builder
   private buildNavigationPad(): void {
-    if (this.connected && this.interactionMode === 'control' && this.showNavigationPad && !this.isUsingManualMonitorLayout()) {
+    if (this.connected && this.interactionMode === 'control' && this.showNavigationPad &&
+      this.panelMode === 'none' && !this.isUsingManualMonitorLayout()) {
       Column({ space: 4 }) {
         Row({ space: 8 }) {
           this.buildNavButton('zoomOut')
