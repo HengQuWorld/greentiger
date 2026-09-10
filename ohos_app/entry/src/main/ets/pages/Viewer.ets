@@ -5635,11 +5635,14 @@ struct Viewer {
       .shadow({ radius: 20, color: 'rgba(0,0,0,0.18)', offsetX: 0, offsetY: 6 })
       .constraintSize({ maxWidth: '100%' })
 
-      if (this.canUseZoomViewer()) {
+      if (this.canUseZoomViewer() || this.canOpenDisplayPanel()) {
         Row({ space: 8 }) {
-          this.buildDockButton({ label: this.s($r('app.string.dock_zoom_out')), active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(-this.zoomStepScale) });
-          this.buildDockButton({ label: this.s($r('app.string.dock_magnification')) + ' ' + this.getZoomButtonLabel(), active: this.zoomScale > 1.05, enabled: this.viewportMode !== 'tile', onClick: () => this.quickToggleViewerZoom() });
-          this.buildDockButton({ label: this.s($r('app.string.dock_zoom_in')), active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(this.zoomStepScale) });
+          // tile（分屏概览）模式下缩放无意义，仅保留 Display 按钮用于切换/退出多屏模式
+          if (this.canUseZoomViewer()) {
+            this.buildDockButton({ label: this.s($r('app.string.dock_zoom_out')), active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(-this.zoomStepScale) });
+            this.buildDockButton({ label: this.s($r('app.string.dock_magnification')) + ' ' + this.getZoomButtonLabel(), active: this.zoomScale > 1.05, enabled: this.viewportMode !== 'tile', onClick: () => this.quickToggleViewerZoom() });
+            this.buildDockButton({ label: this.s($r('app.string.dock_zoom_in')), active: false, enabled: this.viewportMode !== 'tile', onClick: () => this.stepViewerZoom(this.zoomStepScale) });
+          }
           if (this.canOpenDisplayPanel()) {
             this.buildDockButton({ label: this.s($r('app.string.dock_screen')), active: this.panelMode === 'display', enabled: true, onClick: () => this.togglePanel('display') });
           }
