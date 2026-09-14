@@ -323,6 +323,7 @@ struct Viewer {
   private manualDragStartX: number = 0;
   private manualDragStartY: number = 0;
   private manualDragNewScreen: boolean = false;
+  private manualDragBackupRect: VncRect | null = null;
   private creatingPm: boolean = false;
   private pmW: number = 0;
   private pmH: number = 0;
@@ -812,7 +813,7 @@ struct Viewer {
     this.manualMonitorRects = [];
     this.manualMonitorDrafts = [];
     this.manualDragMonitorIndex = -1;
-    this.manualDragActive = false;
+    this.resetManualDragStrokeState();
   }
 
   private getCommonMonitorAspectOptions(): MonitorAspectOption[] {
@@ -1251,7 +1252,7 @@ struct Viewer {
     }
     this.manualDragNewScreen = false;
     this.manualDragMonitorIndex = this.manualDragMonitorIndex === index ? -1 : index;
-    this.manualDragActive = false;
+    this.resetManualDragStrokeState();
     if (this.manualDragMonitorIndex >= 0) {
       this.setViewportMode('all');
       this.closePanel();
@@ -1259,16 +1260,31 @@ struct Viewer {
     }
   }
 
-  private finishManualMonitorDragSession(index: number): void {
-    this.finalizeManualMonitorDrag(index);
-    this.showStatusBanner(this.s($r('app.string.monitor_end_drag_screen'), index + 1));
-    // 画完松手即结束本次拖拽定义，避免停留在拖拽态需要手动退出
-    this.manualDragMonitorIndex = -1;
+  private resetManualDragStrokeState(): void {
     this.manualDragActive = false;
     this.manualDragAction = 'none';
     this.moveStartRect = null;
-    this.chromeVisible = false;
-    this.clearChromeAutoHide();
+    this.manualDragBackupRect = null;
+  }
+
+  private finishManualMonitorDragSession(index: number): void {
+    this.finalizeManualMonitorDrag(index);
+    this.showStatusBanner(this.s($r('app.string.monitor_end_drag_screen'), index + 1));
+    // 拖拽定义是"模式"而非"一笔"：松手仅结束本次笔画，保持定义模式、覆盖层与
+    // 底部悬浮操作条，让用户继续拖拽或切换编号定义其他屏；退出经操作条"完成"
+    this.resetManualDragStrokeState();
+  }
+
+  private cancelManualMonitorDragSession(): void {
+    // 系统打断（Cancel）：还原本次按下前的屏幕矩形，仍停留在拖拽定义模式
+    const index = this.manualDragMonitorIndex;
+    if (index >= 0 && index < this.manualMonitorRects.length && this.manualDragBackupRect) {
+      const rects = this.manualMonitorRects.slice();
+      rects[index] = this.manualDragBackupRect;
+      this.manualMonitorRects = this.sanitizeManualMonitorRects(rects);
+      this.syncManualMonitorDrafts();
+    }
+    this.resetManualDragStrokeState();
   }
 
   private handleDisplayPreviewTouch(ev: TouchEvent): void {
@@ -1286,6 +1302,8 @@ struct Viewer {
       this.manualDragActive = true;
       this.manualDragStartX = fbPoint.x;
       this.manualDragStartY = fbPoint.y;
+      const backup = this.manualMonitorRects[this.manualDragMonitorIndex];
+      this.manualDragBackupRect = backup ? { x: backup.x, y: backup.y, w: backup.w, h: backup.h } : null;
       this.updateManualMonitorRectFromDrag(this.manualDragMonitorIndex, fbPoint, fbPoint);
       return;
     }
@@ -1300,12 +1318,10 @@ struct Viewer {
       if (this.manualDragActive) {
         this.finishManualMonitorDragSession(this.manualDragMonitorIndex);
       }
-      this.manualDragActive = false;
       return;
     }
     if (type === TouchType.Cancel) {
-      this.manualDragActive = false;
-      this.manualDragMonitorIndex = -1;
+      this.cancelManualMonitorDragSession();
     }
   }
 
@@ -1336,6 +1352,8 @@ struct Viewer {
       this.manualDragActive = true;
       this.manualDragStartX = fbPoint.x;
       this.manualDragStartY = fbPoint.y;
+      const backup = this.manualMonitorRects[this.manualDragMonitorIndex];
+      this.manualDragBackupRect = backup ? { x: backup.x, y: backup.y, w: backup.w, h: backup.h } : null;
 
       if (this.manualDragAction === 'draw') {
         this.updateManualMonitorRectFromDrag(this.manualDragMonitorIndex, fbPoint, fbPoint);
@@ -1390,16 +1408,10 @@ struct Viewer {
         }
         this.finishManualMonitorDragSession(this.manualDragMonitorIndex);
       }
-      this.manualDragActive = false;
-      this.manualDragAction = 'none';
-      this.moveStartRect = null;
       return true;
     }
     if (type === TouchType.Cancel) {
-      this.manualDragActive = false;
-      this.manualDragAction = 'none';
-      this.moveStartRect = null;
-      this.manualDragMonitorIndex = -1;
+      this.cancelManualMonitorDragSession();
       return true;
     }
     return false;
@@ -1518,6 +1530,8 @@ struct Viewer {
       this.showStatusBanner(this.s($r('app.string.monitor_reset_layout')));
       return;
     }
+    // 单一屏不支持手动布局（面板"记住布局"在预览屏数 <= 1 时禁用，因此这里通常不可达）；
+    // 保留作为兜底：清洗后仅剩一屏时只应用不落盘，也不锁定布局
     this.showStatusBanner(this.s($r('app.string.monitor_only_one_detected')));
   }
 
@@ -1672,7 +1686,8 @@ struct Viewer {
   }
 
   private shouldRenderChrome(): boolean {
-    // 拖拽定义屏幕进行中：不显示导航工具栏，避免干扰画框操作与面板按钮
+    // 拖拽定义屏幕进行中：不显示导航工具栏（缩放/导航），页面出口由
+    // 底部悬浮操作条（屏幕编号 + 完成）提供
     if (this.manualDragMonitorIndex >= 0) {
       return false;
     }
@@ -5391,6 +5406,23 @@ struct Viewer {
 
           Blank().layoutWeight(1);
 
+          Button($r('app.string.action_cancel'))
+            .fontSize(12)
+            .height(28)
+            .fontColor('#ef4444')
+            .backgroundColor(this.cSurfaceAlt)
+            .border({ width: 1, color: 'rgba(239,68,68,0.55)' })
+            .borderRadius(14)
+            .onClick(() => {
+              // 放弃本次手动布局修改：清除手动矩形并退出定义模式，回到面板主视图查看还原后的布局
+              this.clearManualMonitorLayout();
+              if (this.panelMode !== 'display') {
+                this.togglePanel('display');
+              }
+              this.displayEditingScreens = false;
+              this.showStatusBanner(this.s($r('app.string.monitor_exit_manual')));
+            });
+
           Button($r('app.string.button_done'))
             .fontSize(12)
             .height(28)
@@ -5399,20 +5431,13 @@ struct Viewer {
             .border({ width: 1, color: this.cBorder })
             .borderRadius(14)
             .onClick(() => {
+              // 退出定义模式并回到编辑屏幕视图；布局保存统一由面板主视图"记住布局"完成
               this.manualDragMonitorIndex = -1;
-              this.togglePanel('display');
-            });
-
-          Button($r('app.string.action_save'))
-            .fontSize(12)
-            .height(28)
-            .fontColor('#ffffff')
-            .backgroundColor('#10b981')
-            .border({ width: 0 })
-            .borderRadius(14)
-            .onClick(() => {
-              this.manualDragMonitorIndex = -1;
-              this.confirmMonitorLayout();
+              this.resetManualDragStrokeState();
+              if (this.panelMode !== 'display') {
+                this.togglePanel('display');
+              }
+              this.displayEditingScreens = true;
             });
         }
         .width('92%')
