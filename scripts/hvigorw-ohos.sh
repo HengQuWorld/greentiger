@@ -103,6 +103,19 @@ main() {
 
   sdk_dir="$(resolve_sdk_dir)"
   hvigor_bin="$(resolve_hvigor_bin "${sdk_dir}")"
+
+  # hvigor-ohos-plugin（如 build-native-with-ninja）使用 fs.rmdirSync(path,{recursive:true})，
+  # 该选项在 Node 20+ 已移除（ERR_INVALID_ARG_VALUE）。hvigorw 未设置 NODE_HOME 时会回退到
+  # PATH 中的系统 Node（过新则触发构建失败）。强制使用 DevEco 自带 Node，与 IDE 内构建一致；
+  # 用户显式导出的 NODE_HOME 优先。
+  if [[ -z "${NODE_HOME:-}" ]]; then
+    local deveco_node_home
+    deveco_node_home="$(cd "${sdk_dir}/.." && pwd)/tools/node"
+    if [[ -x "${deveco_node_home}/bin/node" ]]; then
+      export NODE_HOME="${deveco_node_home}"
+    fi
+  fi
+
   stop_daemon_once_per_sdk "${sdk_dir}" "${hvigor_bin}"
 
   # Default to --no-daemon to avoid hvigor daemon IPC deadlock issues.

@@ -206,6 +206,9 @@ main() {
       --release|release)
         build_mode="release"
         ;;
+      --debug|debug)
+        build_mode="debug"
+        ;;
       --android|android)
         platform="android"
         ;;
@@ -225,6 +228,7 @@ main() {
         printf 'Usage: %s [OPTIONS]\n\n' "${BASH_SOURCE[0]}"
         printf 'Options:\n'
         printf '  --release     Release build (default: debug)\n'
+        printf '  --debug       Debug build (default)\n'
         printf '  --android     Build Android only\n'
         printf '  --ohos        Build HarmonyOS only\n'
         printf '  --skip-native Skip native CMake build (requires prior full build)\n'
