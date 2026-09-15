@@ -2,6 +2,29 @@
 
 翠虎远程桌面是一款跨平台 VNC 远程桌面客户端，支持 HarmonyOS 和 Android 平台，提供稳定、安全的远程桌面连接体验。
 
+## 预览
+
+以下预览为鸿蒙端实际效果，安卓端同样支持。
+
+### 多显示器场景
+
+![多显示器场景](docs/media/multi-monitor.gif)
+
+### 多窗口并列显示
+
+![多窗口并列显示](docs/media/multi-window.gif)
+
+## 下载安装
+
+应用已上架主流应用市场，可在手机端直接搜索「翠虎远程桌面」安装：
+
+- **HarmonyOS**：华为应用市场（AppGallery），[查看应用详情](https://appgallery.huawei.com/app/detail?id=com.hengqutiandi.vncviewer)
+- **Android**：小米应用商店，[查看应用详情](https://app.mi.com/details?id=com.hengqutiandi.vncviewer)
+
+> 华为应用市场网页版仅提供详情预览，实际安装请在 HarmonyOS 5 及以上设备的应用市场内搜索。
+
+也可以从源码自行构建安装，参见[构建](#构建)。
+
 ## 功能特性
 
 - **VNC 远程桌面**：通过标准 VNC 协议连接并控制远程计算机，支持画面查看、鼠标、触控与键盘输入。
