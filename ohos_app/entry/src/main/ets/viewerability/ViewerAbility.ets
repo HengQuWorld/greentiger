@@ -35,6 +35,12 @@ interface WindowLike {
 }
 
 export default class ViewerAbility extends UIAbility {
+  onDestroy(): void {
+    // 通知主页（同进程 AppStorage）：查看器会话已结束，可尝试主动促评
+    const seq = (AppStorage.get<number>('vncViewerSessionEndSeq') ?? 0) + 1;
+    AppStorage.setOrCreate<number>('vncViewerSessionEndSeq', seq);
+  }
+
   onWindowStageCreate(windowStage: window.WindowStage): void {
     try {
       windowStage.loadContent('pages/Viewer');

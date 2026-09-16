@@ -30,6 +30,20 @@ import {
   saveEdgeClampEnabled
 } from '../utils/ViewerCommonUtils';
 
+import {
+  RATING_RESULT_ALREADY_RATED,
+  RATING_RESULT_COMMENT_LIMIT,
+  RATING_RESULT_DIALOG_SHOWN,
+  RATING_RESULT_FAILED,
+  RATING_RESULT_NEED_SIGNIN,
+  markRatingNeverAsk,
+  markRatingPrompted,
+  openAppGalleryReviewPage,
+  recordRatingSession,
+  requestAppRating,
+  shouldPromptRating
+} from '../utils/AppRating';
+
 import vnc from 'libvncviewer.so';
 
 interface VncFramebufferInfo {
@@ -243,6 +257,10 @@ struct Index {
   @State private authOpen: boolean = false;
   @State private devToolsEnabled: boolean = false;
   private didShowPanelGestureHint: boolean = false;
+  private ratingPromptBusy: boolean = false;
+  private viewerEndPromptTimer: number = -1;
+  // 查看器窗口关闭的进程内信号：自由多窗口下主窗口不会重新触发 onPageShow
+  @StorageLink('vncViewerSessionEndSeq') @Watch('onViewerSessionEnded') private viewerSessionEndSeq: number = 0;
   private readonly cTextPrimary: string = '#1c1917';
   private readonly cTextMuted: string = '#292524';
   private readonly cTextSecondary: string = '#57534e';
@@ -316,6 +334,85 @@ struct Index {
         console.error('Failed to copy text', e);
         this.toast(this.s($r('app.string.copy_failed')));
       });
+  }
+
+  // 主动拉起应用内评分弹窗；弹窗不可用时说明原因并兜底跳应用市场写评论页
+  private async requestRating(): Promise<void> {
+    const ctx = this.getHostContext();
+    const result = await requestAppRating(ctx);
+    if (result === RATING_RESULT_DIALOG_SHOWN) {
+      this.toast(this.s($r('app.string.rating_thanks')));
+      return;
+    }
+    if (result === RATING_RESULT_ALREADY_RATED) {
+      // 先让用户看到原因，再跳应用市场写评论页核实或修改
+      this.toast(this.s($r('app.string.rating_already_done')));
+      setTimeout(() => {
+        void openAppGalleryReviewPage(ctx);
+      }, 1200);
+      return;
+    }
+
+    // 配额超限 / 未登录华为账号 / 其它失败：说明原因并兜底跳写评论页
+    const opened = await openAppGalleryReviewPage(ctx);
+    if (!opened) {
+      const failedRes = result === RATING_RESULT_COMMENT_LIMIT
+        ? $r('app.string.rating_comment_limit')
+        : $r('app.string.rating_failed');
+      this.toast(this.s(failedRes));
+      return;
+    }
+    const hintRes = result === RATING_RESULT_COMMENT_LIMIT
+      ? $r('app.string.rating_limit_opened')
+      : result === RATING_RESULT_NEED_SIGNIN
+        ? $r('app.string.rating_need_signin')
+        : $r('app.string.rating_store_opened');
+    this.toast(this.s(hintRes));
+  }
+
+  // 累计成功连接达到里程碑后，回到主页时询问一次是否愿意评价
+  private async maybePromptRating(): Promise<void> {
+    if (this.ratingPromptBusy) return;
+    if (this.connected || this.connecting || this.editOpen) return;
+    this.ratingPromptBusy = true;
+    try {
+      const ctx = this.getHostContext();
+      if (!ctx) return;
+      if (!(await shouldPromptRating(ctx))) return;
+      const pa = this.getUIContext()?.getPromptAction?.();
+      if (!pa?.showDialog) return;
+      const res = await pa.showDialog({
+        title: this.s($r('app.string.rating_prompt_title')),
+        message: this.s($r('app.string.rating_prompt_desc')),
+        buttons: [
+          { text: this.s($r('app.string.rating_prompt_decline')), color: this.cTextSecondary },
+          { text: this.s($r('app.string.rating_prompt_never')), color: this.cTextTertiary },
+          { text: this.s($r('app.string.rating_prompt_accept')), color: this.cPrimary }
+        ]
+      });
+      await markRatingPrompted(ctx);
+      if (res.index === 1) {
+        await markRatingNeverAsk(ctx);
+        return;
+      }
+      if (res.index !== 2) return;
+      await this.requestRating();
+    } catch (e) {
+      console.error('Failed to prompt rating', e);
+    } finally {
+      this.ratingPromptBusy = false;
+    }
+  }
+
+  // 查看器窗口关闭后，稍等窗口切换完成再尝试主动促评
+  private onViewerSessionEnded(): void {
+    if (this.viewerEndPromptTimer >= 0) {
+      clearTimeout(this.viewerEndPromptTimer);
+    }
+    this.viewerEndPromptTimer = setTimeout(() => {
+      this.viewerEndPromptTimer = -1;
+      void this.maybePromptRating();
+    }, 800);
   }
 
   @State viewerW: number = 1;
@@ -392,6 +489,7 @@ struct Index {
   onPageShow(): void {
     if (this.connected || this.connecting || this.editOpen) return;
     void this.loadConnections();
+    void this.maybePromptRating();
   }
 
   private async loadConnections() {
@@ -899,6 +997,34 @@ struct Index {
     }
     .alignItems(VerticalAlign.Top)
     .onClick(() => this.openAgreementDialog(mode));
+  }
+
+  @Builder
+  private buildAboutRatingRow(): void {
+    Row() {
+      Text($r('app.string.about_rating_label'))
+        .fontSize(13)
+        .fontColor(this.cTextSecondary)
+        .width(80);
+      Column() {
+        Text($r('app.string.about_rating_title'))
+          .fontSize(15)
+          .lineHeight(22)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.cPrimary);
+        Text($r('app.string.about_rating_action'))
+          .fontSize(12)
+          .lineHeight(18)
+          .fontColor(this.cTextSecondary)
+          .margin({ top: 2 });
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start);
+    }
+    .alignItems(VerticalAlign.Top)
+    .onClick(() => {
+      void this.requestRating();
+    });
   }
 
   @Builder
@@ -1577,6 +1703,7 @@ struct Index {
         return;
       }
       this.touchConnectionUsed();
+      void recordRatingSession(this.getHostContext());
       await this.bootstrapFirstFrame();
       if (!this.connected) return;
       this.refreshFramebufferInfo();
@@ -1629,6 +1756,7 @@ struct Index {
   }
 
   private disconnect(preserveError: boolean = false): void {
+    const wasConnected = this.connected;
     this.stopLoop();
     (vnc as VncClient).disconnect?.();
     this.connected = false;
@@ -1645,6 +1773,7 @@ struct Index {
     this.fbH = 0;
     this.fbStride = 0;
     if (!preserveError) this.lastError = '';
+    if (wasConnected && !preserveError) void this.maybePromptRating();
   }
 
   private mapToRemoteX(x: number): number {
@@ -3490,6 +3619,31 @@ struct Index {
                 .borderRadius(16);
               }
               .padding({ left: 24, right: 24, top: 20 });
+
+              Column() {
+                Row() {
+                  Text('★')
+                    .fontSize(16)
+                    .fontColor('#d99a2b')
+                    .margin({ right: 8 });
+                  Text($r('app.string.about_feedback'))
+                    .fontSize(14)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(this.cTextPrimary);
+                }
+                .alignItems(VerticalAlign.Center)
+                .margin({ bottom: 16 });
+
+                Column() {
+                  this.buildAboutRatingRow();
+                }
+                .width('100%')
+                .padding(18)
+                .backgroundColor(this.cSurface)
+                .border({ width: 1, color: this.cBorder })
+                .borderRadius(16);
+              }
+              .padding({ left: 24, right: 24, top: 16 });
 
               Column() {
                 Row() {

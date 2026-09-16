@@ -20,6 +20,7 @@ import {
 import { keySymFromEvent } from '../utils/KeyMap';
 import { SharedViewerRect, VncClientLike, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
 import { InteractFrameThrottle, saveCtrlPassthrough } from '../utils/ViewerCommonUtils';
+import { recordRatingSession } from '../utils/AppRating';
 import { VncClient } from 'libvncviewer.so';
 
 interface ClickEvent {
@@ -4194,6 +4195,7 @@ struct Viewer {
       this.lastFramebufferUpdateTs = now;
       this.lastServerRefreshRequestTs = 0;
       this.touchConnectionUsed();
+      void recordRatingSession(this.getHostContext());
       await this.bootstrapFirstFrame();
       if (!this.connected) return;
       this.maybeAdoptServerNameAsConnName();

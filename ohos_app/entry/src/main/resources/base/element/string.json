@@ -489,6 +489,23 @@
     { "name": "conn_route_dialog_ssh", "value": "Route: %1$s\nVNC: %2$s\nSSH: %3$s" },
     { "name": "conn_route_dialog_direct", "value": "Route: %1$s\nVNC: %2$s\n%3$s" },
     { "name": "agreement_privacy_policy", "value": "Privacy Policy" },
-    { "name": "agreement_user_agreement", "value": "User Agreement" }
+    { "name": "agreement_user_agreement", "value": "User Agreement" },
+
+    { "name": "about_feedback", "value": "Rating & Feedback" },
+    { "name": "about_rating_label", "value": "Rating" },
+    { "name": "about_rating_title", "value": "Rate GreenTiger on AppGallery" },
+    { "name": "about_rating_action", "value": "Your review helps more remote desktop users find us" },
+    { "name": "rating_prompt_title", "value": "Enjoying GreenTiger?" },
+    { "name": "rating_prompt_desc", "value": "Your review helps more people who need remote desktop discover it and helps us keep improving." },
+    { "name": "rating_prompt_accept", "value": "Rate now" },
+    { "name": "rating_prompt_decline", "value": "Maybe later" },
+    { "name": "rating_prompt_never", "value": "Don't ask again" },
+    { "name": "rating_thanks", "value": "Thanks for your support!" },
+    { "name": "rating_already_done", "value": "You've already rated. Opening the AppGallery review page…" },
+    { "name": "rating_comment_limit", "value": "The rating dialog limit is reached. Please try again later." },
+    { "name": "rating_limit_opened", "value": "Rating dialog limit reached. Opened the AppGallery review page." },
+    { "name": "rating_need_signin", "value": "Please sign in to your HUAWEI ID to rate. Opened the AppGallery review page." },
+    { "name": "rating_store_opened", "value": "In-app rating is unavailable. Opened the AppGallery review page." },
+    { "name": "rating_failed", "value": "Couldn't open the review page. Please try again later." }
   ]
 }

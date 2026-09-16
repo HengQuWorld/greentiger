@@ -489,6 +489,23 @@
     { "name": "conn_route_dialog_ssh", "value": "路径：%1$s\nVNC：%2$s\nSSH：%3$s" },
     { "name": "conn_route_dialog_direct", "value": "路径：%1$s\nVNC：%2$s\n%3$s" },
     { "name": "agreement_privacy_policy", "value": "隐私协议" },
-    { "name": "agreement_user_agreement", "value": "用户协议" }
+    { "name": "agreement_user_agreement", "value": "用户协议" },
+
+    { "name": "about_feedback", "value": "评价与反馈" },
+    { "name": "about_rating_label", "value": "用户评价" },
+    { "name": "about_rating_title", "value": "在应用市场为翠虎评分" },
+    { "name": "about_rating_action", "value": "你的评价会帮助更多需要远程桌面的用户" },
+    { "name": "rating_prompt_title", "value": "喜欢翠虎远程桌面吗？" },
+    { "name": "rating_prompt_desc", "value": "你的评价能帮助更多需要远程桌面的用户发现它，也能帮助我们持续改进。" },
+    { "name": "rating_prompt_accept", "value": "去评价" },
+    { "name": "rating_prompt_decline", "value": "稍后再说" },
+    { "name": "rating_prompt_never", "value": "不再提示" },
+    { "name": "rating_thanks", "value": "感谢你的支持！" },
+    { "name": "rating_already_done", "value": "你已经评价过了，已为你打开应用市场评价页" },
+    { "name": "rating_comment_limit", "value": "评价弹窗次数已达上限，请稍后再试" },
+    { "name": "rating_limit_opened", "value": "评价弹窗次数已达上限，已为你打开应用市场评价页" },
+    { "name": "rating_need_signin", "value": "请先登录华为账号后评价，已为你打开应用市场评价页" },
+    { "name": "rating_store_opened", "value": "应用内评价暂不可用，已为你打开应用市场评价页" },
+    { "name": "rating_failed", "value": "暂时无法打开评价页，请稍后再试" }
   ]
 }

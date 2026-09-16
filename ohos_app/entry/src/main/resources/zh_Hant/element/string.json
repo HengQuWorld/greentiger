@@ -1887,6 +1887,70 @@
     {
       "name": "agreement_user_agreement",
       "value": "使用者協議"
+    },
+    {
+      "name": "about_feedback",
+      "value": "評價與回饋"
+    },
+    {
+      "name": "about_rating_label",
+      "value": "使用者評價"
+    },
+    {
+      "name": "about_rating_title",
+      "value": "在應用市場為翠虎評分"
+    },
+    {
+      "name": "about_rating_action",
+      "value": "你的評價能幫助更多需要遠端桌面的使用者"
+    },
+    {
+      "name": "rating_prompt_title",
+      "value": "喜歡翠虎遠端桌面嗎？"
+    },
+    {
+      "name": "rating_prompt_desc",
+      "value": "你的評價能幫助更多需要遠端桌面的使用者發現它，也能幫助我們持續改進。"
+    },
+    {
+      "name": "rating_prompt_accept",
+      "value": "前往評價"
+    },
+    {
+      "name": "rating_prompt_decline",
+      "value": "稍後再說"
+    },
+    {
+      "name": "rating_prompt_never",
+      "value": "不再提示"
+    },
+    {
+      "name": "rating_thanks",
+      "value": "感謝你的支持！"
+    },
+    {
+      "name": "rating_already_done",
+      "value": "你已經評價過了，已為你開啟應用市場評價頁"
+    },
+    {
+      "name": "rating_comment_limit",
+      "value": "評價彈窗次數已達上限，請稍後再試"
+    },
+    {
+      "name": "rating_limit_opened",
+      "value": "評價彈窗次數已達上限，已為你開啟應用市場評價頁"
+    },
+    {
+      "name": "rating_need_signin",
+      "value": "請先登入華為帳號後評價，已為你開啟應用市場評價頁"
+    },
+    {
+      "name": "rating_store_opened",
+      "value": "應用內評價暫不可用，已為你開啟應用市場評價頁"
+    },
+    {
+      "name": "rating_failed",
+      "value": "暫時無法開啟評價頁，請稍後再試"
     }
   ]
 }
