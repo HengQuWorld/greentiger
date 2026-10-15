@@ -73,9 +73,12 @@ greentiger-open/
 
 ### 前置条件
 
-- 鸿蒙端：DevEco Studio / hvigor 构建环境、HarmonyOS SDK
-- 安卓端：Android SDK、JDK 17+
+- 鸿蒙端：DevEco Studio / hvigor 构建环境、HarmonyOS SDK（脚本会自动定位 DevEco 自带 SDK，也可用 `OHOS_SDK_NATIVE` 指定）
+- 安卓端：Android SDK（含 NDK）、JDK 17–21（Kotlin 1.9.24 无法在更高版本 JDK 上运行，脚本会自动选中可用版本）
+- 首次构建需要联网：脚本会自动下载并交叉编译 Nettle 与 GnuTLS，产物存放在 `prebuilts/gnutls/`（已被 git 忽略，无需提交、可随时重建）
 - 确保已初始化 Git 子模块
+
+构建会先做工具链自检，打印 HarmonyOS SDK / Android NDK / Gradle JDK 的实际位置；缺失项会给出安装或配置提示，无需修改脚本。已知限制：GnuTLS 3.8.4 无法用 NDK 29+ 编译（新版 bionic 头已定义 `timezone_t`），脚本会优先选用可编译的旧版 NDK，机器上只有新版时会提示安装 26.1.10909125。
 
 ### 初始化
 
@@ -89,6 +92,8 @@ git submodule update --init --recursive
 ./scripts/build_all.sh          # Debug 模式
 ./scripts/build_all.sh release  # Release 模式
 ```
+
+首次构建会自动下载 Nettle 3.9 与 GnuTLS 3.8.4 源码（SHA-256 校验）并交叉编译为 `prebuilts/gnutls/` 下的静态库，需要几分钟；之后的构建会直接复用。指定其它 ABI 可用 `OHOS_ARCH`（鸿蒙：`arm64-v8a`/`x86_64`）与 `ANDROID_ABIS`（安卓：默认 `arm64-v8a x86_64`）。
 
 ### 分端构建
 

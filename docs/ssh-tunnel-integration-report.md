@@ -144,7 +144,14 @@
 
 - 选择 `mbedTLS` 作为 `libssh2` 后端。
 - 将 `libssh2` 与共享 VNC 客户端静态链接。
-- 在 HarmonyOS 环境下，如缺少 GnuTLS 预编译产物，则自动执行 `build_tools/gnutls/ohos/build.sh`。
+- 在 HarmonyOS 环境下校验 GnuTLS 预编译产物是否就绪；缺失时直接报错，不在此处触发编译。
+
+GnuTLS 预编译产物的生成由更早的环节负责：
+
+- `scripts/build_all.sh` 在构建前确保 `prebuilts/gnutls/ohos-<arch>` 就绪，缺失时调用 `build_tools/gnutls/ohos/build.sh`。
+- `ohos_app/entry/src/main/cpp/CMakeLists.txt`（以及安卓侧的 `android_app/app/src/main/cpp/CMakeLists.txt`）在预编译产物缺失时同样会现场调用对应脚本，保证直接使用 `hvigorw` / `gradlew` 构建也能成功。
+
+该脚本会自动下载 Nettle 3.9 与 GnuTLS 3.8.4 源码（SHA-256 校验）并交叉编译为静态库。之所以不在 `shared_native` 阶段编译：此时 `rfb` 已配置完毕，补建 GnuTLS 会导致 VeNCrypt/TLS 与 DH 安全类型被静默裁剪。
 
 ## 9. 一键构建入口
 
