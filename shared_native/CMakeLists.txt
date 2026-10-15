@@ -13,20 +13,13 @@ if(DEFINED CMAKE_SYSTEM_NAME AND CMAKE_SYSTEM_NAME STREQUAL "OHOS")
 endif()
 
 if(SHARED_NATIVE_IS_OHOS AND NOT EXISTS "${GNUTLS_PREBUILT_DIR}/lib/libgnutls.a")
-  message(STATUS "GnuTLS prebuilts not found. Downloading and compiling GnuTLS...")
-
-  get_filename_component(OHOS_SDK_NATIVE_PATH "${CMAKE_SYSROOT}/.." ABSOLUTE)
-
-  execute_process(
-    COMMAND env
-      "OHOS_SDK_NATIVE=${OHOS_SDK_NATIVE_PATH}"
-      bash "${REPO_ROOT}/build_tools/gnutls/ohos/build.sh"
-    WORKING_DIRECTORY "${REPO_ROOT}"
-    RESULT_VARIABLE GNUTLS_BUILD_RESULT
-  )
-  if(NOT GNUTLS_BUILD_RESULT EQUAL 0)
-    message(FATAL_ERROR "Failed to build GnuTLS. Check logs above.")
-  endif()
+  # Building the prebuilts here would be too late: rfb is already configured by
+  # the time this file runs, so a missing libgnutls.a silently drops the
+  # VeNCrypt/TLS and DH security types. The app-level CMakeLists.txt in
+  # ohos_app/entry/src/main/cpp bootstraps them before that point instead.
+  message(FATAL_ERROR
+    "Missing OHOS GnuTLS prebuilts at ${GNUTLS_PREBUILT_DIR}/lib/libgnutls.a. "
+    "Run build_tools/gnutls/ohos/build.sh (or ./scripts/build_all.sh) first.")
 endif()
 
 set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)

@@ -32,9 +32,29 @@ if(DEFINED CMAKE_SYSTEM_NAME AND CMAKE_SYSTEM_NAME STREQUAL "OHOS")
     message(FATAL_ERROR "Unsupported OHOS ABI for GnuTLS prebuilts: ${OHOS_GNUTLS_ARCH}")
   endif()
 
-  get_filename_component(GNUTLS_PREBUILT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../../../prebuilts/gnutls/${OHOS_GNUTLS_PREBUILT_NAME}" ABSOLUTE)
+  get_filename_component(REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../../../" ABSOLUTE)
+  get_filename_component(GNUTLS_PREBUILT_DIR "${REPO_ROOT}/prebuilts/gnutls/${OHOS_GNUTLS_PREBUILT_NAME}" ABSOLUTE)
   if(NOT EXISTS "${GNUTLS_PREBUILT_DIR}/lib/libgnutls.a")
-    message(FATAL_ERROR "Missing OHOS GnuTLS prebuilts for ${OHOS_GNUTLS_PREBUILT_NAME}. Build them with build_tools/gnutls/ohos/build.sh.")
+    # Mirror the Android native path: fetch and cross-compile the pinned Nettle
+    # and GnuTLS sources instead of failing a clean checkout. build_all.sh runs
+    # this step up front, so it is normally already satisfied here.
+    message(STATUS "Building OHOS GnuTLS prebuilts for ${OHOS_GNUTLS_PREBUILT_NAME} (build_tools/gnutls/ohos/build.sh)")
+    set(OHOS_GNUTLS_BUILD_ENV "OHOS_ARCH=${OHOS_GNUTLS_ARCH}")
+    if(DEFINED OHOS_SDK_NATIVE AND NOT "${OHOS_SDK_NATIVE}" STREQUAL "")
+      list(APPEND OHOS_GNUTLS_BUILD_ENV "OHOS_SDK_NATIVE=${OHOS_SDK_NATIVE}")
+    endif()
+    execute_process(
+      COMMAND env ${OHOS_GNUTLS_BUILD_ENV}
+        bash "${REPO_ROOT}/build_tools/gnutls/ohos/build.sh"
+      WORKING_DIRECTORY "${REPO_ROOT}"
+      RESULT_VARIABLE OHOS_GNUTLS_BUILD_RESULT
+    )
+    if(NOT OHOS_GNUTLS_BUILD_RESULT EQUAL 0)
+      message(FATAL_ERROR "Failed to build OHOS GnuTLS/Nettle for ${OHOS_GNUTLS_ARCH}. Check the log above.")
+    endif()
+  endif()
+  if(NOT EXISTS "${GNUTLS_PREBUILT_DIR}/lib/libgnutls.a")
+    message(FATAL_ERROR "Missing OHOS GnuTLS prebuilts for ${OHOS_GNUTLS_PREBUILT_NAME} at ${GNUTLS_PREBUILT_DIR}/lib/libgnutls.a")
   endif()
 
   set(GNUTLS_FOUND TRUE)
