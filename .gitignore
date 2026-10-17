@@ -21,6 +21,9 @@ install_manifest.txt
 # TigerVNC OHOS Client Build
 build-ohos-client/
 
+# Host-native test builds
+build/native-tests/
+
 # OHOS App Build and IDE
 ohos_app/.build-signing-mode
 .hvigor/

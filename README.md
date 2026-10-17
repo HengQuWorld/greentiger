@@ -125,6 +125,23 @@ cd android_app
 - 鸿蒙端：`.hap` / `.app` 包，位于 `ohos_app/build/outputs/`
 - 安卓端：`.apk` 包，位于 `android_app/app/build/outputs/apk/`
 
+### 原生测试
+
+`shared_native` 中与平台无关的逻辑有一套宿主机测试，只需要 C++17 编译器，不需要 HarmonyOS SDK、NDK 或真机：
+
+```bash
+./scripts/test_native.sh           # 配置、编译并运行
+./scripts/test_native.sh --clean   # 从干净目录重新构建
+```
+
+测试位于 `shared_native/tests/`，当前覆盖：
+
+- `pixel_convert`：帧缓冲像素格式转换。以改造前的逐像素实现为基准，对全部 byte order、通道交换、非对齐矩形和多宽度做逐字节比对；同时校验 alpha 恒为不透明、源缓冲区只读。
+- `monitor_segmentation`：多显示器分割。校验退化输入、矩形始终落在画面内、超宽画面切分与单窗口裁剪。
+- `ssh_tunnel_config`：SSH 隧道参数校验与默认值填充。
+
+新增可测试的原生逻辑时，把不依赖平台头文件和第三方库的实现放在 `shared_native/` 的独立源文件中，并在 `shared_native/tests/CMakeLists.txt` 里登记。
+
 ## 架构说明
 
 应用采用"共享原生 + 平台 UI"的分层架构：
