@@ -312,6 +312,71 @@ static bool NormalizeCopyRect(int fb_w, int fb_h, int x, int y, int w, int h, Da
   return true;
 }
 
+// The channel mapping is constant for a whole rect, so pick it once instead of
+// branching on every pixel. Each variant works on 32-bit words (load/permute/store)
+// so the compiler can emit NEON for the inner loop.
+//
+// Source layout is TigerVNC's little-endian RGB888-in-32bpp buffer, i.e. the four
+// bytes of a word are (sp[0], sp[1], sp[2], sp[3]). Destination words are written
+// as (dp[0], dp[1], dp[2], dp[3]) with dp[3] forced to 255.
+template <int kMode>
+static inline uint32_t ConvertPixelWord(uint32_t v)
+{
+  if (kMode == 0) {
+    // byteOrder 0/1 without R-B swap: (r,g,b,X) -> (r,g,b,255)
+    return (v & 0x00FFFFFFu) | 0xFF000000u;
+  }
+  if (kMode == 1) {
+    // byteOrder 0/1 with R-B swap: (r,g,b,X) -> (b,g,r,255)
+    return ((v >> 16) & 0x000000FFu) | (v & 0x0000FF00u) |
+           ((v & 0x000000FFu) << 16) | 0xFF000000u;
+  }
+  if (kMode == 2) {
+    // byteOrder 2/3 without R-B swap: channels start at sp[1]
+    return ((v >> 8) & 0x00FFFFFFu) | 0xFF000000u;
+  }
+  // byteOrder 2/3 with R-B swap
+  return ((v >> 24) & 0x000000FFu) | (((v >> 16) & 0x000000FFu) << 8) |
+         (((v >> 8) & 0x000000FFu) << 16) | 0xFF000000u;
+}
+
+template <int kMode>
+static void ConvertRectWords(const uint8_t* src, size_t src_stride,
+                             uint8_t* dst, size_t dst_stride,
+                             int width, int height)
+{
+  for (int y = 0; y < height; y++) {
+    const uint8_t* src_row = src + static_cast<size_t>(y) * src_stride;
+    uint8_t* dst_row = dst + static_cast<size_t>(y) * dst_stride;
+    for (int x = 0; x < width; x++) {
+      const size_t offset = static_cast<size_t>(x) * 4u;
+      uint32_t v = 0;
+      std::memcpy(&v, src_row + offset, sizeof(v));
+      const uint32_t out = ConvertPixelWord<kMode>(v);
+      std::memcpy(dst_row + offset, &out, sizeof(out));
+    }
+  }
+}
+
+static void ConvertRectPixels(const uint8_t* src, size_t src_stride,
+                              uint8_t* dst, size_t dst_stride,
+                              int width, int height,
+                              int32_t byte_order, bool want_bgra)
+{
+  // Anything outside 0..3 was historically treated as the last (b,g,r) branch.
+  int bo = (byte_order < 0 || byte_order > 3) ? 3 : static_cast<int>(byte_order);
+  const int swap = want_bgra ? 1 : 0;
+  // 0/1 share one channel layout, 2/3 share the shifted one.
+  const int mode = (bo < 2 ? 0 : 2) + ((bo & 1) ^ swap);
+
+  switch (mode) {
+    case 0: ConvertRectWords<0>(src, src_stride, dst, dst_stride, width, height); break;
+    case 1: ConvertRectWords<1>(src, src_stride, dst, dst_stride, width, height); break;
+    case 2: ConvertRectWords<2>(src, src_stride, dst, dst_stride, width, height); break;
+    default: ConvertRectWords<3>(src, src_stride, dst, dst_stride, width, height); break;
+  }
+}
+
 static napi_value CopyFrameRectRGBA(napi_env env, ClientState& st, int32_t byteOrder, int32_t pixelMapFormat,
                                     std::optional<DamageRect> rect)
 {
@@ -355,51 +420,10 @@ static napi_value CopyFrameRectRGBA(napi_env env, ClientState& st, int32_t byteO
   try {
     const size_t srcStride = static_cast<size_t>(std::max(0, stride));
     const size_t dstStride = static_cast<size_t>(copyRect.w) * 4u;
-
-    for (int y = 0; y < copyRect.h; y++) {
-      const size_t srcY = static_cast<size_t>(copyRect.y + y) * srcStride;
-      const size_t srcX = static_cast<size_t>(copyRect.x) * 4u;
-      const uint8_t* srcRow = rgba + srcY + srcX;
-      uint8_t* dstRow = dst + static_cast<size_t>(y) * dstStride;
-
-      for (int x = 0; x < copyRect.w; x++) {
-        const uint8_t* sp = srcRow + static_cast<size_t>(x) * 4u;
-        uint8_t* dp = dstRow + static_cast<size_t>(x) * 4u;
-
-        uint8_t r;
-        uint8_t g;
-        uint8_t b;
-        if (byteOrder == 0) {
-          r = sp[0];
-          g = sp[1];
-          b = sp[2];
-        } else if (byteOrder == 1) {
-          b = sp[0];
-          g = sp[1];
-          r = sp[2];
-        } else if (byteOrder == 2) {
-          r = sp[1];
-          g = sp[2];
-          b = sp[3];
-        } else {
-          b = sp[1];
-          g = sp[2];
-          r = sp[3];
-        }
-
-        if (!wantBGRA) {
-          dp[0] = r;
-          dp[1] = g;
-          dp[2] = b;
-          dp[3] = 255;
-        } else {
-          dp[0] = b;
-          dp[1] = g;
-          dp[2] = r;
-          dp[3] = 255;
-        }
-      }
-    }
+    const size_t srcOffset = static_cast<size_t>(copyRect.y) * srcStride +
+                             static_cast<size_t>(copyRect.x) * 4u;
+    ConvertRectPixels(rgba + srcOffset, srcStride, dst, dstStride,
+                      copyRect.w, copyRect.h, byteOrder, wantBGRA);
   } catch (...) {
   }
 

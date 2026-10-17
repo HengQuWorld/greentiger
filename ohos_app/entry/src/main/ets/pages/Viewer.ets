@@ -348,8 +348,16 @@ struct Viewer {
   private touchScrollResidualY: number = 0;
   private readonly touchScrollStepPx: number = 18;
   private readonly touchScrollStepPxMacNewer: number = 8;
-  private readonly loopIntervalMs: number = 16;
-  private readonly fallbackFullFrameSyncMs: number = 250;
+  // The whole VNC pump (process/copyFrame/copyRect) runs on the UI thread, so the
+  // tick rate is a direct tax on main-thread time. 30 fps keeps remote input
+  // responsive without starving ArkUI; 62 fps (16 ms) was measured causing
+  // main-thread freezes in the field.
+  private readonly loopIntervalMs: number = 33;
+  // Idle full-frame resync used to run every 250 ms. Each pass converts and copies
+  // a whole framebuffer (~22 MB at 2880x1920), so an idle session burned ~88 MB/s on
+  // the UI thread for no visual gain. Damage-driven updates cover normal use; this
+  // fallback only needs to catch an occasional missed update.
+  private readonly fallbackFullFrameSyncMs: number = 3000;
   private readonly monitorDetectionIntervalMs: number = 1500;
   private readonly emptyMonitorDetectionIntervalMs: number = 300;
   private readonly inputBurstRefreshWindowMs: number = 1200;
@@ -360,7 +368,10 @@ struct Viewer {
   private readonly idleServerRefreshIntervalMs: number = 1000;
   private readonly partialDamageRefreshIntervalMs: number = 120;
   private readonly partialDamageRefreshAreaRatioThreshold: number = 0.9;
-  private readonly partialPixelMapAreaRatioThreshold: number = 0.08;
+  // Damage above this fraction of the frame falls back to a full-frame convert.
+  // The partial path only converts and uploads the damage rect, so it stays cheaper
+  // well past the half-frame mark; 8% was forcing full frames on ordinary scrolling.
+  private readonly partialPixelMapAreaRatioThreshold: number = 0.5;
   private lastMonitorDetectionTs: number = 0;
   private lastMonitorDetectWidth: number = 0;
   private lastMonitorDetectHeight: number = 0;
@@ -3547,9 +3558,11 @@ struct Viewer {
 
     this.creatingPm = true;
     try {
-      const cached = this.replaceFrameCache(buf);
+      // copyFrameRGBA hands back a freshly allocated buffer, so adopt it directly.
+      // Cloning it again only burnt a second full-frame memcpy on the UI thread.
+      this.frameCache = buf;
       this.syncSharedSessionSnapshot();
-      await this.replacePixelMapFromBuffer(cached);
+      await this.replacePixelMapFromBuffer(buf);
     } catch (e) {
       console.error('Failed to create PixelMap', e);
     } finally {
@@ -3569,24 +3582,12 @@ struct Viewer {
     return { x, y, w, h };
   }
 
-  private cloneFrameBuffer(src: ArrayBuffer): ArrayBuffer {
-    const cloned = new ArrayBuffer(src.byteLength);
-    new Uint8Array(cloned).set(new Uint8Array(src));
-    return cloned;
-  }
-
   private getFrameByteSize(): number {
     return Math.max(0, this.fbW) * Math.max(0, this.fbH) * 4;
   }
 
   private hasUsableFrameCache(): boolean {
     return this.frameCache !== null && this.frameCache.byteLength === this.getFrameByteSize();
-  }
-
-  private replaceFrameCache(buf: ArrayBuffer): ArrayBuffer {
-    const cached = this.cloneFrameBuffer(buf);
-    this.frameCache = cached;
-    return cached;
   }
 
   private patchFrameCache(rect: VncRect, rectBuf: ArrayBuffer): boolean {
@@ -3774,13 +3775,14 @@ struct Viewer {
         buf = null;
       }
       if (!buf) return;
-      const cached = this.replaceFrameCache(buf);
+      // Adopt the buffer copyFrameRGBA just allocated for us (see replaceFrameCache removal).
+      this.frameCache = buf;
       this.refineMonitorsFromFrame(dmg === null || !usePartial);
       this.syncSharedSessionSnapshot();
 
       if (this.debugEnabled) {
         try {
-          const view = new Uint8Array(cached);
+          const view = new Uint8Array(buf);
           if (view.length >= 4) {
             this.firstPixel = `Pixel: ${view[0]},${view[1]},${view[2]},${view[3]}`;
           }
