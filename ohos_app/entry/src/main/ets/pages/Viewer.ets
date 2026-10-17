@@ -369,9 +369,10 @@ struct Viewer {
   private readonly partialDamageRefreshIntervalMs: number = 120;
   private readonly partialDamageRefreshAreaRatioThreshold: number = 0.9;
   // Damage above this fraction of the frame falls back to a full-frame convert.
-  // The partial path only converts and uploads the damage rect, so it stays cheaper
-  // well past the half-frame mark; 8% was forcing full frames on ordinary scrolling.
-  private readonly partialPixelMapAreaRatioThreshold: number = 0.5;
+  // The partial path uploads only the damage rect but also patches the local frame
+  // cache in JS, so past roughly a third of the frame the full-frame path wins;
+  // 8% was forcing full frames on ordinary scrolling.
+  private readonly partialPixelMapAreaRatioThreshold: number = 0.35;
   private lastMonitorDetectionTs: number = 0;
   private lastMonitorDetectWidth: number = 0;
   private lastMonitorDetectHeight: number = 0;
@@ -3600,6 +3601,12 @@ struct Viewer {
     const dst = new Uint8Array(this.frameCache);
     const srcStride = rect.w * 4;
     const dstStride = this.fbW * 4;
+    if (srcStride === dstStride && rect.x === 0) {
+      // Full-width damage is contiguous in both buffers, so one copy covers it.
+      // Scroll and window-drag updates take this path on every frame.
+      dst.set(src.subarray(0, rect.h * srcStride), rect.y * dstStride);
+      return true;
+    }
     for (let row = 0; row < rect.h; row++) {
       const srcOffset = row * srcStride;
       const dstOffset = ((rect.y + row) * dstStride) + (rect.x * 4);
