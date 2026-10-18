@@ -92,6 +92,10 @@ interface MonitorAspectOption {
 }
 
 const MAX_MANUAL_MONITOR_COUNT = 8;
+// 面板标题栏高度：上下内边距 16/12 + 关闭按钮 30
+const PANEL_HEADER_HEIGHT = 58;
+// 面板与其上下窗口边缘之间保留的最小空白
+const PANEL_VERTICAL_GAP = 24;
 
 interface WindowLike {
   setWindowTitle?: (t: string) => void;
@@ -288,6 +292,8 @@ struct Viewer {
 
   @State private windowW: number = 0;
   @State private windowH: number = 0;
+  // 屏幕布局面板实测内容高度：用于让面板贴合内容，不再被拉满整窗
+  @State private panelContentHeight: number = 0;
 
  @State private fbW: number = 0;
   @State private fbH: number = 0;
@@ -6296,6 +6302,19 @@ struct Viewer {
     .width('100%');
   }
 
+  private getPanelBodyMaxHeight(): number {
+    const viewer = this.viewerH > 1 ? this.viewerH : 640;
+    const bottomMargin = this.isFullscreen ? 12 : 24;
+    return Math.max(0, Math.floor(viewer - PANEL_HEADER_HEIGHT - PANEL_VERTICAL_GAP - bottomMargin));
+  }
+
+  // 面板贴合内容：内容短时不再被拉满整窗，内容长时才撑到上限并在内部滚动
+  private getPanelTotalHeight(): number {
+    const max = this.getPanelBodyMaxHeight();
+    const body = this.panelContentHeight > 0 ? Math.min(this.panelContentHeight, max) : max;
+    return body + PANEL_HEADER_HEIGHT;
+  }
+
   @Builder
   private buildPanelLayer(): void {
     if (this.connected && this.panelMode !== 'none') {
@@ -6351,7 +6370,13 @@ struct Viewer {
                 }
               }
               .width('100%')
-              .padding({ left: 16, right: 16, bottom: 16 });
+              .padding({ left: 16, right: 16, bottom: 16 })
+              .onAreaChange((oldValue: Area, newValue: Area) => {
+                const measured = (newValue.height as number) ?? 0;
+                if (measured > 0 && Math.abs(measured - this.panelContentHeight) > 0.5) {
+                  this.panelContentHeight = measured;
+                }
+              });
             }
             .width('100%')
             .layoutWeight(1)
@@ -6360,7 +6385,10 @@ struct Viewer {
             .edgeEffect(EdgeEffect.Spring);
           }
           .width(Math.max(320, Math.min(560, this.windowW > 0 ? this.windowW - 24 : 560)))
-          .constraintSize({ maxHeight: '86%' })
+          .constraintSize({
+            minHeight: this.panelMode === 'display' ? this.getPanelTotalHeight() : 0,
+            maxHeight: this.panelMode === 'display' ? this.getPanelTotalHeight() : '86%'
+          })
           .backgroundColor(this.panelMode === 'connection' ? this.cSurface : this.cSurfaceAlt)
           .border({ width: 1, color: this.cBorder })
           .borderRadius(22)
