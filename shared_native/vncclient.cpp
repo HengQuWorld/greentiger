@@ -1,4 +1,6 @@
 #include "vncclient.h"
+
+#include "ref_counted.h"
 #include "ssh_tunnel.h"
 
 #include <algorithm>
@@ -604,6 +606,7 @@ static int connectWithTimeout(const std::string& host, int port, int timeout_sec
 
 struct vncclient_handle {
   Client impl;
+  shared::RefCounted refs;
 };
 
 vncclient_handle* vncclient_create(const vncclient_callbacks* callbacks)
@@ -616,14 +619,30 @@ vncclient_handle* vncclient_create(const vncclient_callbacks* callbacks)
   return h;
 }
 
-void vncclient_destroy(vncclient_handle* client)
+void vncclient_acquire(vncclient_handle* client)
 {
   if (!client)
     return;
+  client->refs.AddRef();
+}
+
+void vncclient_release(vncclient_handle* client)
+{
+  if (!client)
+    return;
+  if (!client->refs.Release())
+    return;
+
+  // Last reference: shut the connection down before the object goes away.
   vncclient_disconnect(client);
   delete client->impl.conn;
   client->impl.conn = nullptr;
   delete client;
+}
+
+void vncclient_destroy(vncclient_handle* client)
+{
+  vncclient_release(client);
 }
 
 void vncclient_set_storage_root(const char* root_path)

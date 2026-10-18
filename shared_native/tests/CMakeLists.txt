@@ -60,3 +60,13 @@ add_executable(ssh_tunnel_config_test
 target_link_libraries(ssh_tunnel_config_test PRIVATE test_support)
 target_compile_options(ssh_tunnel_config_test PRIVATE -Wall -Wextra)
 add_test(NAME ssh_tunnel_config COMMAND ssh_tunnel_config_test)
+
+# ---------------------------------------------------------------------------
+# Handle lifetime (intrusive reference count used by the VNC client handle)
+# ---------------------------------------------------------------------------
+add_executable(ref_counted_test ref_counted_test.cpp)
+target_link_libraries(ref_counted_test PRIVATE test_support)
+target_compile_options(ref_counted_test PRIVATE -Wall -Wextra)
+find_package(Threads REQUIRED)
+target_link_libraries(ref_counted_test PRIVATE Threads::Threads)
+add_test(NAME ref_counted COMMAND ref_counted_test)

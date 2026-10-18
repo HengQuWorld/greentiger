@@ -1,9 +1,12 @@
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdarg>
 #include <cstring>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 
 #include <napi/native_api.h>
 
@@ -38,9 +41,21 @@ struct PendingSshConfig {
 };
 
 struct ClientState {
+  // Guards `client` and `clientGeneration`. Held while a vncclient_* call is in
+  // flight. Lock order: clientMu before mu, never the other way around.
+  std::mutex clientMu;
   vncclient_handle* client = nullptr;
+  // Bumped whenever the handle is replaced, so an asynchronous connect that
+  // finishes after the session was torn down can tell it is stale.
+  uint64_t clientGeneration = 0;
 
   std::mutex mu;
+  // Background pump. It only drains the socket and never calls into JS, so it is
+  // safe to run off the UI thread; the JS side keeps owning rendering.
+  std::mutex pumpMu;
+  std::thread pumpThread;
+  std::atomic<bool> pumpRun{false};
+  std::atomic<bool> pumpActive{false};
   std::optional<DamageRect> damage;
   int remoteClipboardAnnounce = -1;
   bool remoteClipboardDirty = false;
@@ -313,6 +328,8 @@ static bool NormalizeCopyRect(int fb_w, int fb_h, int x, int y, int w, int h, Da
   return true;
 }
 
+// Callers must hold ClientState::clientMu: this reads the shared framebuffer
+// and converts it, and must not run concurrently with process().
 static napi_value CopyFrameRectRGBA(napi_env env, ClientState& st, int32_t byteOrder, int32_t pixelMapFormat,
                                     std::optional<DamageRect> rect)
 {
@@ -374,10 +391,92 @@ static napi_value CopyFrameRectRGBA(napi_env env, ClientState& st, int32_t byteO
   return arraybuffer;
 }
 
+// ---------------------------------------------------------------------------
+// Background pump
+//
+// Reading and decoding a framebuffer update used to happen inside process() on
+// the UI thread, so a large or slow update could monopolise it for seconds. The
+// pump drains the socket on its own thread instead; the UI thread keeps calling
+// process(), which now just reports status and returns immediately.
+
+static void PumpLoop(ClientState* st)
+{
+  while (st->pumpRun.load(std::memory_order_acquire)) {
+    int rc = 0;
+    {
+      std::lock_guard<std::mutex> clientLock(st->clientMu);
+      if (!st->client)
+        break;
+      rc = vncclient_process(st->client);
+      if (rc == 0) {
+        std::lock_guard<std::mutex> stateLock(st->mu);
+        st->processCount++;
+        st->lastProcessRc = 0;
+      }
+    }
+
+    if (rc != 0)
+      break;
+
+    // process() drains everything available and never blocks, so yielding here
+    // is what keeps this thread from spinning while the session is idle.
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+  }
+
+  st->pumpActive.store(false, std::memory_order_release);
+}
+
+static bool StartPump(ClientState* st)
+{
+  std::lock_guard<std::mutex> pumpLock(st->pumpMu);
+  if (st->pumpThread.joinable())
+    return true;
+  {
+    std::lock_guard<std::mutex> clientLock(st->clientMu);
+    if (!st->client)
+      return false;
+  }
+  st->pumpRun.store(true, std::memory_order_release);
+  st->pumpActive.store(true, std::memory_order_release);
+  try {
+    st->pumpThread = std::thread(PumpLoop, st);
+  } catch (...) {
+    st->pumpActive.store(false, std::memory_order_release);
+    st->pumpRun.store(false, std::memory_order_release);
+    return false;
+  }
+  return true;
+}
+
+// Must be called without holding clientMu: the pump takes that lock on every
+// iteration, so joining while holding it would deadlock.
+static void StopPump(ClientState* st)
+{
+  std::thread worker;
+  {
+    std::lock_guard<std::mutex> pumpLock(st->pumpMu);
+    if (!st->pumpThread.joinable()) {
+      st->pumpActive.store(false, std::memory_order_release);
+      return;
+    }
+    st->pumpRun.store(false, std::memory_order_release);
+    worker = std::move(st->pumpThread);
+  }
+  if (worker.joinable())
+    worker.join();
+  st->pumpActive.store(false, std::memory_order_release);
+}
+
 struct ConnectData {
   napi_async_work work = nullptr;
   napi_deferred deferred = nullptr;
+  napi_ref selfRef = nullptr;
   ClientState* st = nullptr;
+  // Pinned for the duration of the async work: the owning ClientState may be
+  // torn down while the worker is still connecting, and this reference keeps
+  // the handle alive until the worker is done with it.
+  vncclient_handle* client = nullptr;
+  uint64_t generation = 0;
   std::string addr;
   int32_t basePort = 5900;
   std::string user;
@@ -387,23 +486,49 @@ struct ConnectData {
 
 static void VncConnectExecute(napi_env env, void* data) {
   auto* req = static_cast<ConnectData*>(data);
-  if (!req->st || !req->st->client) return;
-  req->rc = vncclient_connect(req->st->client, req->addr.c_str(), req->basePort);
-  if (req->rc == 0 && req->st->client) {
-    vncclient_announce_clipboard(req->st->client, 1);
-    std::lock_guard<std::mutex> lock(req->st->mu);
-    if (req->st->debugEnabled && req->st->debugLevel >= 1) {
-      AppendDebugLogLocked(*(req->st), "clipboard initialized announce=1");
-    }
+  // Never touch req->st here: only the pinned handle and the request itself are
+  // guaranteed to outlive the worker.
+  if (!req->client) return;
+  req->rc = vncclient_connect(req->client, req->addr.c_str(), req->basePort);
+  if (req->rc == 0) {
+    vncclient_announce_clipboard(req->client, 1);
   }
 }
 
 static void VncConnectComplete(napi_env env, napi_status status, void* data) {
   auto* req = static_cast<ConnectData*>(data);
+
+  int rc = req->rc;
+  if (req->st) {
+    std::lock_guard<std::mutex> lock(req->st->clientMu);
+    // The session may have been disconnected (or replaced) while we were
+    // connecting. Report that instead of claiming a live connection.
+    if (req->st->client != req->client || req->st->clientGeneration != req->generation) {
+      if (rc == 0) rc = -1;
+    }
+  }
+  if (rc != req->rc) {
+    // Stale attempt: roll the connection back on the pinned handle.
+    if (req->client) vncclient_disconnect(req->client);
+  }
+
+  // A live session is drained by the pump from here on.
+  if (rc == 0 && req->st)
+    StartPump(req->st);
+
+  if (req->client) {
+    vncclient_release(req->client);
+    req->client = nullptr;
+  }
+
   napi_value result;
-  napi_create_int32(env, req->rc, &result);
+  napi_create_int32(env, rc, &result);
   napi_resolve_deferred(env, req->deferred, result);
   napi_delete_async_work(env, req->work);
+  if (req->selfRef) {
+    napi_delete_reference(env, req->selfRef);
+    req->selfRef = nullptr;
+  }
   delete req;
 }
 
@@ -432,51 +557,87 @@ static napi_value VncConnect(napi_env env, napi_callback_info info)
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
 
-  if (st.client) {
-    vncclient_disconnect(st.client);
-    vncclient_destroy(st.client);
-    st.client = nullptr;
-  }
-
-  vncclient_callbacks cbs{};
-  cbs.user = &st;
-  cbs.get_user_passwd = cb_get_user_passwd;
-  cbs.show_msg_box = cb_show_msg_box;
-  cbs.on_framebuffer_update = cb_on_framebuffer_update;
-  cbs.on_clipboard_announce = cb_on_clipboard_announce;
-  cbs.on_clipboard_data = cb_on_clipboard_data;
-
-  st.client = vncclient_create(&cbs);
-  if (!st.client) {
-    napi_throw_error(env, nullptr, "failed to create client");
+  // Pin the JS object for the whole connect attempt. Without this the object
+  // can be collected while the background worker is still running, which frees
+  // ClientState and the client handle underneath it.
+  napi_ref selfRef = nullptr;
+  if (napi_create_reference(env, jsthis, 1, &selfRef) != napi_ok) {
+    napi_throw_error(env, nullptr, "failed to pin client object");
     return nullptr;
   }
 
+  vncclient_handle* attempt = nullptr;
+  uint64_t generation = 0;
+  int sshRc = 0;
+  bool hasPendingSsh = false;
+
+  // The pump holds clientMu on every iteration, so it has to be stopped before
+  // taking that lock to replace the handle.
+  StopPump(&st);
+
   {
-    std::lock_guard<std::mutex> lock(st.mu);
-    st.user = user;
-    st.password = pass;
-    st.damage.reset();
-    st.remoteClipboardAnnounce = -1;
-    st.remoteClipboardDirty = false;
-    st.remoteClipboardUtf8.clear();
+    std::lock_guard<std::mutex> clientLock(st.clientMu);
+
+    if (st.client) {
+      vncclient_handle* previous = st.client;
+      st.client = nullptr;
+      st.clientGeneration++;
+      vncclient_disconnect(previous);
+      vncclient_destroy(previous);
+    }
+
+    vncclient_callbacks cbs{};
+    cbs.user = &st;
+    cbs.get_user_passwd = cb_get_user_passwd;
+    cbs.show_msg_box = cb_show_msg_box;
+    cbs.on_framebuffer_update = cb_on_framebuffer_update;
+    cbs.on_clipboard_announce = cb_on_clipboard_announce;
+    cbs.on_clipboard_data = cb_on_clipboard_data;
+
+    attempt = vncclient_create(&cbs);
+    if (!attempt) {
+      napi_delete_reference(env, selfRef);
+      napi_throw_error(env, nullptr, "failed to create client");
+      return nullptr;
+    }
+    st.client = attempt;
+    st.clientGeneration++;
+    generation = st.clientGeneration;
+
+    {
+      std::lock_guard<std::mutex> lock(st.mu);
+      st.user = user;
+      st.password = pass;
+      st.damage.reset();
+      st.remoteClipboardAnnounce = -1;
+      st.remoteClipboardDirty = false;
+      st.remoteClipboardUtf8.clear();
+    }
+
+    if (st.pendingSshConfig.has_value()) {
+      hasPendingSsh = true;
+      sshRc = ApplySshTunnelConfig(attempt, *st.pendingSshConfig);
+    }
   }
 
-  if (st.pendingSshConfig.has_value()) {
-    int sshRc = ApplySshTunnelConfig(st.client, *st.pendingSshConfig);
-    if (sshRc != 0) {
-      napi_value promise;
-      napi_deferred deferred;
-      napi_create_promise(env, &deferred, &promise);
-      napi_value result;
-      napi_create_int32(env, sshRc, &result);
-      napi_resolve_deferred(env, deferred, result);
-      return promise;
-    }
+  if (hasPendingSsh && sshRc != 0) {
+    napi_value promise;
+    napi_deferred deferred;
+    napi_create_promise(env, &deferred, &promise);
+    napi_value result;
+    napi_create_int32(env, sshRc, &result);
+    napi_resolve_deferred(env, deferred, result);
+    napi_delete_reference(env, selfRef);
+    return promise;
   }
 
   auto* req = new ConnectData();
   req->st = &st;
+  req->selfRef = selfRef;
+  req->client = attempt;
+  req->generation = generation;
+  // The worker keeps its own reference so teardown can proceed concurrently.
+  vncclient_acquire(attempt);
   req->addr = addr;
   req->basePort = basePort;
   req->user = user;
@@ -501,10 +662,18 @@ static napi_value VncDisconnect(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
-  if (st.client) {
-    vncclient_disconnect(st.client);
-    vncclient_destroy(st.client);
-    st.client = nullptr;
+  StopPump(&st);
+  {
+    std::lock_guard<std::mutex> clientLock(st.clientMu);
+    if (st.client) {
+      vncclient_handle* previous = st.client;
+      st.client = nullptr;
+      // Invalidate any connect attempt still in flight so it reports failure
+      // instead of resurrecting a session the user just closed.
+      st.clientGeneration++;
+      vncclient_disconnect(previous);
+      vncclient_destroy(previous);
+    }
   }
   napi_value out;
   napi_get_undefined(env, &out);
@@ -541,8 +710,11 @@ static napi_value VncSetSshTunnel(napi_env env, napi_callback_info info)
   }
 
   int rc = 0;
-  if (st_ptr->client)
-    rc = ApplySshTunnelConfig(st_ptr->client, config);
+  {
+    std::lock_guard<std::mutex> clientLock(st_ptr->clientMu);
+    if (st_ptr->client)
+      rc = ApplySshTunnelConfig(st_ptr->client, config);
+  }
   napi_value out;
   napi_create_int32(env, rc, &out);
   return out;
@@ -559,6 +731,7 @@ static napi_value VncClearSshTunnel(napi_env env, napi_callback_info info)
       std::lock_guard<std::mutex> lock(st_ptr->mu);
       st_ptr->pendingSshConfig.reset();
     }
+    std::lock_guard<std::mutex> clientLock(st_ptr->clientMu);
     if (st_ptr->client)
       vncclient_clear_ssh_tunnel(st_ptr->client);
   }
@@ -575,6 +748,16 @@ static napi_value VncProcess(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+
+  // While the pump owns the socket there is nothing to drain here; report its
+  // status so the caller's error handling still fires if the session died.
+  if (st.pumpActive.load(std::memory_order_acquire)) {
+    napi_value out;
+    napi_create_int32(env, 0, &out);
+    return out;
+  }
+
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   int rc = -1;
   try {
     if (st.client) rc = vncclient_process(st.client);
@@ -604,6 +787,7 @@ static napi_value VncRefresh(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   int rc = -1;
   try {
     if (st.client) rc = vncclient_refresh(st.client);
@@ -625,6 +809,7 @@ static napi_value VncRequestUpdate(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   bool incremental = true;
   if (argc >= 1)
     GetBoolArg(env, argv[0], &incremental);
@@ -685,6 +870,7 @@ static napi_value VncGetFramebufferInfo(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
 
   int w = 0, h = 0, stride = 0;
   int state = -1;
@@ -740,6 +926,7 @@ static napi_value VncCopyFrameRGBA(napi_env env, napi_callback_info info)
     pixelMapFormat = st.pixelMapFormat;
   }
   if (argc >= 1) GetInt32Arg(env, argv[0], &byteOrder);
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   return CopyFrameRectRGBA(env, st, byteOrder, pixelMapFormat, std::nullopt);
 }
 
@@ -771,6 +958,7 @@ static napi_value VncCopyRectRGBA(napi_env env, napi_callback_info info)
   if (argc >= 4) GetInt32Arg(env, argv[3], &w);
   if (argc >= 5) GetInt32Arg(env, argv[4], &h);
 
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   return CopyFrameRectRGBA(env, st, byteOrder, pixelMapFormat, DamageRect{ x, y, w, h });
 }
 
@@ -822,6 +1010,7 @@ static napi_value VncGetDebugInfo(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
 
   int w = 0, h = 0, stride = 0;
   const uint8_t* buf = nullptr;
@@ -965,6 +1154,7 @@ static napi_value VncSendPointer(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   int rc = -1;
   if (st.client)
     rc = vncclient_send_pointer(st.client, x, y, mask);
@@ -996,6 +1186,7 @@ static napi_value VncSendKey(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   int rc = -1;
   if (st.client) {
     if (down)
@@ -1030,6 +1221,7 @@ static napi_value VncSetClipboard(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   if (st.client) {
     vncclient_announce_clipboard(st.client, 1);
     vncclient_send_clipboard(st.client, text.c_str());
@@ -1049,6 +1241,7 @@ static napi_value VncRequestClipboard(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   if (st.client) {
     vncclient_request_clipboard(st.client);
   }
@@ -1127,6 +1320,7 @@ static napi_value VncGetLastError(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   const char* err = st.client ? vncclient_last_error(st.client) : "not connected";
   return MakeString(env, err ? std::string(err) : std::string());
 }
@@ -1139,6 +1333,7 @@ static napi_value VncGetSecurityLevel(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   int level = st.client ? vncclient_get_security_level(st.client) : 0;
   napi_value out;
   napi_create_int32(env, level, &out);
@@ -1153,6 +1348,7 @@ static napi_value VncHasReceivedFirstUpdate(napi_env env, napi_callback_info inf
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   bool has_received = st.client ? (vncclient_has_received_first_update(st.client) != 0) : false;
   napi_value out;
   napi_get_boolean(env, has_received, &out);
@@ -1167,6 +1363,7 @@ static napi_value VncIsSecure(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
   bool is_secure = st.client ? (vncclient_is_secure(st.client) != 0) : false;
   napi_value out;
   napi_get_boolean(env, is_secure, &out);
@@ -1184,6 +1381,7 @@ static napi_value VncDetectMonitors(napi_env env, napi_callback_info info)
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
   if (!st_ptr) return nullptr;
   auto& st = *st_ptr;
+  std::lock_guard<std::mutex> clientLock(st.clientMu);
 
   std::vector<MonitorRect> fallback;
   if (argc >= 1) {
@@ -1252,7 +1450,10 @@ static napi_value VncIsServerLikelyMac(napi_env env, napi_callback_info info)
   napi_get_cb_info(env, info, nullptr, nullptr, &jsthis, nullptr);
   ClientState* st_ptr = nullptr;
   napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
-  if (!st_ptr || !st_ptr->client) {
+  if (!st_ptr) return nullptr;
+
+  std::lock_guard<std::mutex> clientLock(st_ptr->clientMu);
+  if (!st_ptr->client) {
     napi_value out;
     napi_get_boolean(env, false, &out);
     return out;
@@ -1273,9 +1474,19 @@ static napi_value VncClient_New(napi_env env, napi_callback_info info) {
     napi_get_cb_info(env, info, nullptr, nullptr, &jsthis, nullptr);
     napi_wrap(env, jsthis, st, [](napi_env env, void* nativeObject, void*) {
       auto* st = static_cast<ClientState*>(nativeObject);
-      if (st->client) {
-        vncclient_destroy(st->client);
-        st->client = nullptr;
+      // The pump must be joined before the handle goes away, and it cannot be
+      // joined while holding clientMu.
+      StopPump(st);
+      {
+        std::lock_guard<std::mutex> clientLock(st->clientMu);
+        if (st->client) {
+          // Drops this state's reference. An in-flight connect keeps its own,
+          // so the handle survives until that worker finishes.
+          vncclient_handle* previous = st->client;
+          st->client = nullptr;
+          st->clientGeneration++;
+          vncclient_destroy(previous);
+        }
       }
       delete st;
     }, nullptr, nullptr);

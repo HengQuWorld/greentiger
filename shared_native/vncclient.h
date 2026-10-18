@@ -53,7 +53,19 @@ typedef struct vncclient_ssh_config {
 } vncclient_ssh_config;
 
 vncclient_handle* vncclient_create(const vncclient_callbacks* callbacks);
+
+// Drops the reference taken by vncclient_create. The handle is torn down and
+// freed by whichever release brings the count to zero, so an in-flight
+// asynchronous connect holds the handle alive until it finishes.
 void vncclient_destroy(vncclient_handle* client);
+
+// Takes an additional reference. Every caller that keeps a handle across a
+// thread hop must acquire one and release it when done; this is what makes it
+// safe to disconnect or drop the owning object while work is still running.
+void vncclient_acquire(vncclient_handle* client);
+
+// Drops a reference previously taken with vncclient_acquire.
+void vncclient_release(vncclient_handle* client);
 
 void vncclient_set_storage_root(const char* root_path);
 int vncclient_set_ssh_tunnel(vncclient_handle* client, const vncclient_ssh_config* config);
