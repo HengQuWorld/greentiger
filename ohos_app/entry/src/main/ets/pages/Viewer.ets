@@ -292,8 +292,6 @@ struct Viewer {
 
   @State private windowW: number = 0;
   @State private windowH: number = 0;
-  // 屏幕布局面板实测内容高度：用于让面板贴合内容，不再被拉满整窗
-  @State private panelContentHeight: number = 0;
 
  @State private fbW: number = 0;
   @State private fbH: number = 0;
@@ -6305,14 +6303,15 @@ struct Viewer {
   private getPanelBodyMaxHeight(): number {
     const viewer = this.viewerH > 1 ? this.viewerH : 640;
     const bottomMargin = this.isFullscreen ? 12 : 24;
-    return Math.max(0, Math.floor(viewer - PANEL_HEADER_HEIGHT - PANEL_VERTICAL_GAP - bottomMargin));
+    const available = Math.floor(viewer - PANEL_HEADER_HEIGHT - PANEL_VERTICAL_GAP - bottomMargin);
+    // 窗口极矮时仍保留一段可用高度，但不允许整个面板超出窗口
+    const floor = Math.max(0, Math.min(160, Math.floor(viewer - PANEL_HEADER_HEIGHT - 8)));
+    return Math.max(available, floor);
   }
 
   // 面板贴合内容：内容短时不再被拉满整窗，内容长时才撑到上限并在内部滚动
-  private getPanelTotalHeight(): number {
-    const max = this.getPanelBodyMaxHeight();
-    const body = this.panelContentHeight > 0 ? Math.min(this.panelContentHeight, max) : max;
-    return body + PANEL_HEADER_HEIGHT;
+  private getPanelMaxHeight(): number {
+    return this.getPanelBodyMaxHeight() + PANEL_HEADER_HEIGHT;
   }
 
   @Builder
@@ -6370,25 +6369,16 @@ struct Viewer {
                 }
               }
               .width('100%')
-              .padding({ left: 16, right: 16, bottom: 16 })
-              .onAreaChange((oldValue: Area, newValue: Area) => {
-                const measured = (newValue.height as number) ?? 0;
-                if (measured > 0 && Math.abs(measured - this.panelContentHeight) > 0.5) {
-                  this.panelContentHeight = measured;
-                }
-              });
+              .padding({ left: 16, right: 16, bottom: 16 });
             }
             .width('100%')
-            .layoutWeight(1)
+            .constraintSize({ maxHeight: this.getPanelBodyMaxHeight() })
             .scrollable(this.manualDragMonitorIndex >= 0 ? ScrollDirection.None : ScrollDirection.Vertical)
             .scrollBar(BarState.Auto)
             .edgeEffect(EdgeEffect.Spring);
           }
           .width(Math.max(320, Math.min(560, this.windowW > 0 ? this.windowW - 24 : 560)))
-          .constraintSize({
-            minHeight: this.panelMode === 'display' ? this.getPanelTotalHeight() : 0,
-            maxHeight: this.panelMode === 'display' ? this.getPanelTotalHeight() : '86%'
-          })
+          .constraintSize({ maxHeight: this.getPanelMaxHeight() })
           .backgroundColor(this.panelMode === 'connection' ? this.cSurface : this.cSurfaceAlt)
           .border({ width: 1, color: this.cBorder })
           .borderRadius(22)
