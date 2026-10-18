@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdarg>
 #include <cstring>
@@ -7,6 +8,8 @@
 #include <optional>
 #include <string>
 #include <thread>
+
+#include <poll.h>
 
 #include <napi/native_api.h>
 
@@ -399,9 +402,42 @@ static napi_value CopyFrameRectRGBA(napi_env env, ClientState& st, int32_t byteO
 // pump drains the socket on its own thread instead; the UI thread keeps calling
 // process(), which now just reports status and returns immediately.
 
+// How long the pump waits for the server before checking whether it should stop.
+// The wait ends immediately when data arrives, so this only bounds shutdown
+// latency, not update latency.
+constexpr int kPumpPollTimeoutMs = 50;
+
 static void PumpLoop(ClientState* st)
 {
   while (st->pumpRun.load(std::memory_order_acquire)) {
+    // Wait for the server instead of polling: waking every few milliseconds cost
+    // about 6% of a core while the session sat idle.
+    int fd = -1;
+    {
+      std::lock_guard<std::mutex> clientLock(st->clientMu);
+      if (!st->client)
+        break;
+      fd = vncclient_get_fd(st->client);
+    }
+
+    if (fd >= 0) {
+      struct pollfd pfd;
+      pfd.fd = fd;
+      pfd.events = POLLIN;
+      pfd.revents = 0;
+      const int ready = ::poll(&pfd, 1, kPumpPollTimeoutMs);
+      if (ready < 0) {
+        if (errno == EINTR)
+          continue;
+        break;
+      }
+    } else {
+      std::this_thread::sleep_for(std::chrono::milliseconds(kPumpPollTimeoutMs));
+    }
+
+    if (!st->pumpRun.load(std::memory_order_acquire))
+      break;
+
     int rc = 0;
     {
       std::lock_guard<std::mutex> clientLock(st->clientMu);
@@ -417,10 +453,6 @@ static void PumpLoop(ClientState* st)
 
     if (rc != 0)
       break;
-
-    // process() drains everything available and never blocks, so yielding here
-    // is what keeps this thread from spinning while the session is idle.
-    std::this_thread::sleep_for(std::chrono::milliseconds(3));
   }
 
   st->pumpActive.store(false, std::memory_order_release);
