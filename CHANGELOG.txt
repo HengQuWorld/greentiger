@@ -1,0 +1,17 @@
+Version 1.8.5 (2026-10-18)
+
+Added
+  Rate the app without leaving it. After a few successful connections you can
+  rate it inside the app, or choose to be asked later.
+
+Improved
+  Screen updates keep up. Only the changed part of the screen is redrawn, so
+  dragging windows and scrolling respond faster.
+  Large updates no longer freeze the interface. Heavy screen data is processed
+  in the background, so the interface stays responsive.
+  Longer sessions use less power. A still screen is no longer redrawn over and
+  over, and an open session stops waking the device when nothing is happening.
+
+Fixed
+  Safer closing. Closing the window while a connection is still starting no
+  longer crashes the app.
