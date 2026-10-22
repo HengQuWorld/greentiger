@@ -297,6 +297,9 @@ struct Viewer {
   @State private fbH: number = 0;
   private fbStride: number = 0;
   @State private vncState: number = -1;
+  // rfb::CConnection::RFBSTATE_NORMAL: the handshake is done and the server's
+  // capabilities (screen layout, security type) are all known.
+  private readonly vncStateNormal: number = 7;
   private lastMask: number = 0;
   private isInteracting: boolean = false;
   private frameThrottle: InteractFrameThrottle = new InteractFrameThrottle();
@@ -2886,12 +2889,15 @@ struct Viewer {
       this.vncState = info.state;
       if (info?.name) {
         this.serverName = info.name;
-        if (!this.macAutoChecked) {
-          this.macAutoChecked = true;
-          if (this.vncClient.isServerLikelyMac?.()) {
-            this.runtimeMacMode = true;
-            console.info(`Viewer auto-detected macOS server: ${info.name}`);
-          }
+      }
+      // Detect once the handshake is complete, where both the RFB banner and the
+      // negotiated security type are known. Waiting for a desktop name here used
+      // to skip detection entirely on servers that send an unrelated name.
+      if (!this.macAutoChecked && this.connected && this.vncState === this.vncStateNormal) {
+        this.macAutoChecked = true;
+        if (this.vncClient.isServerLikelyMac?.()) {
+          this.runtimeMacMode = true;
+          console.info(`Viewer auto-detected macOS server: ${this.serverName}`);
         }
       }
       if (this.connected) {

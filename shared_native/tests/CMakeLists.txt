@@ -62,6 +62,14 @@ target_compile_options(ssh_tunnel_config_test PRIVATE -Wall -Wextra)
 add_test(NAME ssh_tunnel_config COMMAND ssh_tunnel_config_test)
 
 # ---------------------------------------------------------------------------
+# Apple RFB banner recognition (header-only, used to detect a macOS server)
+# ---------------------------------------------------------------------------
+add_executable(apple_rfb_banner_test apple_rfb_banner_test.cpp)
+target_link_libraries(apple_rfb_banner_test PRIVATE test_support)
+target_compile_options(apple_rfb_banner_test PRIVATE -Wall -Wextra)
+add_test(NAME apple_rfb_banner COMMAND apple_rfb_banner_test)
+
+# ---------------------------------------------------------------------------
 # Handle lifetime (intrusive reference count used by the VNC client handle)
 # ---------------------------------------------------------------------------
 add_executable(ref_counted_test ref_counted_test.cpp)

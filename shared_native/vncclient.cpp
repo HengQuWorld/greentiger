@@ -1,5 +1,6 @@
 #include "vncclient.h"
 
+#include "apple_rfb_banner.h"
 #include "ref_counted.h"
 #include "ssh_tunnel.h"
 
@@ -10,8 +11,10 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <netdb.h>
@@ -283,6 +286,13 @@ public:
     return 0;
   }
 
+  // ARD's Diffie-Hellman scheme (security type 30) is only offered by Apple's
+  // server, so a session authenticated with it is a Mac even when the desktop
+  // name says nothing.
+  bool usedAppleArdAuth() const {
+    return csecurity && csecurity->getType() == rfb::secTypeDH;
+  }
+
   bool hasReceivedFirstUpdate() const {
     return rfb::CConnection::hasReceivedFirstUpdate();
   }
@@ -454,6 +464,8 @@ struct Client {
   std::unique_ptr<shared::SshTunnel> sshTunnel;
   std::string host;
   int port = 0;
+  // The server announced RFB 003.889, i.e. Apple Screen Sharing / ARD.
+  bool appleServerBanner = false;
 
   network::Socket* sock = nullptr;
   SharedConn* conn = nullptr;
@@ -602,6 +614,65 @@ static int connectWithTimeout(const std::string& host, int port, int timeout_sec
   return sockfd;
 }
 
+// Apple's Screen Sharing / ARD server announces itself as RFB 003.889 before the
+// handshake, which is the only reliable way to tell it apart from a Windows or
+// X11 server: the desktop name is just the computer name, and CConnection
+// rewrites the version to 3.8 as soon as it reads the banner. Peek at the
+// pending banner without consuming it so the handshake still sees it.
+static bool peekAppleServerBanner(int fd, int timeout_ms)
+{
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(timeout_ms);
+  ssize_t previousLength = 0;
+
+  for (;;) {
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::steady_clock::now()).count();
+    if (remaining <= 0)
+      return false;
+
+    struct pollfd pfd = {};
+    pfd.fd = fd;
+    pfd.events = POLLIN;
+    const int ready = ::poll(&pfd, 1, static_cast<int>(remaining));
+    if (ready < 0) {
+      if (errno == EINTR)
+        continue;
+      return false;
+    }
+    if (ready == 0)
+      return false;
+
+    char banner[shared::kRfbBannerLength] = {};
+    const ssize_t n = ::recv(fd, banner, sizeof(banner), MSG_PEEK);
+    if (n < 0) {
+      if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+        continue;
+      return false;
+    }
+    if (n == 0)
+      return false;
+
+    switch (shared::MatchAppleRfbBanner(banner, static_cast<size_t>(n))) {
+      case shared::AppleBannerMatch::kYes:
+        return true;
+      case shared::AppleBannerMatch::kNo:
+        // Already contradicted the banner, so there is nothing left to wait for.
+        return false;
+      case shared::AppleBannerMatch::kPartial:
+        break;
+    }
+
+    // poll() keeps reporting readable for the bytes already peeked, so without
+    // a pause here a banner that arrives in pieces would spin until the
+    // deadline. The banner is a single write; 2 ms is far below the round trip
+    // that produced the first fragment.
+    if (n <= previousLength)
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    previousLength = n;
+  }
+}
+
 }
 
 struct vncclient_handle {
@@ -684,6 +755,7 @@ int vncclient_connect(vncclient_handle* client, const char* host_port, int base_
     return fail(&client->impl, "empty host");
 
   vncclient_disconnect(client);
+  client->impl.appleServerBanner = false;
 
   // Recreate the connection object to ensure a clean protocol state for the new session
   if (client->impl.conn) {
@@ -716,6 +788,10 @@ int vncclient_connect(vncclient_handle* client, const char* host_port, int base_
     if (fd < 0) {
       return fail(&client->impl, connectErr);
     }
+
+    // Read the RFB banner before the handshake swallows it; see
+    // peekAppleServerBanner(). A server that stays quiet is simply not Apple.
+    client->impl.appleServerBanner = peekAppleServerBanner(fd, 1500);
 
     client->impl.sock = new network::TcpSocket(fd);
     client->impl.conn->bindSocket(client->impl.sock, connectHost.c_str());
@@ -1060,10 +1136,18 @@ int vncclient_is_server_likely_mac(vncclient_handle* client)
   if (!validClient(client) || !client->impl.conn)
     return 0;
 
-  // Apple's built-in VNC server (ARD / Screen Sharing) identifies itself
-  // with RFB protocol version 3.889 and is detected by
-  // CConnection::processVersionMsg() for shared-mode handling.
-  // The macOS desktop name typically contains "Mac" or "Apple".
+  // 1. Apple's own banner (RFB 003.889). This is the only signature that is
+  //    always present on macOS and never on other platforms.
+  if (client->impl.appleServerBanner)
+    return 1;
+
+  // 2. ARD's Diffie-Hellman authentication, which only Apple's server offers.
+  if (client->impl.conn->usedAppleArdAuth())
+    return 1;
+
+  // 3. Last resort: the desktop name. macOS Screen Sharing reports the
+  //    computer name here, which is usually unrelated to the platform, so this
+  //    alone cannot be relied on.
   const char* name = client->impl.conn->server.name();
   if (!name || name[0] == '\0')
     return 0;

@@ -139,6 +139,7 @@ cd android_app
 - `pixel_convert`：帧缓冲像素格式转换。以改造前的逐像素实现为基准，对全部 byte order、通道交换、非对齐矩形和多宽度做逐字节比对；同时校验 alpha 恒为不透明、源缓冲区只读。
 - `monitor_segmentation`：多显示器分割。校验退化输入、矩形始终落在画面内、超宽画面切分与单窗口裁剪。
 - `ssh_tunnel_config`：SSH 隧道参数校验与默认值填充。
+- `apple_rfb_banner`：从 RFB 版本横幅识别 macOS 屏幕共享。校验完整横幅、截断横幅与读取中途的字节分类（不匹配可立即放弃，前缀匹配则继续等待）。
 
 新增可测试的原生逻辑时，把不依赖平台头文件和第三方库的实现放在 `shared_native/` 的独立源文件中，并在 `shared_native/tests/CMakeLists.txt` 里登记。
 
