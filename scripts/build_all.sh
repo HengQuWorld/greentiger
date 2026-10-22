@@ -336,9 +336,20 @@ run_android_build() {
   )
 }
 
+check_theme_tokens() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    log "python3 not found, skipping theme token checks"
+    return 0
+  fi
+  log "Checking HarmonyOS theme tokens"
+  python3 "${SCRIPT_DIR}/check_theme_tokens.py"
+}
+
 run_ohos_build() {
   local native_changes="$1"
   local mode="$2"
+
+  check_theme_tokens
 
   local mode_file="${OHOS_DIR}/.build-signing-mode"
   echo "${mode}" > "${mode_file}"

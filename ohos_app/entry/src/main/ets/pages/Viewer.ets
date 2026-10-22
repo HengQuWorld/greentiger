@@ -21,6 +21,7 @@ import { keySymFromEvent } from '../utils/KeyMap';
 import { SharedViewerRect, VncClientLike, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
 import { InteractFrameThrottle, saveCtrlPassthrough, saveAdaptiveResolution } from '../utils/ViewerCommonUtils';
 import { recordRatingSession } from '../utils/AppRating';
+import { ThemeColors, LightColors, DarkColors } from '../utils/ThemeConstants';
 import { VncClient } from 'libvncviewer.so';
 
 interface ClickEvent {
@@ -275,22 +276,9 @@ struct Viewer {
   @State private authOpen: boolean = false;
   @State private devToolsEnabled: boolean = false;
   private didShowPanelGestureHint: boolean = false;
-  private readonly cTextPrimary: string = '#1c1917';
-  private readonly cTextMuted: string = '#292524';
-  private readonly cTextSecondary: string = '#57534e';
-  private readonly cTextTertiary: string = '#78716c';
-  private readonly cSurface: string = '#fdfbf7';
-  private readonly cSurfaceAlt: string = '#ffffff';
-  private readonly cBorder: string = '#e7e5e4';
-  private readonly cPrimary: string = '#2c4f54';
-  private readonly cPrimaryFg: string = '#ffffff';
-  private readonly cPrimarySoft: string = 'rgba(44,79,84,0.12)';
-  private readonly cInk: string = '#0c1416';
-  private readonly cOnInk: string = '#e7e5e4';
-  private readonly cError: string = '#b42318';
-  private readonly cWarning: string = '#d97706';
-  private readonly cSuccess: string = '#15803d';
-  private readonly cOverlayPanel: string = 'rgba(12,20,22,0.78)';
+  // 界面主题跟随系统深色/浅色设置（见 utils/ThemeConstants.ets）
+  @StorageProp('__app_is_dark_mode__') @Watch('onThemeChanged') private isDarkMode: boolean = false;
+  @State private colors: ThemeColors = LightColors;
 
   @State viewerW: number = 1;
   @State viewerH: number = 1;
@@ -531,6 +519,7 @@ struct Viewer {
   }
 
   aboutToAppear() {
+    this.colors = this.isDarkMode ? DarkColors : LightColors;
     viewerMultiWindowStore.ensureSession(this.sharedSessionId);
     this.refreshMonitorWindowsState();
     void this.loadEdgeClampSetting();
@@ -547,6 +536,12 @@ struct Viewer {
       this.tryAutoConnect();
       setTimeout(() => this.tryAutoConnect(), 0);
     });
+  }
+
+  onThemeChanged(): void {
+    this.colors = this.isDarkMode ? DarkColors : LightColors;
+    // 系统栏内容色跟随主题，否则深色背景下黑色图标不可见
+    this.applyFullscreenToWindow();
   }
 
   onPageShow(): void {
@@ -1636,10 +1631,10 @@ struct Viewer {
                   navigationBarContentColor: '#00000000'
                 }
                 : {
-                  statusBarColor: this.cSurface,
-                  navigationBarColor: this.cSurface,
-                  statusBarContentColor: '#000000',
-                  navigationBarContentColor: '#000000'
+                  statusBarColor: this.colors.surface,
+                  navigationBarColor: this.colors.surface,
+                  statusBarContentColor: this.colors.statusBarContent,
+                  navigationBarContentColor: this.colors.statusBarContent
                 };
               w.setWindowSystemBarProperties?.(props);
             } catch (e) {
@@ -1708,10 +1703,10 @@ struct Viewer {
   }
 
   private getConnectionStateColor(): string {
-    if (this.lastError) return this.cError;
-    if (this.connected) return this.cSuccess;
-    if (this.connecting) return this.cWarning;
-    return this.cTextSecondary;
+    if (this.lastError) return this.colors.error;
+    if (this.connected) return this.colors.success;
+    if (this.connecting) return this.colors.warning;
+    return this.colors.textSecondary;
   }
 
   private getSecurityLabel(): string {
@@ -1729,9 +1724,9 @@ struct Viewer {
   }
 
   private getSecurityBadgeColor(): string {
-    if (!this.connected || this.securityLevel === 0) return this.cError;
-    if (this.securityLevel === 1) return this.cWarning;
-    return this.cSuccess;
+    if (!this.connected || this.securityLevel === 0) return this.colors.error;
+    if (this.securityLevel === 1) return this.colors.warning;
+    return this.colors.success;
   }
 
   private shouldAutoHideChrome(): boolean {
@@ -2804,9 +2799,9 @@ struct Viewer {
         title: normalizeConnName(c.name, c.address, c.sshTunnel),
         message: resolveConnectionAddress(c.address, c.sshTunnel),
         buttons: [
-          { text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary },
-          { text: this.s($r('app.string.action_edit')), color: this.cPrimary },
-          { text: this.s($r('app.string.action_delete')), color: this.cError }
+          { text: this.s($r('app.string.action_cancel')), color: this.colors.textSecondary },
+          { text: this.s($r('app.string.action_edit')), color: this.colors.primary },
+          { text: this.s($r('app.string.action_delete')), color: this.colors.error }
         ]
       });
       if (res.index === 1) {
@@ -2827,14 +2822,14 @@ struct Viewer {
       Blank()
         .width(18)
         .height(18)
-        .backgroundColor(this.cSurfaceAlt)
+        .backgroundColor(this.colors.toggleKnob)
         .borderRadius(9)
         .margin({ left: isOn ? 18 : 0 });
     }
     .width(42)
     .height(24)
     .padding(3)
-    .backgroundColor(isOn ? this.cPrimary : this.cBorder)
+    .backgroundColor(isOn ? this.colors.toggleTrackOn : this.colors.toggleTrackOff)
     .borderRadius(12)
     .opacity(enabled ? 1 : 0.6)
     .onClick(() => {
@@ -2875,9 +2870,9 @@ struct Viewer {
             Button($r('app.string.action_close'))
               .height(28)
               .fontSize(12)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => this.closeConnectPasswordPrompt());
           }
@@ -2886,12 +2881,12 @@ struct Viewer {
           Column() {
             Text(`"${this.connectPromptName || this.s($r('app.string.conn_unnamed'))}" ${this.s($r('app.string.viewer_password_not_saved'))}`)
               .fontSize(14)
-              .fontColor(this.cTextPrimary)
+              .fontColor(this.colors.textPrimary)
               .width('100%');
             if (this.connectPromptAddress) {
               Text(this.connectPromptAddress)
                 .fontSize(12)
-                .fontColor(this.cTextSecondary)
+                .fontColor(this.colors.textSecondary)
                 .width('100%')
                 .padding({ top: 4, bottom: 10 });
             } else {
@@ -2899,7 +2894,7 @@ struct Viewer {
             }
             Text($r('app.string.conn_password_label'))
               .fontSize(12)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .width('100%')
               .padding({ bottom: 4 });
             TextInput({ text: this.connectPromptPassword, placeholder: $r('app.string.enter_password_placeholder') })
@@ -2909,7 +2904,7 @@ struct Viewer {
             Row() {
               Text($r('app.string.conn_save_password'))
                 .fontSize(12)
-                .fontColor(this.cTextSecondary)
+                .fontColor(this.colors.textSecondary)
                 .layoutWeight(1);
               this.buildBrandSwitch(this.connectPromptStorePassword, true, (next: boolean) => {
                 this.connectPromptStorePassword = next;
@@ -2923,25 +2918,25 @@ struct Viewer {
             Button($r('app.string.action_cancel'))
               .layoutWeight(1)
               .height(36)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(14)
               .onClick(() => this.closeConnectPasswordPrompt());
             Button($r('app.string.conn_connect'))
               .layoutWeight(1)
               .height(36)
               .margin({ left: 10 })
-              .fontColor(this.cPrimaryFg)
-              .backgroundColor(this.cPrimary)
+              .fontColor(this.colors.primaryFg)
+              .backgroundColor(this.colors.primary)
               .borderRadius(14)
               .onClick(() => { void this.confirmConnectPasswordPrompt(); });
           }
           .padding({ left: 14, right: 14, bottom: 14 });
         }
         .width(420)
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(12)
         .shadow({ radius: 16, color: 'rgba(12,20,22,0.16)', offsetX: 0, offsetY: 4 });
       }
@@ -3023,7 +3018,7 @@ struct Viewer {
       const res = await pa.showDialog({
         title: this.s($r('app.string.action_delete')),
         message: this.s($r('app.string.action_confirm')) + ` "${normalizeConnName(c.name, c.address, c.sshTunnel)}"？`,
-        buttons: [{ text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary }, { text: this.s($r('app.string.action_delete')), color: this.cError }]
+        buttons: [{ text: this.s($r('app.string.action_cancel')), color: this.colors.textSecondary }, { text: this.s($r('app.string.action_delete')), color: this.colors.error }]
       });
       if (res.index !== 1) return;
     } catch (e) {
@@ -4844,16 +4839,16 @@ struct Viewer {
         Button($r('app.string.conn_new'))
           .height(32)
           .fontSize(12)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
+          .fontColor(this.colors.primary)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.border })
           .borderRadius(12)
           .enabled(!this.connected)
           .onClick(() => this.openCreateDialog());
         if (this.connected) {
           Text($r('app.string.conn_collapse'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .margin({ left: 12 })
             .onClick(() => this.closePanel());
         }
@@ -4863,7 +4858,7 @@ struct Viewer {
       if (this.connections.length === 0) {
         Text($r('app.string.conn_no_saved'))
           .fontSize(13)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .padding({ left: 12, right: 12, bottom: 10 });
       } else {
         List() {
@@ -4879,30 +4874,30 @@ struct Viewer {
                       if (((c.name ?? '').trim())) {
                         Text(resolveConnectionAddress(c.address ?? '', c.sshTunnel))
                           .fontSize(12)
-                          .fontColor(this.cTextSecondary)
+                          .fontColor(this.colors.textSecondary)
                           .maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis })
                           .layoutWeight(1);
                       }
                       if ((c.user ?? '').trim()) {
-                        Text($r('app.string.conn_user_prefix', (c.user ?? '').trim())).fontSize(12).fontColor(this.cTextSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
+                        Text($r('app.string.conn_user_prefix', (c.user ?? '').trim())).fontSize(12).fontColor(this.colors.textSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
                       }
                       if (c.storePassword && (c.password ?? '').length > 0) {
-                        Text($r('app.string.conn_password_saved')).fontSize(12).fontColor(this.cTextSecondary).margin({ left: 8 });
+                        Text($r('app.string.conn_password_saved')).fontSize(12).fontColor(this.colors.textSecondary).margin({ left: 8 });
                       }
                     }.margin({ top: 2 });
                   }.layoutWeight(1);
                   if (!this.connected && c.id === this.selectedConnId) {
                     Text($r('app.string.conn_edit_delete'))
                       .fontSize(12)
-                      .fontColor(this.cTextSecondary)
+                      .fontColor(this.colors.textSecondary)
                       .margin({ left: 12 })
                       .onClick(() => { void this.openConnectionActions(c.id); });
                   }
                 }
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
                 .onClick(() => this.selectConnection(c.id));
-                Blank().height(1).backgroundColor(this.cBorder).margin({ left: 12, right: 12 });
+                Blank().height(1).backgroundColor(this.colors.border).margin({ left: 12, right: 12 });
               }
             }
           }, (c: ConnectionItem) => c.id);
@@ -4918,9 +4913,9 @@ struct Viewer {
         Button(this.authOpen ? $r('app.string.conn_collapse_auth') : $r('app.string.conn_open_auth'))
           .height(32)
           .fontSize(12)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
+          .fontColor(this.colors.primary)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.border })
           .borderRadius(12)
           .enabled(!this.connected)
           .onClick(() => this.authOpen = !this.authOpen);
@@ -4930,7 +4925,7 @@ struct Viewer {
       Column() {
         Text($r('app.string.conn_address_label'))
           .fontSize(12)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%')
           .padding({ bottom: 4 });
         TextInput({ text: this.address, placeholder: $r('app.string.conn_address_placeholder') })
@@ -4941,7 +4936,7 @@ struct Viewer {
         if (this.authOpen) {
           Text($r('app.string.conn_user_optional'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%')
             .padding({ bottom: 4 });
           TextInput({ text: this.user, placeholder: $r('app.string.conn_user_placeholder') })
@@ -4951,7 +4946,7 @@ struct Viewer {
 
           Text($r('app.string.conn_password_optional'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%')
             .padding({ bottom: 4 });
           TextInput({ text: this.password, placeholder: $r('app.string.conn_password_placeholder') })
@@ -4963,7 +4958,7 @@ struct Viewer {
             Row() {
               Text($r('app.string.conn_remember_password'))
                 .fontSize(12)
-                .fontColor(this.cTextSecondary)
+                .fontColor(this.colors.textSecondary)
                 .layoutWeight(1);
               this.buildBrandSwitch(this.isSelectedStorePasswordEnabled(), !this.connected, (next: boolean) => {
                 if (next !== this.isSelectedStorePasswordEnabled()) this.toggleSelectedStorePassword();
@@ -4978,7 +4973,7 @@ struct Viewer {
       if (this.lastError) {
         Text(this.lastError)
           .fontSize(12)
-          .fontColor(this.cError)
+          .fontColor(this.colors.error)
           .padding({ left: 12, right: 12, bottom: 8 });
       }
 
@@ -4987,9 +4982,9 @@ struct Viewer {
           .layoutWeight(1)
           .height(44)
           .fontSize(15)
-          .fontColor(this.connected ? this.cPrimary : this.cPrimaryFg)
-          .backgroundColor(this.connected ? this.cSurfaceAlt : this.cPrimary)
-          .border(this.connected ? { width: 1, color: this.cBorder } : { width: 0, color: this.cBorder })
+          .fontColor(this.connected ? this.colors.primary : this.colors.primaryFg)
+          .backgroundColor(this.connected ? this.colors.surfaceAlt : this.colors.primary)
+          .border(this.connected ? { width: 1, color: this.colors.border } : { width: 0, color: this.colors.border })
           .borderRadius(14)
           .enabled(!this.connecting)
           .onClick(() => {
@@ -5003,14 +4998,14 @@ struct Viewer {
         Row() {
           Text(this.s($r('app.string.viewer_connected_size'), this.fbW, this.fbH))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .layoutWeight(1);
           Button(this.devToolsEnabled ? $r('app.string.viewer_devtools_on') : $r('app.string.viewer_devtools_off'))
             .fontSize(12)
             .height(28)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onClick(() => this.setDevToolsEnabled(!this.devToolsEnabled));
         }.padding({ left: 12, right: 12, bottom: 8 });
@@ -5020,9 +5015,9 @@ struct Viewer {
             Button(this.debugEnabled ? $r('app.string.viewer_debug_on') : $r('app.string.viewer_debug_off'))
               .fontSize(12)
               .height(28)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => {
                 this.debugEnabled = !this.debugEnabled;
@@ -5037,9 +5032,9 @@ struct Viewer {
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => {
                 this.debugPmFormat = (this.debugPmFormat + 1) % 2;
@@ -5051,9 +5046,9 @@ struct Viewer {
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => {
                 this.debugByteOrder = (this.debugByteOrder + 1) % 4;
@@ -5068,9 +5063,9 @@ struct Viewer {
               .fontSize(12)
               .height(28)
               .layoutWeight(1)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => this.vncClient.refresh());
             Button($r('app.string.viewer_save_frame'))
@@ -5078,9 +5073,9 @@ struct Viewer {
               .height(28)
               .layoutWeight(1)
               .margin({ left: 8 })
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => { void this.saveImage(); });
           }.padding({ left: 12, right: 12, bottom: 8 });
@@ -5093,7 +5088,7 @@ struct Viewer {
             Text(this.firstPixel)
               .fontSize(14)
               .lineHeight(18)
-              .fontColor(this.cError)
+              .fontColor(this.colors.error)
               .fontWeight(FontWeight.Bold)
               .fontFamily('monospace');
           }
@@ -5101,7 +5096,7 @@ struct Viewer {
             Text(this.debugInfoText)
               .fontSize(13)
               .lineHeight(18)
-              .fontColor(this.cTextPrimary)
+              .fontColor(this.colors.textPrimary)
               .fontFamily('monospace')
               .maxLines(4)
               .textOverflow({ overflow: TextOverflow.Ellipsis });
@@ -5110,7 +5105,7 @@ struct Viewer {
             Text(this.debugLogText)
               .fontSize(12)
               .lineHeight(16)
-              .fontColor(this.cTextMuted)
+              .fontColor(this.colors.textMuted)
               .fontFamily('monospace')
               .maxLines(8)
               .textOverflow({ overflow: TextOverflow.Ellipsis });
@@ -5118,12 +5113,12 @@ struct Viewer {
         }
         .padding(10)
         .margin({ left: 12, right: 12, bottom: 12 })
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(8);
       }
     }
-    .backgroundColor(this.cSurface)
+    .backgroundColor(this.colors.surface)
     .margin({ left: 0, right: 0, top: 0, bottom: 0 });
   }
 
@@ -5147,9 +5142,9 @@ struct Viewer {
             Button($r('app.string.action_close'))
               .height(28)
               .fontSize(12)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => this.closeEditDialog());
           }
@@ -5158,7 +5153,7 @@ struct Viewer {
           Column() {
             Text($r('app.string.conn_name_optional'))
               .fontSize(12)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .width('100%')
               .padding({ bottom: 4 });
             TextInput({ text: this.editName, placeholder: $r('app.string.conn_name_placeholder') })
@@ -5167,7 +5162,7 @@ struct Viewer {
 
             Text($r('app.string.conn_address_label'))
               .fontSize(12)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .width('100%')
               .padding({ bottom: 4 });
             TextInput({ text: this.editAddress, placeholder: $r('app.string.conn_address_placeholder') })
@@ -5176,7 +5171,7 @@ struct Viewer {
 
             Text($r('app.string.conn_user_optional'))
               .fontSize(12)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .width('100%')
               .padding({ bottom: 4 });
             TextInput({ text: this.editUser, placeholder: $r('app.string.conn_user_placeholder') })
@@ -5185,7 +5180,7 @@ struct Viewer {
 
             Text($r('app.string.conn_password_optional'))
               .fontSize(12)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .width('100%')
               .padding({ bottom: 4 });
             TextInput({ text: this.editPassword, placeholder: $r('app.string.password_optional_short') })
@@ -5195,7 +5190,7 @@ struct Viewer {
             Row() {
               Text($r('app.string.conn_remember_password'))
                 .fontSize(12)
-                .fontColor(this.cTextSecondary)
+                .fontColor(this.colors.textSecondary)
                 .layoutWeight(1);
               this.buildBrandSwitch(this.editStorePassword, true, (next: boolean) => this.editStorePassword = next);
             }
@@ -5203,43 +5198,43 @@ struct Viewer {
             Column() {
               Text($r('app.string.conn_touch_scroll_step'))
                 .fontSize(12)
-                .fontColor(this.cTextSecondary)
+                .fontColor(this.colors.textSecondary)
                 .width('100%')
                 .padding({ bottom: 6 });
               Row() {
                 Button($r('app.string.button_auto'))
                   .height(28)
                   .fontSize(12)
-                  .fontColor(this.editTouchScrollStep <= 0 ? this.cPrimaryFg : this.cPrimary)
-                  .backgroundColor(this.editTouchScrollStep <= 0 ? this.cPrimary : this.cSurfaceAlt)
-                  .border({ width: 1, color: this.cBorder })
+                  .fontColor(this.editTouchScrollStep <= 0 ? this.colors.primaryFg : this.colors.primary)
+                  .backgroundColor(this.editTouchScrollStep <= 0 ? this.colors.primary : this.colors.surfaceAlt)
+                  .border({ width: 1, color: this.colors.border })
                   .borderRadius(12)
                   .onClick(() => this.updateEditTouchScrollStep(0));
                 Button($r('app.string.tool_scroll_slow'))
                   .height(28)
                   .fontSize(12)
                   .margin({ left: 6 })
-                  .fontColor(this.editTouchScrollStep === 18 ? this.cPrimaryFg : this.cPrimary)
-                  .backgroundColor(this.editTouchScrollStep === 18 ? this.cPrimary : this.cSurfaceAlt)
-                  .border({ width: 1, color: this.cBorder })
+                  .fontColor(this.editTouchScrollStep === 18 ? this.colors.primaryFg : this.colors.primary)
+                  .backgroundColor(this.editTouchScrollStep === 18 ? this.colors.primary : this.colors.surfaceAlt)
+                  .border({ width: 1, color: this.colors.border })
                   .borderRadius(12)
                   .onClick(() => this.updateEditTouchScrollStep(18));
                 Button($r('app.string.tool_scroll_medium'))
                   .height(28)
                   .fontSize(12)
                   .margin({ left: 6 })
-                  .fontColor(this.editTouchScrollStep === 12 ? this.cPrimaryFg : this.cPrimary)
-                  .backgroundColor(this.editTouchScrollStep === 12 ? this.cPrimary : this.cSurfaceAlt)
-                  .border({ width: 1, color: this.cBorder })
+                  .fontColor(this.editTouchScrollStep === 12 ? this.colors.primaryFg : this.colors.primary)
+                  .backgroundColor(this.editTouchScrollStep === 12 ? this.colors.primary : this.colors.surfaceAlt)
+                  .border({ width: 1, color: this.colors.border })
                   .borderRadius(12)
                   .onClick(() => this.updateEditTouchScrollStep(12));
                 Button($r('app.string.tool_scroll_fast'))
                   .height(28)
                   .fontSize(12)
                   .margin({ left: 6 })
-                  .fontColor(this.editTouchScrollStep === 8 ? this.cPrimaryFg : this.cPrimary)
-                  .backgroundColor(this.editTouchScrollStep === 8 ? this.cPrimary : this.cSurfaceAlt)
-                  .border({ width: 1, color: this.cBorder })
+                  .fontColor(this.editTouchScrollStep === 8 ? this.colors.primaryFg : this.colors.primary)
+                  .backgroundColor(this.editTouchScrollStep === 8 ? this.colors.primary : this.colors.surfaceAlt)
+                  .border({ width: 1, color: this.colors.border })
                   .borderRadius(12)
                   .onClick(() => this.updateEditTouchScrollStep(8));
               }
@@ -5248,7 +5243,7 @@ struct Viewer {
                 ? this.s($r('app.string.conn_touch_scroll_auto_current'))
                 : this.s($r('app.string.conn_touch_scroll_value_current'), this.editTouchScrollStep))
                 .fontSize(11)
-                .fontColor(this.cTextTertiary)
+                .fontColor(this.colors.textTertiary)
                 .width('100%')
                 .padding({ top: 6 });
             }
@@ -5259,25 +5254,25 @@ struct Viewer {
             Button($r('app.string.action_cancel'))
               .layoutWeight(1)
               .height(36)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(14)
               .onClick(() => this.closeEditDialog());
             Button($r('app.string.action_save'))
               .layoutWeight(1)
               .height(36)
               .margin({ left: 10 })
-              .fontColor(this.cPrimaryFg)
-              .backgroundColor(this.cPrimary)
+              .fontColor(this.colors.primaryFg)
+              .backgroundColor(this.colors.primary)
               .borderRadius(14)
               .onClick(() => { void this.saveEditDialog(); });
           }
           .padding({ left: 14, right: 14, bottom: 14 });
         }
         .width(420)
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(12)
         .shadow({ radius: 16, color: 'rgba(12,20,22,0.16)', offsetX: 0, offsetY: 4 });
       }
@@ -5301,7 +5296,7 @@ struct Viewer {
         Column() {
           Text(this.connecting ? this.s($r('app.string.conn_connecting')) : (this.lastError ? this.lastError : (this.connected ? this.s($r('app.string.viewer_waiting_first_frame_state')) : this.s($r('app.string.conn_disconnected_state')))))
             .fontSize(14)
-            .fontColor(this.lastError ? this.cError : this.cOnInk);
+            .fontColor(this.lastError ? this.colors.error : this.colors.onInk);
         }
         .alignItems(HorizontalAlign.Center)
         .justifyContent(FlexAlign.Center)
@@ -5624,9 +5619,9 @@ struct Viewer {
             Button(`${index + 1}`)
               .fontSize(12)
               .height(28)
-              .fontColor(this.manualDragMonitorIndex === index ? this.cPrimaryFg : this.cTextPrimary)
-              .backgroundColor(this.manualDragMonitorIndex === index ? this.cPrimary : this.cSurfaceAlt)
-              .border({ width: 1, color: this.manualDragMonitorIndex === index ? this.cPrimary : this.cBorder })
+              .fontColor(this.manualDragMonitorIndex === index ? this.colors.primaryFg : this.colors.textPrimary)
+              .backgroundColor(this.manualDragMonitorIndex === index ? this.colors.primary : this.colors.surfaceAlt)
+              .border({ width: 1, color: this.manualDragMonitorIndex === index ? this.colors.primary : this.colors.border })
               .borderRadius(14)
               .onClick(() => {
                 this.manualDragMonitorIndex = index;
@@ -5639,9 +5634,9 @@ struct Viewer {
           Button($r('app.string.action_cancel'))
             .fontSize(12)
             .height(28)
-            .fontColor('#ef4444')
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: 'rgba(239,68,68,0.55)' })
+            .fontColor(this.colors.destructive)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.destructiveBorder })
             .borderRadius(14)
             .onClick(() => {
               // 放弃本次手动布局修改：清除手动矩形并退出定义模式，回到面板主视图查看还原后的布局
@@ -5656,9 +5651,9 @@ struct Viewer {
           Button($r('app.string.button_done'))
             .fontSize(12)
             .height(28)
-            .fontColor(this.cTextPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.textPrimary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(14)
             .onClick(() => {
               // 退出定义模式并回到编辑屏幕视图；布局保存统一由面板主视图"记住布局"完成
@@ -5684,7 +5679,7 @@ struct Viewer {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.cInk)
+    .backgroundColor(this.colors.ink)
     .margin(this.isFullscreen ? { left: 0, right: 0, bottom: 0 } : { left: 12, right: 12, bottom: 12 })
     .borderRadius(this.isFullscreen ? 0 : 8)
     .clip(true);
@@ -5771,9 +5766,9 @@ struct Viewer {
     Button($$.label)
       .height(32)
       .fontSize(12)
-      .fontColor($$.active ? this.cPrimaryFg : this.cOnInk)
-      .backgroundColor($$.active ? this.cPrimary : 'rgba(255,255,255,0.08)')
-      .border($$.active ? { width: 0, color: this.cPrimary } : { width: 1, color: 'rgba(255,255,255,0.12)' })
+      .fontColor($$.active ? this.colors.primaryFg : this.colors.onInk)
+      .backgroundColor($$.active ? this.colors.primary : 'rgba(255,255,255,0.08)')
+      .border($$.active ? { width: 0, color: this.colors.primary } : { width: 1, color: 'rgba(255,255,255,0.12)' })
       .borderRadius(16)
       .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
       .onClick(() => {
@@ -5789,9 +5784,9 @@ struct Viewer {
       .flexShrink(1)
       .height(40)
       .fontSize(12)
-      .fontColor($$.active ? this.cPrimaryFg : '#f5f5f4')
-      .backgroundColor($$.active ? this.cPrimary : 'rgba(255,255,255,0.08)')
-      .border($$.active ? { width: 0, color: this.cPrimary } : { width: 1, color: 'rgba(255,255,255,0.12)' })
+      .fontColor($$.active ? this.colors.primaryFg : '#f5f5f4')
+      .backgroundColor($$.active ? this.colors.primary : 'rgba(255,255,255,0.08)')
+      .border($$.active ? { width: 0, color: this.colors.primary } : { width: 1, color: 'rgba(255,255,255,0.12)' })
       .borderRadius(16)
       .enabled($$.enabled)
       .opacity($$.enabled ? 1 : 0.5)
@@ -5808,9 +5803,9 @@ struct Viewer {
       .width('100%')
       .height(36)
       .fontSize(12)
-      .fontColor($$.primary ? this.cPrimaryFg : this.cPrimary)
-      .backgroundColor($$.primary ? this.cPrimary : this.cSurfaceAlt)
-      .border($$.primary ? { width: 0, color: this.cPrimary } : { width: 1, color: this.cBorder })
+      .fontColor($$.primary ? this.colors.primaryFg : this.colors.primary)
+      .backgroundColor($$.primary ? this.colors.primary : this.colors.surfaceAlt)
+      .border($$.primary ? { width: 0, color: this.colors.primary } : { width: 1, color: this.colors.border })
       .borderRadius(14)
       .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
       .onClick(() => {
@@ -5829,11 +5824,11 @@ struct Viewer {
       Column() {
         Text($r('app.string.more_adaptive_resolution'))
           .fontSize(13)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .maxLines(1);
         Text($r('app.string.more_adaptive_resolution_desc'))
           .fontSize(11)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .maxLines(2);
       }
       .layoutWeight(1);
@@ -5841,21 +5836,21 @@ struct Viewer {
         Blank()
           .width(18)
           .height(18)
-          .backgroundColor(this.cSurfaceAlt)
+          .backgroundColor(this.colors.surfaceAlt)
           .borderRadius(9)
           .margin({ left: this.adaptiveResolutionEnabled ? 18 : 0 });
       }
       .width(42)
       .height(24)
       .padding(3)
-      .backgroundColor(this.adaptiveResolutionEnabled ? this.cPrimary : this.cBorder)
+      .backgroundColor(this.adaptiveResolutionEnabled ? this.colors.primary : this.colors.border)
       .borderRadius(12);
     }
     .width('100%')
     .padding({ left: 12, right: 8, top: 8, bottom: 8 })
-    .backgroundColor(this.cSurfaceAlt)
+    .backgroundColor(this.colors.surfaceAlt)
     .borderRadius(14)
-    .border({ width: 1, color: this.cBorder })
+    .border({ width: 1, color: this.colors.border })
     .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
     // The whole row is the hit area, not just the 42x24 switch.
     .onClick(() => {
@@ -5972,19 +5967,19 @@ struct Viewer {
           Text($r('app.string.panel_session_setup'))
             .fontSize(18)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.cTextPrimary)
+            .fontColor(this.colors.textPrimary)
             .width('100%')
             .padding({ left: 12, right: 12, top: 12 });
           Text($r('app.string.panel_session_setup_desc'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%')
             .padding({ left: 12, right: 12, top: 4, bottom: 8 });
           this.buildControls();
         }
         .width(Math.max(320, Math.min(560, this.windowW > 0 ? this.windowW - 24 : 560)))
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(20)
         .shadow({ radius: 24, color: 'rgba(12,20,22,0.14)', offsetX: 0, offsetY: 10 });
         Blank().height(24);
@@ -5999,7 +5994,7 @@ struct Viewer {
     Column({ space: 10 }) {
       Text($r('app.string.clipboard_panel_action_desc'))
         .fontSize(12)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%');
       Text(this.s(
         $r('app.string.clipboard_local_cache_label'),
@@ -6008,7 +6003,7 @@ struct Viewer {
           : this.s($r('app.string.clipboard_none'))
       ))
         .fontSize(12)
-        .fontColor(this.cTextPrimary)
+        .fontColor(this.colors.textPrimary)
         .width('100%');
       Text(this.s(
         $r('app.string.clipboard_remote_cache_label'),
@@ -6017,7 +6012,7 @@ struct Viewer {
           : this.s($r('app.string.clipboard_none'))
       ))
         .fontSize(12)
-        .fontColor(this.cTextPrimary)
+        .fontColor(this.colors.textPrimary)
         .width('100%');
       PasteButton()
         .width('100%')
@@ -6107,7 +6102,7 @@ struct Viewer {
       .height(this.getDisplayPreviewContainer().h)
       .clip(true)
       .backgroundColor('#000000')
-      .border({ width: 1, color: this.cBorder })
+      .border({ width: 1, color: this.colors.border })
       .borderRadius(14)
       .onTouch((ev: TouchEvent) => this.handleDisplayPreviewTouch(ev))
       .alignSelf(ItemAlign.Center);
@@ -6121,14 +6116,14 @@ struct Viewer {
         Text($r('app.string.monitor_edit_screens'))
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .layoutWeight(1);
         Button($r('app.string.monitor_edit_done'))
           .height(32)
           .fontSize(12)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
+          .fontColor(this.colors.primary)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.border })
           .borderRadius(14)
           .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
           .onClick(() => {
@@ -6143,29 +6138,29 @@ struct Viewer {
         : this.s($r('app.string.monitor_manual_input_hint')))
         .fontSize(11)
         .lineHeight(16)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%');
       ForEach(this.manualMonitorDrafts, (draft: string, index: number) => {
         Column({ space: 6 }) {
           Text($r('app.string.viewer_screen_label', index + 1))
             .fontSize(11)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%');
           TextInput({ text: draft, placeholder: $r('app.string.monitor_coords_placeholder') })
             .onChange((value: string) => this.updateManualMonitorDraft(index, value))
             .width('100%');
           Text($r('app.string.monitor_current_rect', this.formatMonitorRectLabel(this.manualMonitorRects[index])))
             .fontSize(10)
-            .fontColor(this.cTextMuted)
+            .fontColor(this.colors.textMuted)
             .width('100%');
           Row({ space: 8 }) {
             Button(this.manualDragMonitorIndex === index ? this.s($r('app.string.monitor_end_drag')) : this.s($r('app.string.monitor_drag_define')))
               .layoutWeight(1)
               .height(32)
               .fontSize(11)
-              .fontColor(this.manualDragMonitorIndex === index ? '#ffffff' : this.cPrimary)
-              .backgroundColor(this.manualDragMonitorIndex === index ? '#ef4444' : this.cSurfaceAlt)
-              .border({ width: this.manualDragMonitorIndex === index ? 0 : 1, color: this.cBorder })
+              .fontColor(this.manualDragMonitorIndex === index ? '#ffffff' : this.colors.primary)
+              .backgroundColor(this.manualDragMonitorIndex === index ? '#ef4444' : this.colors.surfaceAlt)
+              .border({ width: this.manualDragMonitorIndex === index ? 0 : 1, color: this.colors.border })
               .borderRadius(10)
               .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
               .onClick(() => {
@@ -6176,9 +6171,9 @@ struct Viewer {
               .layoutWeight(1)
               .height(32)
               .fontSize(11)
-              .fontColor('#ef4444')
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: 'rgba(239,68,68,0.55)' })
+              .fontColor(this.colors.destructive)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.destructiveBorder })
               .borderRadius(10)
               .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
               .onClick(() => {
@@ -6190,8 +6185,8 @@ struct Viewer {
         }
         .width('100%')
         .padding(10)
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(12);
       }, (draft: string, index: number) => `manual:${index}:${draft}`);
       Row({ space: 8 }) {
@@ -6199,9 +6194,9 @@ struct Viewer {
           .layoutWeight(1)
           .height(34)
           .fontSize(12)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
+          .fontColor(this.colors.primary)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.border })
           .borderRadius(12)
           .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
           .onClick(() => {
@@ -6212,9 +6207,9 @@ struct Viewer {
           .layoutWeight(1)
           .height(34)
           .fontSize(12)
-          .fontColor('#ef4444')
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: 'rgba(239,68,68,0.55)' })
+          .fontColor(this.colors.destructive)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.destructiveBorder })
           .borderRadius(12)
           .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
           .onClick(() => {
@@ -6234,7 +6229,7 @@ struct Viewer {
     Column({ space: 10 }) {
       Text($r('app.string.display_panel_switch_desc'))
         .fontSize(12)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%');
       this.buildDisplayPreviewImage();
       if (this.getDisplayPreviewMonitorRects().length > 0) {
@@ -6246,12 +6241,12 @@ struct Viewer {
             : this.s($r('app.string.display_detected_screens_count'), this.getDisplayPreviewMonitorRects().length)
         )
           .fontSize(12)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%');
         ForEach(this.getDisplayPreviewMonitorRects(), (m: VncRect, index: number) => {
           Text(this.s($r('app.string.display_screen_n_with_rect'), index + 1, this.formatMonitorRectLabel(m)))
             .fontSize(11)
-            .fontColor(this.cTextMuted)
+            .fontColor(this.colors.textMuted)
             .width('100%');
         }, (m: VncRect, index: number) => `${index}:${m.x},${m.y},${m.w},${m.h}:label`);
         Row({ space: 8 }) {
@@ -6259,9 +6254,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(14)
             .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
             .onClick(() => {
@@ -6272,9 +6267,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(14)
             .enabled(this.getDisplayPreviewMonitorRects().length > 1)
             .opacity(this.getDisplayPreviewMonitorRects().length > 1 ? 1 : 0.5)
@@ -6290,16 +6285,16 @@ struct Viewer {
           : this.s($r('app.string.display_monitor_window_desc')))
           .fontSize(11)
           .lineHeight(16)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%');
         Row({ space: 8 }) {
           Button($r('app.string.display_split_to_windows'))
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(14)
             .enabled(this.getDisplayPreviewMonitorRects().length > 1 && this.connected)
             .opacity(this.getDisplayPreviewMonitorRects().length > 1 && this.connected ? 1 : 0.5)
@@ -6312,9 +6307,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(36)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(14)
             .enabled(this.monitorWindowsOpenCount > 0)
             .opacity(this.monitorWindowsOpenCount > 0 ? 1 : 0.5)
@@ -6330,13 +6325,13 @@ struct Viewer {
         Text($r('app.string.display_total_canvas_desc', this.fbW, this.fbH))
           .fontSize(11)
           .lineHeight(16)
-          .fontColor(this.cTextMuted)
+          .fontColor(this.colors.textMuted)
           .width('100%');
         if (this.monitorLayoutLocked && this.monitors.length > 1) {
           Text($r('app.string.display_layout_locked_hint'))
             .fontSize(11)
             .lineHeight(16)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%');
         }
         Row({ space: 8 }) {
@@ -6344,9 +6339,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
             .onClick(() => {
@@ -6357,9 +6352,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
             .onClick(() => {
@@ -6370,9 +6365,9 @@ struct Viewer {
             .layoutWeight(1)
             .height(34)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
             .onClick(() => {
@@ -6400,12 +6395,12 @@ struct Viewer {
       } else if (this.detectingDisplayLayout) {
         Text($r('app.string.monitor_detecting'))
           .fontSize(12)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%');
       } else {
         Text($r('app.string.monitor_only_one_detected'))
           .fontSize(12)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%');
       }
     }
@@ -6417,14 +6412,14 @@ struct Viewer {
     Column({ space: 10 }) {
       Text($r('app.string.more_panel_desc'))
         .fontSize(12)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%');
       this.buildPanelAction({ label: this.s($r('app.string.more_clipboard_label')), primary: false, onClick: () => this.togglePanel('clipboard') });
       this.buildAdaptiveResolutionToggle();
       if (this.adaptiveResizeNotice) {
         Text(this.adaptiveResizeNotice)
           .fontSize(11)
-          .fontColor(this.cWarning)
+          .fontColor(this.colors.warning)
           .width('100%');
       }
       if (this.runtimeMacMode) {
@@ -6432,11 +6427,11 @@ struct Viewer {
           Column() {
             Text($r('app.string.keyboard_ctrl_passthrough'))
               .fontSize(13)
-              .fontColor(this.cTextPrimary)
+              .fontColor(this.colors.textPrimary)
               .maxLines(1);
             Text($r('app.string.keyboard_ctrl_passthrough_desc'))
               .fontSize(11)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .maxLines(2);
           }
           .layoutWeight(1);
@@ -6444,14 +6439,14 @@ struct Viewer {
             Blank()
               .width(18)
               .height(18)
-              .backgroundColor(this.cSurfaceAlt)
+              .backgroundColor(this.colors.surfaceAlt)
               .borderRadius(9)
               .margin({ left: this.remoteCtrlPassthrough ? 18 : 0 });
           }
           .width(42)
           .height(24)
           .padding(3)
-          .backgroundColor(this.remoteCtrlPassthrough ? this.cPrimary : this.cBorder)
+          .backgroundColor(this.remoteCtrlPassthrough ? this.colors.primary : this.colors.border)
           .borderRadius(12)
           .onClick(() => {
             const next = !this.remoteCtrlPassthrough;
@@ -6462,9 +6457,9 @@ struct Viewer {
         }
         .width('100%')
         .padding({ left: 12, right: 8, top: 8, bottom: 8 })
-        .backgroundColor(this.cSurfaceAlt)
+        .backgroundColor(this.colors.surfaceAlt)
         .borderRadius(14)
-        .border({ width: 1, color: this.cBorder })
+        .border({ width: 1, color: this.colors.border })
         .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev));
       }
       this.buildPanelAction({ label: this.s($r('app.string.more_open_session_panel')), primary: false, onClick: () => this.togglePanel('connection') });
@@ -6497,11 +6492,11 @@ struct Viewer {
       Text(this.getSecurityDescription())
         .fontSize(13)
         .lineHeight(20)
-        .fontColor(this.cTextPrimary)
+        .fontColor(this.colors.textPrimary)
         .width('100%');
       Text($r('app.string.security_panel_desc'))
         .fontSize(12)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%');
     }
     .width('100%');
@@ -6512,7 +6507,7 @@ struct Viewer {
     Column({ space: 10 }) {
       Text($r('app.string.devtools_desc'))
         .fontSize(12)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%');
       this.buildPanelAction({ label: this.debugEnabled ? this.s($r('app.string.debug_turn_off')) : this.s($r('app.string.debug_turn_on')), primary: false, onClick: () => {
         this.debugEnabled = !this.debugEnabled;
@@ -6540,7 +6535,7 @@ struct Viewer {
       if (this.firstPixel) {
         Text(this.firstPixel)
           .fontSize(12)
-          .fontColor(this.cError)
+          .fontColor(this.colors.error)
           .fontWeight(FontWeight.Medium)
           .fontFamily('monospace')
           .width('100%');
@@ -6548,7 +6543,7 @@ struct Viewer {
       if (this.debugInfoText) {
         Text(this.debugInfoText)
           .fontSize(12)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .fontFamily('monospace')
           .maxLines(5)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -6557,7 +6552,7 @@ struct Viewer {
       if (this.debugLogText) {
         Text(this.debugLogText)
           .fontSize(11)
-          .fontColor(this.cTextMuted)
+          .fontColor(this.colors.textMuted)
           .fontFamily('monospace')
           .maxLines(8)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -6605,14 +6600,14 @@ struct Viewer {
               )
                 .fontSize(16)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.cTextPrimary)
+                .fontColor(this.colors.textPrimary)
                 .layoutWeight(1);
               Button($r('app.string.action_close'))
                 .height(30)
                 .fontSize(12)
-                .fontColor(this.cPrimary)
-                .backgroundColor(this.cSurfaceAlt)
-                .border({ width: 1, color: this.cBorder })
+                .fontColor(this.colors.primary)
+                .backgroundColor(this.colors.surfaceAlt)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(14)
                 .onClick(() => this.closePanel());
             }
@@ -6646,8 +6641,8 @@ struct Viewer {
           }
           .width(Math.max(320, Math.min(560, this.windowW > 0 ? this.windowW - 24 : 560)))
           .constraintSize({ maxHeight: this.getPanelMaxHeight() })
-          .backgroundColor(this.panelMode === 'connection' ? this.cSurface : this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
+          .backgroundColor(this.panelMode === 'connection' ? this.colors.surface : this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.border })
           .borderRadius(22)
           .shadow({ radius: 24, color: 'rgba(12,20,22,0.18)', offsetX: 0, offsetY: 10 })
           .margin({ bottom: this.isFullscreen ? 12 : 24 });
@@ -6710,7 +6705,7 @@ struct Viewer {
           .fontSize(12)
           .fontColor('#ffffff')
           .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-          .backgroundColor(this.cOverlayPanel)
+          .backgroundColor(this.colors.overlayPanel)
           .borderRadius(16);
       }
       .width('100%')
@@ -6855,7 +6850,7 @@ struct Viewer {
     .id('vnc_root_stack')
     .width("100%")
     .height("100%")
-    .backgroundColor(this.cSurface)
+    .backgroundColor(this.colors.surface)
     .focusable(true)
     .defaultFocus(true)
     .onKeyEvent((ev: KeyEvent) => {

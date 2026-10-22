@@ -30,6 +30,8 @@ import {
   saveEdgeClampEnabled
 } from '../utils/ViewerCommonUtils';
 
+import { ThemeColors, LightColors, DarkColors } from '../utils/ThemeConstants';
+
 import {
   RATING_RESULT_ALREADY_RATED,
   RATING_RESULT_COMMENT_LIMIT,
@@ -133,6 +135,11 @@ const AGREEMENT_DIALOG_NONE = 0;
 const AGREEMENT_DIALOG_PRIVACY = 1;
 const AGREEMENT_DIALOG_USER = 2;
 const AGREEMENT_DIALOG_LAUNCH = 3;
+// 图标按钮的语义变体：颜色在 @Builder 内部从 this.colors 取，
+// 不能作为参数传进去——多参数 @Builder 按值传参，主题切换后不会重绘。
+const ICON_BUTTON_PRIMARY = 0;
+const ICON_BUTTON_NEUTRAL = 1;
+const ICON_BUTTON_DANGER = 2;
 const LAUNCH_AGREEMENTS_ACCEPTED_KEY = 'launch_agreements_accepted_v1';
 const PRIVACY_POLICY_RAWFILE = 'privacy-policy.md';
 const USER_AGREEMENT_RAWFILE = 'user-agreement.md';
@@ -178,21 +185,35 @@ class RemotePoint {
 struct BrandSwitch {
   @Prop isOn: boolean = false;
   @Prop isEnabled: boolean = true;
+  @StorageProp('__app_is_dark_mode__') @Watch('onThemeChanged') isDarkMode: boolean = false;
+  @State private colors: ThemeColors = LightColors;
   onChange: (next: boolean) => void = () => {};
+
+  aboutToAppear(): void {
+    this.syncTheme();
+  }
+
+  onThemeChanged(): void {
+    this.syncTheme();
+  }
+
+  private syncTheme(): void {
+    this.colors = this.isDarkMode ? DarkColors : LightColors;
+  }
 
   build() {
     Row() {
       Blank()
         .width(18)
         .height(18)
-        .backgroundColor('#ffffff')
+        .backgroundColor(this.colors.toggleKnob)
         .borderRadius(9)
         .margin({ left: this.isOn ? 18 : 0 });
     }
     .width(42)
     .height(24)
     .padding(3)
-    .backgroundColor(this.isOn ? '#2c4f54' : '#e7e5e4')
+    .backgroundColor(this.isOn ? this.colors.toggleTrackOn : this.colors.toggleTrackOff)
     .borderRadius(12)
     .opacity(this.isEnabled ? 1 : 0.6)
     .onClick(() => {
@@ -261,21 +282,9 @@ struct Index {
   private viewerEndPromptTimer: number = -1;
   // 查看器窗口关闭的进程内信号：自由多窗口下主窗口不会重新触发 onPageShow
   @StorageLink('vncViewerSessionEndSeq') @Watch('onViewerSessionEnded') private viewerSessionEndSeq: number = 0;
-  private readonly cTextPrimary: string = '#1c1917';
-  private readonly cTextMuted: string = '#292524';
-  private readonly cTextSecondary: string = '#57534e';
-  private readonly cTextTertiary: string = '#78716c';
-  private readonly cSurface: string = '#fdfbf7';
-  private readonly cSurfaceAlt: string = '#ffffff';
-  private readonly cBorder: string = '#e7e5e4';
-  private readonly cPrimary: string = '#2c4f54';
-  private readonly cPrimaryFg: string = '#ffffff';
-  private readonly cPrimarySoft: string = 'rgba(44,79,84,0.12)';
-  private readonly cInk: string = '#0c1416';
-  private readonly cOnInk: string = '#e7e5e4';
-  private readonly cError: string = '#b42318';
-  private readonly borderNone: BorderSpec = { width: 0, color: this.cBorder };
-  private readonly borderThin: BorderSpec = { width: 1, color: this.cBorder };
+  // 界面主题跟随系统深色/浅色设置（见 utils/ThemeConstants.ets）
+  @StorageProp('__app_is_dark_mode__') @Watch('onThemeChanged') private isDarkMode: boolean = false;
+  @State private colors: ThemeColors = LightColors;
 
   private getHostContext(): common.UIAbilityContext | undefined {
     try {
@@ -385,9 +394,9 @@ struct Index {
         title: this.s($r('app.string.rating_prompt_title')),
         message: this.s($r('app.string.rating_prompt_desc')),
         buttons: [
-          { text: this.s($r('app.string.rating_prompt_decline')), color: this.cTextSecondary },
-          { text: this.s($r('app.string.rating_prompt_never')), color: this.cTextTertiary },
-          { text: this.s($r('app.string.rating_prompt_accept')), color: this.cPrimary }
+          { text: this.s($r('app.string.rating_prompt_decline')), color: this.colors.textSecondary },
+          { text: this.s($r('app.string.rating_prompt_never')), color: this.colors.textTertiary },
+          { text: this.s($r('app.string.rating_prompt_accept')), color: this.colors.primary }
         ]
       });
       await markRatingPrompted(ctx);
@@ -459,16 +468,40 @@ struct Index {
   private readonly iconBtnSize: number = 42;
   private readonly iconBtnRadius: number = 14;
   private readonly iconSize: number = 20;
-  private readonly cSurfacePressed: string = 'rgba(12,20,22,0.06)';
-  private readonly cPrimaryPressed: string = 'rgba(44,79,84,0.88)';
-  private readonly cErrorSoft: string = 'rgba(180,35,24,0.12)';
-  private readonly cPrimaryOutline: string = 'rgba(44,79,84,0.22)';
-  private readonly cFocusOutline: string = '#3b82f6';
   private readonly connectionListScroller: Scroller = new Scroller();
+
+  private borderNone(): BorderSpec {
+    return { width: 0, color: this.colors.border };
+  }
+
+  private borderThin(): BorderSpec {
+    return { width: 1, color: this.colors.border };
+  }
+
+  private iconButtonIconColor(variant: number): string {
+    if (variant === ICON_BUTTON_PRIMARY) return this.colors.primaryFg;
+    if (variant === ICON_BUTTON_DANGER) return this.colors.error;
+    return this.colors.primary;
+  }
+
+  private iconButtonColor(variant: number): string {
+    return variant === ICON_BUTTON_PRIMARY ? this.colors.primary : this.colors.surfaceAlt;
+  }
+
+  private iconButtonPressedColor(variant: number): string {
+    if (variant === ICON_BUTTON_PRIMARY) return this.colors.primaryPressed;
+    if (variant === ICON_BUTTON_DANGER) return this.colors.errorSoft;
+    return this.colors.surfacePressed;
+  }
+
+  private iconButtonBorder(variant: number): BorderSpec {
+    return variant === ICON_BUTTON_PRIMARY ? this.borderNone() : this.borderThin();
+  }
 
   @StorageProp('currentBreakpoint') currentBreakpoint: string = 'sm';
 
   aboutToAppear() {
+    this.colors = this.isDarkMode ? DarkColors : LightColors;
     this.loadConnections();
     void this.loadAgreementsState();
     
@@ -484,6 +517,10 @@ struct Index {
         }
       });
     }
+  }
+
+  onThemeChanged(): void {
+    this.colors = this.isDarkMode ? DarkColors : LightColors;
   }
 
   onPageShow(): void {
@@ -751,9 +788,9 @@ struct Index {
             this.s($r('app.string.conn_route_direct_access'), this.getConnectionVncTarget(c))
           ),
         buttons: [
-          { text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary },
-          { text: this.s($r('app.string.action_edit')), color: this.cPrimary },
-          { text: this.s($r('app.string.action_delete')), color: this.cError }
+          { text: this.s($r('app.string.action_cancel')), color: this.colors.textSecondary },
+          { text: this.s($r('app.string.action_edit')), color: this.colors.primary },
+          { text: this.s($r('app.string.action_delete')), color: this.colors.error }
         ]
       });
       if (res.index === 1) {
@@ -978,18 +1015,18 @@ struct Index {
     Row() {
       Text(label)
         .fontSize(13)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width(80);
       Column() {
         Text(title)
           .fontSize(15)
           .lineHeight(22)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cPrimary);
+          .fontColor(this.colors.primary);
         Text($r('app.string.about_view_in_app'))
           .fontSize(12)
           .lineHeight(18)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .margin({ top: 2 });
       }
       .layoutWeight(1)
@@ -1004,18 +1041,18 @@ struct Index {
     Row() {
       Text($r('app.string.about_rating_label'))
         .fontSize(13)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width(80);
       Column() {
         Text($r('app.string.about_rating_title'))
           .fontSize(15)
           .lineHeight(22)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cPrimary);
+          .fontColor(this.colors.primary);
         Text($r('app.string.about_rating_action'))
           .fontSize(12)
           .lineHeight(18)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .margin({ top: 2 });
       }
       .layoutWeight(1)
@@ -1032,25 +1069,25 @@ struct Index {
     Row() {
       Text(label)
         .fontSize(13)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width(80);
       Column() {
         Text(value)
           .fontSize(15)
           .lineHeight(22)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cPrimary)
+          .fontColor(this.colors.primary)
           .onClick(() => this.openExternalUrl(uri));
         Row() {
           Text(actionLabel)
             .fontSize(12)
             .lineHeight(18)
-            .fontColor(this.cPrimary)
+            .fontColor(this.colors.primary)
             .onClick(() => this.openExternalUrl(uri));
           Text($r('app.string.action_copy'))
             .fontSize(12)
             .lineHeight(18)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .margin({ left: 16 })
             .onClick(() => this.copyText(value, copyMessage));
         }
@@ -1070,19 +1107,19 @@ struct Index {
         .fontSize(this.getMarkdownHeadingFontSize(block.level))
         .lineHeight(block.level <= 1 ? 28 : 24)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.cTextPrimary);
+        .fontColor(this.colors.textPrimary);
     } else if (block.type === MARKDOWN_BLOCK_BULLET) {
       Row() {
         Text('•')
           .width(18)
           .fontSize(14)
           .lineHeight(22)
-          .fontColor(this.cTextPrimary);
+          .fontColor(this.colors.textPrimary);
         Text(block.text)
           .layoutWeight(1)
           .fontSize(14)
           .lineHeight(22)
-          .fontColor(this.cTextMuted);
+          .fontColor(this.colors.textMuted);
       }
       .width('100%')
       .alignItems(VerticalAlign.Top);
@@ -1090,13 +1127,13 @@ struct Index {
       Row() {
         Blank()
           .width(3)
-          .backgroundColor(this.cBorder)
+          .backgroundColor(this.colors.border)
           .borderRadius(1.5);
         Text(block.text)
           .layoutWeight(1)
           .fontSize(14)
           .lineHeight(22)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .padding({ left: 12, right: 8, top: 6, bottom: 6 });
       }
       .width('100%')
@@ -1106,7 +1143,7 @@ struct Index {
         .width('100%')
         .fontSize(14)
         .lineHeight(22)
-        .fontColor(this.cTextMuted);
+        .fontColor(this.colors.textMuted);
     }
   }
 
@@ -1118,7 +1155,7 @@ struct Index {
           .width('100%')
           .fontSize(14)
           .lineHeight(22)
-          .fontColor(this.cTextSecondary);
+          .fontColor(this.colors.textSecondary);
       } else {
         ForEach(blocks, (block: MarkdownBlock) => {
           this.buildAgreementMarkdownBlock(block);
@@ -1136,7 +1173,7 @@ struct Index {
         .width('100%')
         .fontSize(17)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.cTextPrimary);
+        .fontColor(this.colors.textPrimary);
       this.buildAgreementMarkdown(blocks);
     }
     .width('100%')
@@ -1411,7 +1448,7 @@ struct Index {
       const res = await pa.showDialog({
         title: this.s($r('app.string.conn_delete_title')),
         message: this.s($r('app.string.conn_delete_confirm'), normalizeConnName(c.name, c.address, c.sshTunnel)),
-        buttons: [{ text: this.s($r('app.string.action_cancel')), color: this.cTextSecondary }, { text: this.s($r('app.string.action_delete')), color: this.cError }]
+        buttons: [{ text: this.s($r('app.string.action_cancel')), color: this.colors.textSecondary }, { text: this.s($r('app.string.action_delete')), color: this.colors.error }]
       });
       if (res.index !== 1) return;
     } catch (e) {
@@ -1847,15 +1884,15 @@ struct Index {
         Button($r('app.string.conn_new'))
           .height(32)
           .fontSize(12)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
+          .fontColor(this.colors.primary)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.border })
           .borderRadius(12)
           .enabled(!this.connected)
           .onClick(() => this.openCreateDialog());
         Text($r('app.string.conn_collapse'))
           .fontSize(12)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .margin({ left: 12 })
           .onClick(() => {
             this.showPanel = false;
@@ -1870,7 +1907,7 @@ struct Index {
       if (this.connections.length === 0) {
         Text($r('app.string.conn_no_saved'))
           .fontSize(13)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .padding({ left: 12, right: 12, bottom: 10 });
       } else {
         List() {
@@ -1886,30 +1923,30 @@ struct Index {
                       if (((c.name ?? '').trim())) {
                         Text(resolveConnectionAddress(c.address ?? '', c.sshTunnel))
                           .fontSize(12)
-                          .fontColor(this.cTextSecondary)
+                          .fontColor(this.colors.textSecondary)
                           .maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis })
                           .layoutWeight(1);
                       }
                       if ((c.user ?? '').trim()) {
-                        Text(this.s($r('app.string.conn_user_prefix'), (c.user ?? '').trim())).fontSize(12).fontColor(this.cTextSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
+                        Text(this.s($r('app.string.conn_user_prefix'), (c.user ?? '').trim())).fontSize(12).fontColor(this.colors.textSecondary).margin({ left: ((c.name ?? '').trim()) ? 8 : 0 });
                       }
                       if (c.storePassword && (c.password ?? '').length > 0) {
-                        Text($r('app.string.conn_password_saved')).fontSize(12).fontColor(this.cTextSecondary).margin({ left: 8 });
+                        Text($r('app.string.conn_password_saved')).fontSize(12).fontColor(this.colors.textSecondary).margin({ left: 8 });
                       }
                     }.margin({ top: 2 });
                   }.layoutWeight(1);
                   if (!this.connected && c.id === this.selectedConnId) {
                     Text($r('app.string.conn_edit_delete'))
                       .fontSize(12)
-                      .fontColor(this.cTextSecondary)
+                      .fontColor(this.colors.textSecondary)
                       .margin({ left: 12 })
                       .onClick(() => { void this.openConnectionActions(c.id); });
                   }
                 }
                 .padding({ left: 12, right: 12, top: 10, bottom: 10 })
                 .onClick(() => this.selectConnection(c.id));
-                Blank().height(1).backgroundColor(this.cBorder).margin({ left: 12, right: 12 });
+                Blank().height(1).backgroundColor(this.colors.border).margin({ left: 12, right: 12 });
               }
             }
           }, (c: ConnectionItem) => c.id);
@@ -1925,9 +1962,9 @@ struct Index {
         Button(this.authOpen ? $r('app.string.conn_collapse_auth') : $r('app.string.conn_open_auth'))
           .height(32)
           .fontSize(12)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cBorder })
+          .fontColor(this.colors.primary)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.border })
           .borderRadius(12)
           .enabled(!this.connected)
           .onClick(() => this.authOpen = !this.authOpen);
@@ -1937,7 +1974,7 @@ struct Index {
       Column() {
         Text($r('app.string.conn_address_label'))
           .fontSize(12)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%')
           .padding({ bottom: 4 });
         TextInput({ text: this.address, placeholder: $r('app.string.conn_desktop_addr_ssh_hint') })
@@ -1948,7 +1985,7 @@ struct Index {
         if (this.authOpen) {
           Text($r('app.string.conn_user_optional'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%')
             .padding({ bottom: 4 });
           TextInput({ text: this.user, placeholder: $r('app.string.conn_user_placeholder') })
@@ -1958,7 +1995,7 @@ struct Index {
 
           Text($r('app.string.conn_password_optional'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%')
             .padding({ bottom: 4 });
           TextInput({ text: this.password, placeholder: $r('app.string.conn_password_placeholder') })
@@ -1970,7 +2007,7 @@ struct Index {
             Row() {
               Text($r('app.string.conn_remember_password'))
                 .fontSize(12)
-                .fontColor(this.cTextSecondary)
+                .fontColor(this.colors.textSecondary)
                 .layoutWeight(1);
               BrandSwitch({ isOn: this.isSelectedStorePasswordEnabled(), isEnabled: !this.connected, onChange: (next: boolean) => {
                 if (next !== this.isSelectedStorePasswordEnabled()) this.toggleSelectedStorePassword();
@@ -1985,7 +2022,7 @@ struct Index {
       if (this.lastError) {
         Text(this.lastError)
           .fontSize(12)
-          .fontColor(this.cError)
+          .fontColor(this.colors.error)
           .padding({ left: 12, right: 12, bottom: 8 });
       }
 
@@ -1994,9 +2031,9 @@ struct Index {
           .layoutWeight(1)
           .height(44)
           .fontSize(15)
-          .fontColor(this.connected ? this.cPrimary : this.cPrimaryFg)
-          .backgroundColor(this.connected ? this.cSurfaceAlt : this.cPrimary)
-          .border(this.connected ? { width: 1, color: this.cBorder } : { width: 0, color: this.cBorder })
+          .fontColor(this.connected ? this.colors.primary : this.colors.primaryFg)
+          .backgroundColor(this.connected ? this.colors.surfaceAlt : this.colors.primary)
+          .border(this.connected ? { width: 1, color: this.colors.border } : { width: 0, color: this.colors.border })
           .borderRadius(14)
           .enabled(!this.connecting)
           .onClick(() => {
@@ -2010,14 +2047,14 @@ struct Index {
         Row() {
           Text(this.s($r('app.string.conn_connected')) + ` ${this.fbW}x${this.fbH}`)
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .layoutWeight(1);
           Button(this.devToolsEnabled ? this.s($r('app.string.viewer_devtools_on')) : this.s($r('app.string.viewer_devtools_off')))
             .fontSize(12)
             .height(28)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onClick(() => this.setDevToolsEnabled(!this.devToolsEnabled));
         }.padding({ left: 12, right: 12, bottom: 8 });
@@ -2027,9 +2064,9 @@ struct Index {
             Button(this.debugEnabled ? this.s($r('app.string.viewer_debug_on')) : this.s($r('app.string.viewer_debug_off')))
               .fontSize(12)
               .height(28)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => {
                 this.debugEnabled = !this.debugEnabled;
@@ -2044,9 +2081,9 @@ struct Index {
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => {
                 this.debugPmFormat = (this.debugPmFormat + 1) % 2;
@@ -2058,9 +2095,9 @@ struct Index {
               .fontSize(12)
               .height(28)
               .margin({ left: 6 })
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => {
                 this.debugByteOrder = (this.debugByteOrder + 1) % 4;
@@ -2075,9 +2112,9 @@ struct Index {
               .fontSize(12)
               .height(28)
               .layoutWeight(1)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => (vnc as VncClient).refresh?.());
             Button($r('app.string.viewer_save_frame'))
@@ -2085,9 +2122,9 @@ struct Index {
               .height(28)
               .layoutWeight(1)
               .margin({ left: 8 })
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => { void this.saveImage(); });
           }.padding({ left: 12, right: 12, bottom: 8 });
@@ -2100,7 +2137,7 @@ struct Index {
             Text(this.firstPixel)
               .fontSize(14)
               .lineHeight(18)
-              .fontColor(this.cError)
+              .fontColor(this.colors.error)
               .fontWeight(FontWeight.Bold)
               .fontFamily('monospace');
           }
@@ -2108,7 +2145,7 @@ struct Index {
             Text(this.debugInfoText)
               .fontSize(13)
               .lineHeight(18)
-              .fontColor(this.cTextPrimary)
+              .fontColor(this.colors.textPrimary)
               .fontFamily('monospace')
               .maxLines(4)
               .textOverflow({ overflow: TextOverflow.Ellipsis });
@@ -2117,7 +2154,7 @@ struct Index {
             Text(this.debugLogText)
               .fontSize(12)
               .lineHeight(16)
-              .fontColor(this.cTextMuted)
+              .fontColor(this.colors.textMuted)
               .fontFamily('monospace')
               .maxLines(8)
               .textOverflow({ overflow: TextOverflow.Ellipsis });
@@ -2125,12 +2162,12 @@ struct Index {
         }
         .padding(10)
         .margin({ left: 12, right: 12, bottom: 12 })
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(8);
       }
     }
-    .backgroundColor(this.cSurface)
+    .backgroundColor(this.colors.surface)
     .margin({ left: 0, right: 0, top: 0, bottom: 0 });
   }
 
@@ -2139,9 +2176,9 @@ struct Index {
     Text(label)
       .fontSize(11)
       .fontWeight(FontWeight.Medium)
-      .fontColor(highlighted ? this.cPrimary : this.cTextSecondary)
-      .backgroundColor(highlighted ? this.cPrimarySoft : this.cSurfaceAlt)
-      .border({ width: 1, color: highlighted ? this.cPrimaryOutline : this.cBorder })
+      .fontColor(highlighted ? this.colors.primary : this.colors.textSecondary)
+      .backgroundColor(highlighted ? this.colors.primarySoft : this.colors.surfaceAlt)
+      .border({ width: 1, color: highlighted ? this.colors.primaryOutline : this.colors.border })
       .borderRadius(999)
       .padding({ left: 10, right: 10, top: 6, bottom: 6 });
   }
@@ -2154,12 +2191,12 @@ struct Index {
           Text($r('app.string.conn_current_route'))
             .fontSize(12)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.cPrimary)
+            .fontColor(this.colors.primary)
             .width('100%');
           Text(routeLabel === this.s($r('app.string.conn_route_ssh_tunnel')) ? this.s($r('app.string.conn_route_ssh_secure')) : this.s($r('app.string.conn_route_direct')))
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor(this.cTextPrimary)
+            .fontColor(this.colors.textPrimary)
             .width('100%')
             .padding({ top: 2 });
         }
@@ -2169,9 +2206,9 @@ struct Index {
         Text(routeLabel)
           .fontSize(11)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cPrimary)
-          .backgroundColor(this.cSurfaceAlt)
-          .border({ width: 1, color: this.cPrimaryOutline })
+          .fontColor(this.colors.primary)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border({ width: 1, color: this.colors.primaryOutline })
           .borderRadius(999)
           .padding({ left: 10, right: 10, top: 6, bottom: 6 });
       }
@@ -2183,13 +2220,13 @@ struct Index {
         : this.s($r('app.string.conn_route_direct_access'), vncTarget))
         .fontSize(11)
         .lineHeight(16)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%')
         .padding({ top: 4 });
     }
     .width('100%')
     .padding(12)
-    .backgroundColor(this.cPrimarySoft)
+    .backgroundColor(this.colors.primarySoft)
     .borderRadius(16);
   }
 
@@ -2199,25 +2236,25 @@ struct Index {
       Text(label)
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.cPrimary)
+        .fontColor(this.colors.primary)
         .width('100%');
       Text(value)
         .fontSize(13)
         .lineHeight(18)
         .fontWeight(FontWeight.Medium)
-        .fontColor(missing ? this.cTextTertiary : this.cTextPrimary)
+        .fontColor(missing ? this.colors.textTertiary : this.colors.textPrimary)
         .width('100%');
       Text(supportingText)
         .fontSize(11)
         .lineHeight(16)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .width('100%');
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding(12)
-    .backgroundColor(this.cPrimarySoft)
-    .border({ width: 1, color: this.cPrimaryOutline })
+    .backgroundColor(this.colors.primarySoft)
+    .border({ width: 1, color: this.colors.primaryOutline })
     .borderRadius(14)
     .margin({ bottom: 8 });
   }
@@ -2229,54 +2266,54 @@ struct Index {
         Text($r('app.string.conn_ssh_touch_scroll_title'))
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .width('100%')
           .padding({ bottom: 4 });
         Text($r('app.string.conn_ssh_touch_scroll_desc'))
           .fontSize(11)
           .lineHeight(16)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%')
           .padding({ bottom: 10 });
         Text($r('app.string.conn_touch_scroll_step'))
           .fontSize(12)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%')
           .padding({ bottom: 6 });
         Row() {
           Button($r('app.string.button_auto'))
             .height(28)
             .fontSize(12)
-            .fontColor(this.editTouchScrollStep <= 0 ? this.cPrimaryFg : this.cPrimary)
-            .backgroundColor(this.editTouchScrollStep <= 0 ? this.cPrimary : this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.editTouchScrollStep <= 0 ? this.colors.primaryFg : this.colors.primary)
+            .backgroundColor(this.editTouchScrollStep <= 0 ? this.colors.primary : this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onClick(() => this.updateEditTouchScrollStep(0));
           Button($r('app.string.tool_scroll_slow'))
             .height(28)
             .fontSize(12)
             .margin({ left: 6 })
-            .fontColor(this.editTouchScrollStep === 18 ? this.cPrimaryFg : this.cPrimary)
-            .backgroundColor(this.editTouchScrollStep === 18 ? this.cPrimary : this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.editTouchScrollStep === 18 ? this.colors.primaryFg : this.colors.primary)
+            .backgroundColor(this.editTouchScrollStep === 18 ? this.colors.primary : this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onClick(() => this.updateEditTouchScrollStep(18));
           Button($r('app.string.tool_scroll_medium'))
             .height(28)
             .fontSize(12)
             .margin({ left: 6 })
-            .fontColor(this.editTouchScrollStep === 12 ? this.cPrimaryFg : this.cPrimary)
-            .backgroundColor(this.editTouchScrollStep === 12 ? this.cPrimary : this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.editTouchScrollStep === 12 ? this.colors.primaryFg : this.colors.primary)
+            .backgroundColor(this.editTouchScrollStep === 12 ? this.colors.primary : this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onClick(() => this.updateEditTouchScrollStep(12));
           Button($r('app.string.tool_scroll_fast'))
             .height(28)
             .fontSize(12)
             .margin({ left: 6 })
-            .fontColor(this.editTouchScrollStep === 8 ? this.cPrimaryFg : this.cPrimary)
-            .backgroundColor(this.editTouchScrollStep === 8 ? this.cPrimary : this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.editTouchScrollStep === 8 ? this.colors.primaryFg : this.colors.primary)
+            .backgroundColor(this.editTouchScrollStep === 8 ? this.colors.primary : this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onClick(() => this.updateEditTouchScrollStep(8));
         }
@@ -2285,14 +2322,14 @@ struct Index {
           ? this.s($r('app.string.conn_touch_scroll_auto_current'))
           : this.s($r('app.string.conn_touch_scroll_value_current'), this.editTouchScrollStep))
           .fontSize(11)
-          .fontColor(this.cTextTertiary)
+          .fontColor(this.colors.textTertiary)
           .width('100%')
           .padding({ top: 6 });
       }
       .width('100%')
       .padding(12)
-      .backgroundColor(this.cSurfaceAlt)
-      .border({ width: 1, color: this.cBorder })
+      .backgroundColor(this.colors.surfaceAlt)
+      .border({ width: 1, color: this.colors.border })
       .borderRadius(16)
       .margin({ bottom: 12 });
 
@@ -2300,20 +2337,20 @@ struct Index {
         Text($r('app.string.conn_mac_mode_title'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .width('100%')
           .padding({ bottom: 4 });
         Text($r('app.string.conn_mac_mode_desc'))
           .fontSize(11)
           .lineHeight(16)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%')
           .padding({ bottom: 10 });
         Row() {
           Column() {
             Text($r('app.string.conn_mac_mode_label'))
               .fontSize(12)
-              .fontColor(this.cTextSecondary);
+              .fontColor(this.colors.textSecondary);
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start);
@@ -2326,8 +2363,8 @@ struct Index {
       }
       .width('100%')
       .padding(12)
-      .backgroundColor(this.cSurfaceAlt)
-      .border({ width: 1, color: this.cBorder })
+      .backgroundColor(this.colors.surfaceAlt)
+      .border({ width: 1, color: this.colors.border })
       .borderRadius(16)
       .margin({ bottom: 12 });
 
@@ -2335,7 +2372,7 @@ struct Index {
         Text($r('app.string.conn_ssh_title'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .width('100%')
           .padding({ bottom: 4 });
         Text(this.editSshEnabled
@@ -2343,7 +2380,7 @@ struct Index {
           : $r('app.string.conn_ssh_disabled_hint'))
           .fontSize(11)
           .lineHeight(16)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .width('100%')
           .padding({ bottom: 10 });
 
@@ -2352,12 +2389,12 @@ struct Index {
             Text(this.editSshEnabled ? this.s($r('app.string.conn_ssh_route_enabled_label')) : this.s($r('app.string.conn_ssh_route_disabled_label')))
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
-              .fontColor(this.editSshEnabled ? this.cPrimary : this.cTextPrimary)
+              .fontColor(this.editSshEnabled ? this.colors.primary : this.colors.textPrimary)
               .width('100%');
             Text(this.editSshEnabled ? this.s($r('app.string.conn_ssh_route_enabled_hint')) : this.s($r('app.string.conn_ssh_route_disabled_hint')))
               .fontSize(11)
               .lineHeight(16)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .width('100%')
               .padding({ top: 2 });
           }
@@ -2395,7 +2432,7 @@ struct Index {
           Row() {
             Text(this.isReusingEditDesktopCredentials() ? this.s($r('app.string.ssh_reuse_desktop_creds')) : this.s($r('app.string.ssh_separate_ssh_info')))
               .fontSize(12)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .layoutWeight(1);
             BrandSwitch({
               isOn: this.isReusingEditDesktopCredentials(),
@@ -2416,31 +2453,31 @@ struct Index {
             : this.s($r('app.string.ssh_desc_separate')))
             .fontSize(11)
             .lineHeight(16)
-            .fontColor(this.cTextTertiary)
+            .fontColor(this.colors.textTertiary)
             .width('100%')
             .padding({ bottom: 8 });
 
           Text($r('app.string.ssh_login_method'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%')
             .padding({ bottom: 6 });
           Row() {
             Button($r('app.string.ssh_auth_password_label'))
               .height(28)
               .fontSize(12)
-              .fontColor(this.editSshAuthType === SSH_AUTH_PASSWORD ? this.cPrimaryFg : this.cPrimary)
-              .backgroundColor(this.editSshAuthType === SSH_AUTH_PASSWORD ? this.cPrimary : this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.editSshAuthType === SSH_AUTH_PASSWORD ? this.colors.primaryFg : this.colors.primary)
+              .backgroundColor(this.editSshAuthType === SSH_AUTH_PASSWORD ? this.colors.primary : this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => this.setEditSshAuthType(SSH_AUTH_PASSWORD));
             Button($r('app.string.ssh_auth_key_label'))
               .height(28)
               .fontSize(12)
               .margin({ left: 6 })
-              .fontColor(this.editSshAuthType === SSH_AUTH_PUBLIC_KEY ? this.cPrimaryFg : this.cPrimary)
-              .backgroundColor(this.editSshAuthType === SSH_AUTH_PUBLIC_KEY ? this.cPrimary : this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.editSshAuthType === SSH_AUTH_PUBLIC_KEY ? this.colors.primaryFg : this.colors.primary)
+              .backgroundColor(this.editSshAuthType === SSH_AUTH_PUBLIC_KEY ? this.colors.primary : this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => this.setEditSshAuthType(SSH_AUTH_PUBLIC_KEY));
           }
@@ -2476,7 +2513,7 @@ struct Index {
               : this.s($r('app.string.ssh_separate_password_msg')))
               .fontSize(11)
               .lineHeight(16)
-              .fontColor(this.cTextTertiary)
+              .fontColor(this.colors.textTertiary)
               .width('100%')
               .padding({ bottom: 8 });
           }
@@ -2495,7 +2532,7 @@ struct Index {
           Row() {
             Text($r('app.string.ssh_strict_host_key_check'))
               .fontSize(12)
-              .fontColor(this.cTextSecondary)
+              .fontColor(this.colors.textSecondary)
               .layoutWeight(1);
             BrandSwitch({
               isOn: this.editSshStrictHostKeyCheck,
@@ -2513,13 +2550,13 @@ struct Index {
 
           Text($r('app.string.ssh_remote_specify_target'))
             .fontSize(12)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%')
             .padding({ bottom: 6 });
           Text($r('app.string.ssh_remote_default_hint'))
             .fontSize(11)
             .lineHeight(16)
-            .fontColor(this.cTextTertiary)
+            .fontColor(this.colors.textTertiary)
             .width('100%')
             .padding({ bottom: 8 });
           Row() {
@@ -2537,14 +2574,14 @@ struct Index {
           Text($r('app.string.ssh_placeholder_hint'))
             .fontSize(11)
             .lineHeight(16)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .width('100%');
         }
       }
       .width('100%')
       .padding(12)
-      .backgroundColor(this.cSurfaceAlt)
-      .border({ width: 1, color: this.cBorder })
+      .backgroundColor(this.colors.surfaceAlt)
+      .border({ width: 1, color: this.colors.border })
       .borderRadius(16);
     }
     .width('100%');
@@ -2570,9 +2607,9 @@ struct Index {
             Button($r('app.string.action_close'))
               .height(28)
               .fontSize(12)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(12)
               .onClick(() => this.closeEditDialog());
           }
@@ -2590,9 +2627,9 @@ struct Index {
                 .layoutWeight(1)
                 .height(32)
                 .fontSize(12)
-                .fontColor(this.editTabIndex === EDIT_TAB_BASIC ? this.cPrimaryFg : this.cPrimary)
-                .backgroundColor(this.editTabIndex === EDIT_TAB_BASIC ? this.cPrimary : this.cSurfaceAlt)
-                .border({ width: 1, color: this.cBorder })
+                .fontColor(this.editTabIndex === EDIT_TAB_BASIC ? this.colors.primaryFg : this.colors.primary)
+                .backgroundColor(this.editTabIndex === EDIT_TAB_BASIC ? this.colors.primary : this.colors.surfaceAlt)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(14)
                 .onClick(() => this.editTabIndex = EDIT_TAB_BASIC);
               Button(this.hasAnyEditAdvancedOptions() ? $r('app.string.conn_advanced_tab_configured') : $r('app.string.conn_advanced_tab'))
@@ -2600,9 +2637,9 @@ struct Index {
                 .height(32)
                 .margin({ left: 8 })
                 .fontSize(12)
-                .fontColor(this.editTabIndex === EDIT_TAB_ADVANCED ? this.cPrimaryFg : this.cPrimary)
-                .backgroundColor(this.editTabIndex === EDIT_TAB_ADVANCED ? this.cPrimary : this.cSurfaceAlt)
-                .border({ width: 1, color: this.cBorder })
+                .fontColor(this.editTabIndex === EDIT_TAB_ADVANCED ? this.colors.primaryFg : this.colors.primary)
+                .backgroundColor(this.editTabIndex === EDIT_TAB_ADVANCED ? this.colors.primary : this.colors.surfaceAlt)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(14)
                 .onClick(() => this.editTabIndex = EDIT_TAB_ADVANCED);
             }
@@ -2617,7 +2654,7 @@ struct Index {
                       Text($r('app.string.conn_remote_desktop'))
                         .fontSize(14)
                         .fontWeight(FontWeight.Medium)
-                        .fontColor(this.cTextPrimary)
+                        .fontColor(this.colors.textPrimary)
                         .width('100%')
                         .padding({ bottom: 4 });
                       Text(this.editSshEnabled
@@ -2625,13 +2662,13 @@ struct Index {
                         : this.s($r('app.string.conn_desktop_address_hint_simple')))
                         .fontSize(11)
                         .lineHeight(16)
-                        .fontColor(this.cTextSecondary)
+                        .fontColor(this.colors.textSecondary)
                         .width('100%')
                         .padding({ bottom: 10 });
 
                       Text($r('app.string.conn_name_optional'))
                         .fontSize(12)
-                        .fontColor(this.cTextSecondary)
+                        .fontColor(this.colors.textSecondary)
                         .width('100%')
                         .padding({ bottom: 4 });
                       TextInput({ text: this.editName, placeholder: $r('app.string.conn_name_placeholder') })
@@ -2640,7 +2677,7 @@ struct Index {
 
                       Text($r('app.string.conn_desktop_address'))
                         .fontSize(12)
-                        .fontColor(this.cTextSecondary)
+                        .fontColor(this.colors.textSecondary)
                         .width('100%')
                         .padding({ bottom: 4 });
                       TextInput({
@@ -2654,7 +2691,7 @@ struct Index {
 
                       Text($r('app.string.conn_desktop_user_label'))
                         .fontSize(12)
-                        .fontColor(this.cTextSecondary)
+                        .fontColor(this.colors.textSecondary)
                         .width('100%')
                         .padding({ bottom: 4 });
                       TextInput({ text: this.editUser, placeholder: $r('app.string.conn_desktop_user_placeholder') })
@@ -2663,7 +2700,7 @@ struct Index {
 
                       Text($r('app.string.conn_desktop_password_label'))
                         .fontSize(12)
-                        .fontColor(this.cTextSecondary)
+                        .fontColor(this.colors.textSecondary)
                         .width('100%')
                         .padding({ bottom: 4 });
                       TextInput({ text: this.editPassword, placeholder: $r('app.string.conn_desktop_password_placeholder') })
@@ -2674,7 +2711,7 @@ struct Index {
                       Row() {
                         Text($r('app.string.conn_save_desktop_password'))
                           .fontSize(12)
-                          .fontColor(this.cTextSecondary)
+                          .fontColor(this.colors.textSecondary)
                           .layoutWeight(1);
                         BrandSwitch({ isOn: this.editStorePassword, isEnabled: true, onChange: (next: boolean) => this.editStorePassword = next });
                       }
@@ -2682,8 +2719,8 @@ struct Index {
                     }
                     .width('100%')
                     .padding(12)
-                    .backgroundColor(this.cSurfaceAlt)
-                    .border({ width: 1, color: this.cBorder })
+                    .backgroundColor(this.colors.surfaceAlt)
+                    .border({ width: 1, color: this.colors.border })
                     .borderRadius(16)
                     .margin({ bottom: 12 });
                   } else {
@@ -2706,17 +2743,17 @@ struct Index {
             Button($r('app.string.action_cancel'))
               .layoutWeight(1)
               .height(36)
-              .fontColor(this.cPrimary)
-              .backgroundColor(this.cSurfaceAlt)
-              .border({ width: 1, color: this.cBorder })
+              .fontColor(this.colors.primary)
+              .backgroundColor(this.colors.surfaceAlt)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(14)
               .onClick(() => this.closeEditDialog());
             Button($r('app.string.action_save'))
               .layoutWeight(1)
               .height(36)
               .margin({ left: 10 })
-              .fontColor(this.cPrimaryFg)
-              .backgroundColor(this.cPrimary)
+              .fontColor(this.colors.primaryFg)
+              .backgroundColor(this.colors.primary)
               .borderRadius(14)
               .onClick(() => { void this.saveEditDialog(); });
           }
@@ -2725,8 +2762,8 @@ struct Index {
         .width('100%')
         .height('88%')
         .constraintSize({ maxWidth: 460 })
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(12)
         .shadow({ radius: 16, color: 'rgba(12,20,22,0.16)', offsetX: 0, offsetY: 4 });
       }
@@ -2811,12 +2848,12 @@ struct Index {
       } else {
         Text(this.connected ? this.s($r('app.string.viewer_waiting_first_frame_state')) : this.s($r('app.string.conn_disconnected_state')))
           .fontSize(14)
-          .fontColor(this.cOnInk);
+          .fontColor(this.colors.onInk);
       }
     }
     .width('100%')
     .layoutWeight(1)
-    .backgroundColor(this.cInk)
+    .backgroundColor(this.colors.ink)
     .margin({ left: 12, right: 12, bottom: 12 })
     .borderRadius(8)
     .clip(true);
@@ -3138,20 +3175,20 @@ struct Index {
   }
 
   @Builder
-  private buildIconButton(key: string, icon: Resource, iconColor: string, bg: string, bgPressed: string, border: BorderSpec | null, onClick: () => void, enabled: boolean = true, marginLeft: number = 0): void {
+  private buildIconButton(key: string, icon: Resource, variant: number, onClick: () => void, enabled: boolean = true, marginLeft: number = 0): void {
     Button() {
       Image(icon)
         .width(this.iconSize)
         .height(this.iconSize)
         .objectFit(ImageFit.Contain)
-        .fillColor(iconColor);
+        .fillColor(this.iconButtonIconColor(variant));
     }
     .width(this.iconBtnSize)
     .height(this.iconBtnSize)
     .padding(0)
     .margin({ left: marginLeft })
-    .backgroundColor(this.isBtnPressed(key) ? bgPressed : bg)
-    .border(border ? border : this.borderNone)
+    .backgroundColor(this.isBtnPressed(key) ? this.iconButtonPressedColor(variant) : this.iconButtonColor(variant))
+    .border(this.iconButtonBorder(variant))
     .borderRadius(this.iconBtnRadius)
     .shadow({ radius: 12, color: 'rgba(12,20,22,0.12)', offsetX: 0, offsetY: 3 })
     .enabled(enabled)
@@ -3166,19 +3203,19 @@ struct Index {
         Text($r('app.string.conn_manage'))
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .layoutWeight(1);
 
         Row() {
           Text(`v${BUILD_VERSION}`)
             .fontSize(12)
-            .fontColor(this.cTextSecondary);
+            .fontColor(this.colors.textSecondary);
           Button($r('app.string.settings_title'))
             .height(30)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .padding({ left: 12, right: 12 })
             .margin({ left: 10 })
@@ -3189,9 +3226,9 @@ struct Index {
           Button($r('app.string.about_title'))
             .height(30)
             .fontSize(12)
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .padding({ left: 12, right: 12 })
             .margin({ left: 10 })
@@ -3207,8 +3244,8 @@ struct Index {
           .onChange((v: string) => this.keyword = v)
           .height(40)
           .fontSize(14)
-          .backgroundColor(this.cSurfaceAlt)
-          .border(this.borderThin)
+          .backgroundColor(this.colors.surfaceAlt)
+          .border(this.borderThin())
           .borderRadius(14)
           .padding({ left: 12, right: 12 })
           .layoutWeight(1);
@@ -3217,9 +3254,9 @@ struct Index {
             .height(36)
             .fontSize(12)
             .margin({ left: 10 })
-            .fontColor(this.cPrimary)
-            .backgroundColor(this.cSurfaceAlt)
-            .border({ width: 1, color: this.cBorder })
+            .fontColor(this.colors.primary)
+            .backgroundColor(this.colors.surfaceAlt)
+            .border({ width: 1, color: this.colors.border })
             .borderRadius(12)
             .onClick(() => this.keyword = '');
         }
@@ -3227,10 +3264,7 @@ struct Index {
         this.buildIconButton(
           'top_add',
           $r('app.media.ic_plus'),
-          this.cPrimaryFg,
-          this.cPrimary,
-          this.cPrimaryPressed,
-          null,
+          ICON_BUTTON_PRIMARY,
           () => this.openCreateDialog(),
           true,
           10
@@ -3243,7 +3277,7 @@ struct Index {
         Column() {
           Text(this.connections.length === 0 ? this.s($r('app.string.conn_no_connections_yet')) : this.s($r('app.string.conn_no_matching_connections')))
             .fontSize(14)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .margin({ bottom: 6 });
           if (this.connections.length === 0) {
             Button() {
@@ -3252,17 +3286,17 @@ struct Index {
                   .width(18)
                   .height(18)
                   .objectFit(ImageFit.Contain)
-                  .fillColor(this.cPrimaryFg)
+                  .fillColor(this.colors.primaryFg)
                   .margin({ right: 8 });
                 Text($r('app.string.conn_new_connection'))
-                  .fontColor(this.cPrimaryFg)
+                  .fontColor(this.colors.primaryFg)
                   .fontSize(14)
                   .fontWeight(FontWeight.Medium);
               }
               .alignItems(VerticalAlign.Center);
             }
               .height(40)
-              .backgroundColor(this.cPrimary)
+              .backgroundColor(this.colors.primary)
               .borderRadius(14)
               .padding({ left: 14, right: 14 })
               .onClick(() => this.openCreateDialog());
@@ -3270,8 +3304,8 @@ struct Index {
         }
         .padding(16)
         .margin({ left: 16, right: 16, top: 8 })
-        .backgroundColor(this.cSurfaceAlt)
-        .border({ width: 1, color: this.cBorder })
+        .backgroundColor(this.colors.surfaceAlt)
+        .border({ width: 1, color: this.colors.border })
         .borderRadius(14);
       } else {
         List({ scroller: this.connectionListScroller }) {
@@ -3283,15 +3317,15 @@ struct Index {
                     Text(normalizeConnName(c.name ?? '', c.address ?? '', c.sshTunnel))
                       .fontSize(15)
                       .fontWeight(c.id === this.selectedConnId ? FontWeight.Medium : FontWeight.Regular)
-                      .fontColor(this.cTextPrimary)
+                      .fontColor(this.colors.textPrimary)
                       .layoutWeight(1)
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis });
                     Text(this.getConnectionRouteLabel(c))
                       .fontSize(11)
                       .fontWeight(FontWeight.Medium)
-                      .fontColor(this.cPrimary)
-                      .backgroundColor(this.cPrimarySoft)
+                      .fontColor(this.colors.primary)
+                      .backgroundColor(this.colors.primarySoft)
                       .borderRadius(10)
                       .padding({ left: 10, right: 10, top: 4, bottom: 4 })
                       .margin({ left: 8 });
@@ -3300,27 +3334,27 @@ struct Index {
                   .alignItems(VerticalAlign.Center);
                   Text(this.getConnectionPathSummary(c))
                     .fontSize(11)
-                    .fontColor(this.cPrimary)
+                    .fontColor(this.colors.primary)
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .margin({ top: 4 });
                   Text(`VNC：${this.getConnectionVncTarget(c)}`)
                     .fontSize(12)
-                    .fontColor(this.cTextSecondary)
+                    .fontColor(this.colors.textSecondary)
                     .maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis })
                     .margin({ top: 4 });
                   if (this.isConnectionUsingSsh(c)) {
                     Text(`SSH：${this.getConnectionSshServer(c)}`)
                       .fontSize(12)
-                      .fontColor(this.cTextSecondary)
+                      .fontColor(this.colors.textSecondary)
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                       .margin({ top: 2 });
                   }
                   Text(this.formatLastUsed(c.lastUsedAt))
                     .fontSize(12)
-                    .fontColor(this.cTextTertiary)
+                    .fontColor(this.colors.textTertiary)
                     .margin({ top: 4 });
                 }
                 .layoutWeight(1)
@@ -3330,10 +3364,7 @@ struct Index {
                   this.buildIconButton(
                     `conn_${c.id}_open`,
                     $r('app.media.ic_plug'),
-                    this.cPrimaryFg,
-                    this.cPrimary,
-                    this.cPrimaryPressed,
-                    null,
+                    ICON_BUTTON_PRIMARY,
                     () => { void this.openViewerWindow(c); },
                     true,
                     0
@@ -3342,10 +3373,7 @@ struct Index {
                   this.buildIconButton(
                     `conn_${c.id}_edit`,
                     $r('app.media.ic_edit'),
-                    this.cPrimary,
-                    this.cSurfaceAlt,
-                    this.cSurfacePressed,
-                    this.borderThin,
+                    ICON_BUTTON_NEUTRAL,
                     () => this.openEditDialog(c.id),
                     true,
                     8
@@ -3354,10 +3382,7 @@ struct Index {
                   this.buildIconButton(
                     `conn_${c.id}_delete`,
                     $r('app.media.ic_trash'),
-                    this.cError,
-                    this.cSurfaceAlt,
-                    this.cErrorSoft,
-                    this.borderThin,
+                    ICON_BUTTON_DANGER,
                     () => { void this.deleteConnection(c.id); },
                     true,
                     8
@@ -3366,15 +3391,15 @@ struct Index {
               }
               .alignItems(VerticalAlign.Center)
               .padding(12)
-              .backgroundColor(c.id === this.selectedConnId ? this.cPrimarySoft : this.cSurfaceAlt)
-              .border(c.id === this.selectedConnId ? { width: 1.5, color: this.cPrimaryOutline } : { width: 1, color: this.cBorder })
+              .backgroundColor(c.id === this.selectedConnId ? this.colors.primarySoft : this.colors.surfaceAlt)
+              .border(c.id === this.selectedConnId ? { width: 1.5, color: this.colors.primaryOutline } : { width: 1, color: this.colors.border })
               .borderRadius(14)
               .shadow({ radius: 14, color: 'rgba(12,20,22,0.10)', offsetX: 0, offsetY: 4 })
               .onClick(() => this.selectConnection(c.id))
               .stateStyles({
                 focused: {
-                  .border({ width: 2, color: this.cFocusOutline })
-                  .backgroundColor(this.cPrimarySoft)
+                  .border({ width: 2, color: this.colors.focusOutline })
+                  .backgroundColor(this.colors.primarySoft)
                 }
               })
               .focusable(true);
@@ -3403,7 +3428,7 @@ struct Index {
         Column() {
           Text($r('app.string.conn_not_selected'))
             .fontSize(14)
-            .fontColor(this.cTextSecondary)
+            .fontColor(this.colors.textSecondary)
             .margin({ bottom: 6 });
         }
         .alignItems(HorizontalAlign.Center)
@@ -3415,7 +3440,7 @@ struct Index {
     .width('100%')
     .height('100%')
     .padding(12)
-    .backgroundColor(this.cSurface);
+    .backgroundColor(this.colors.surface);
   }
 
   @Builder
@@ -3424,12 +3449,12 @@ struct Index {
       if (this.getSelectedConnection()) {
         Text($r('app.string.conn_currently_selected'))
           .fontSize(14)
-          .fontColor(this.cTextSecondary)
+          .fontColor(this.colors.textSecondary)
           .margin({ bottom: 8 });
         Text(normalizeConnName(this.getSelectedConnection()?.name ?? '', this.getSelectedConnection()?.address ?? '', this.getSelectedConnection()?.sshTunnel))
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor(this.cTextPrimary)
+          .fontColor(this.colors.textPrimary)
           .margin({ bottom: 16 });
 
         this.buildDetailLine({
@@ -3465,7 +3490,7 @@ struct Index {
     .width('100%')
     .height('100%')
     .padding(20)
-    .backgroundColor(this.cPrimarySoft)
+    .backgroundColor(this.colors.primarySoft)
     .borderRadius(20);
   }
 
@@ -3474,11 +3499,11 @@ struct Index {
     Column() {
       Text(line.label)
         .fontSize(12)
-        .fontColor(this.cTextSecondary)
+        .fontColor(this.colors.textSecondary)
         .margin({ bottom: 2 });
       Text(line.value)
         .fontSize(14)
-        .fontColor(this.cTextPrimary)
+        .fontColor(this.colors.textPrimary)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis });
     }
@@ -3526,10 +3551,10 @@ struct Index {
                   Text($r('app.string.app_name'))
                     .fontSize(22)
                     .fontWeight(FontWeight.Bold)
-                    .fontColor(this.cTextPrimary);
+                    .fontColor(this.colors.textPrimary);
                   Text(`Version ${BUILD_VERSION}`)
                     .fontSize(13)
-                    .fontColor(this.cTextSecondary)
+                    .fontColor(this.colors.textSecondary)
                     .margin({ top: 2 });
                 }
                 .alignItems(HorizontalAlign.Start);
@@ -3543,7 +3568,7 @@ struct Index {
               Image($r('app.media.ic_close'))
                 .width(18)
                 .height(18)
-                .fillColor(this.cTextSecondary)
+                .fillColor(this.colors.textSecondary)
             }
             .width(36)
             .height(36)
@@ -3557,7 +3582,7 @@ struct Index {
 
           Blank()
             .height(1)
-            .color(this.cBorder)
+            .color(this.colors.border)
             .margin({ left: 24, right: 24 });
 
           Scroll() {
@@ -3573,7 +3598,7 @@ struct Index {
                   Text($r('app.string.about_company_info'))
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor(this.cTextPrimary);
+                    .fontColor(this.colors.textPrimary);
                 }
                 .alignItems(VerticalAlign.Center)
                 .margin({ bottom: 16 });
@@ -3582,13 +3607,13 @@ struct Index {
                   Row() {
                     Text($r('app.string.about_team'))
                       .fontSize(13)
-                      .fontColor(this.cTextSecondary)
+                      .fontColor(this.colors.textSecondary)
                       .width(80);
                     Text($r('app.string.about_developer_name'))
                       .fontSize(15)
                       .lineHeight(22)
                       .fontWeight(FontWeight.Medium)
-                      .fontColor(this.cTextPrimary)
+                      .fontColor(this.colors.textPrimary)
                       .layoutWeight(1);
                   }
                   .alignItems(VerticalAlign.Top)
@@ -3614,8 +3639,8 @@ struct Index {
                 }
                 .width('100%')
                 .padding(18)
-                .backgroundColor(this.cSurface)
-                .border({ width: 1, color: this.cBorder })
+                .backgroundColor(this.colors.surface)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(16);
               }
               .padding({ left: 24, right: 24, top: 20 });
@@ -3624,12 +3649,12 @@ struct Index {
                 Row() {
                   Text('★')
                     .fontSize(16)
-                    .fontColor('#d99a2b')
+                    .fontColor(this.colors.warningStrong)
                     .margin({ right: 8 });
                   Text($r('app.string.about_feedback'))
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor(this.cTextPrimary);
+                    .fontColor(this.colors.textPrimary);
                 }
                 .alignItems(VerticalAlign.Center)
                 .margin({ bottom: 16 });
@@ -3639,8 +3664,8 @@ struct Index {
                 }
                 .width('100%')
                 .padding(18)
-                .backgroundColor(this.cSurface)
-                .border({ width: 1, color: this.cBorder })
+                .backgroundColor(this.colors.surface)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(16);
               }
               .padding({ left: 24, right: 24, top: 16 });
@@ -3656,7 +3681,7 @@ struct Index {
                   Text($r('app.string.about_agreements'))
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor(this.cTextPrimary);
+                    .fontColor(this.colors.textPrimary);
                 }
                 .alignItems(VerticalAlign.Center)
                 .margin({ bottom: 16 });
@@ -3668,8 +3693,8 @@ struct Index {
                 }
                 .width('100%')
                 .padding(18)
-                .backgroundColor(this.cSurface)
-                .border({ width: 1, color: this.cBorder })
+                .backgroundColor(this.colors.surface)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(16);
               }
               .padding({ left: 24, right: 24, top: 16 });
@@ -3685,7 +3710,7 @@ struct Index {
                   Text($r('app.string.about_open_source'))
                     .fontSize(14)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor(this.cTextPrimary);
+                    .fontColor(this.colors.textPrimary);
                 }
                 .alignItems(VerticalAlign.Center)
                 .margin({ bottom: 16 });
@@ -3694,12 +3719,12 @@ struct Index {
                   Row() {
                     Text($r('app.string.about_license_label'))
                       .fontSize(13)
-                      .fontColor(this.cTextSecondary)
+                      .fontColor(this.colors.textSecondary)
                       .width(80);
                     Text($r('app.string.about_license_text'))
                       .fontSize(14)
                       .lineHeight(21)
-                      .fontColor(this.cTextPrimary)
+                      .fontColor(this.colors.textPrimary)
                       .layoutWeight(1);
                   }
                   .alignItems(VerticalAlign.Top)
@@ -3718,12 +3743,12 @@ struct Index {
                   Row() {
                     Text($r('app.string.about_third_party_label'))
                       .fontSize(13)
-                      .fontColor(this.cTextSecondary)
+                      .fontColor(this.colors.textSecondary)
                       .width(80);
                     Text('• TigerVNC (GPL-2.0)\n• libssh2 (BSD-3-Clause)\n• mbedTLS (Apache-2.0 / GPL-2.0)\n• GnuTLS (LGPL-2.1+)\n• Nettle (GPL-2.0+ / LGPL-3.0+)')
                       .fontSize(14)
                       .lineHeight(21)
-                      .fontColor(this.cTextPrimary)
+                      .fontColor(this.colors.textPrimary)
                       .layoutWeight(1);
                   }
                   .alignItems(VerticalAlign.Top)
@@ -3732,20 +3757,20 @@ struct Index {
                   Row() {
                     Text($r('app.string.about_disclaimer_label'))
                       .fontSize(13)
-                      .fontColor(this.cTextSecondary)
+                      .fontColor(this.colors.textSecondary)
                       .width(80);
                     Text($r('app.string.about_disclaimer_text'))
                       .fontSize(14)
                       .lineHeight(21)
-                      .fontColor(this.cTextPrimary)
+                      .fontColor(this.colors.textPrimary)
                       .layoutWeight(1);
                   }
                   .alignItems(VerticalAlign.Top);
                 }
                 .width('100%')
                 .padding(18)
-                .backgroundColor(this.cSurface)
-                .border({ width: 1, color: this.cBorder })
+                .backgroundColor(this.colors.surface)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(16);
               }
               .padding({ left: 24, right: 24, top: 16, bottom: 24 });
@@ -3758,7 +3783,7 @@ struct Index {
         .width('100%')
         .height('86%')
         .constraintSize({ maxWidth: 480 })
-        .backgroundColor(this.cSurfaceAlt)
+        .backgroundColor(this.colors.surfaceAlt)
         .borderRadius(24)
         .shadow({ radius: 32, color: 'rgba(12,20,22,0.18)', offsetX: 0, offsetY: 8 });
       }
@@ -3789,13 +3814,13 @@ struct Index {
               Text(this.getAgreementDialogTitle())
                 .fontSize(22)
                 .fontWeight(FontWeight.Bold)
-                .fontColor(this.cTextPrimary);
+                .fontColor(this.colors.textPrimary);
               Text(this.isLaunchAgreementDialog()
                 ? this.s($r('app.string.agreement_launch_desc'))
                 : this.s($r('app.string.agreement_normal_desc')))
                 .fontSize(13)
                 .lineHeight(20)
-                .fontColor(this.cTextSecondary)
+                .fontColor(this.colors.textSecondary)
                 .margin({ top: 6 });
             }
             .layoutWeight(1)
@@ -3806,7 +3831,7 @@ struct Index {
                 Image($r('app.media.ic_close'))
                   .width(18)
                   .height(18)
-                  .fillColor(this.cTextSecondary);
+                  .fillColor(this.colors.textSecondary);
               }
               .width(36)
               .height(36)
@@ -3821,14 +3846,14 @@ struct Index {
 
           Blank()
             .height(1)
-            .color(this.cBorder)
+            .color(this.colors.border)
             .margin({ left: 24, right: 24 });
 
           Scroll() {
             Column({ space: 20 }) {
               if (this.agreementDialogMode === AGREEMENT_DIALOG_LAUNCH) {
                 this.buildAgreementSection($r('app.string.agreement_privacy_policy'), this.privacyPolicyBlocks);
-                Blank().height(1).color(this.cBorder).width('100%');
+                Blank().height(1).color(this.colors.border).width('100%');
                 this.buildAgreementSection($r('app.string.agreement_user_agreement'), this.userAgreementBlocks);
               } else if (this.agreementDialogMode === AGREEMENT_DIALOG_PRIVACY) {
                 this.buildAgreementSection($r('app.string.agreement_privacy_policy'), this.privacyPolicyBlocks);
@@ -3846,7 +3871,7 @@ struct Index {
 
           Blank()
             .height(1)
-            .color(this.cBorder)
+            .color(this.colors.border)
             .margin({ left: 24, right: 24 });
 
           Row() {
@@ -3856,9 +3881,9 @@ struct Index {
                 .height(44)
                 .fontSize(15)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.cTextPrimary)
-                .backgroundColor(this.cSurfaceAlt)
-                .border({ width: 1, color: this.cBorder })
+                .fontColor(this.colors.textPrimary)
+                .backgroundColor(this.colors.surfaceAlt)
+                .border({ width: 1, color: this.colors.border })
                 .borderRadius(14)
                 .onClick(() => {
                   void this.exitApplication();
@@ -3871,8 +3896,8 @@ struct Index {
                 .height(44)
                 .fontSize(15)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.cPrimaryFg)
-                .backgroundColor(this.cPrimary)
+                .fontColor(this.colors.primaryFg)
+                .backgroundColor(this.colors.primary)
                 .borderRadius(14)
                 .onClick(() => {
                   void this.acceptLaunchAgreements();
@@ -3883,8 +3908,8 @@ struct Index {
                 .height(44)
                 .fontSize(15)
                 .fontWeight(FontWeight.Medium)
-                .fontColor(this.cPrimaryFg)
-                .backgroundColor(this.cPrimary)
+                .fontColor(this.colors.primaryFg)
+                .backgroundColor(this.colors.primary)
                 .borderRadius(14)
                 .onClick(() => this.closeAgreementDialog());
             }
@@ -3896,7 +3921,7 @@ struct Index {
         .width('100%')
         .height('88%')
         .constraintSize({ maxWidth: 720 })
-        .backgroundColor(this.cSurfaceAlt)
+        .backgroundColor(this.colors.surfaceAlt)
         .borderRadius(24)
         .shadow({ radius: 32, color: 'rgba(12,20,22,0.18)', offsetX: 0, offsetY: 8 });
       }
@@ -3921,14 +3946,14 @@ struct Index {
             Text($r('app.string.settings_title'))
               .fontSize(22)
               .fontWeight(FontWeight.Bold)
-              .fontColor(this.cTextPrimary);
+              .fontColor(this.colors.textPrimary);
             Blank()
               .layoutWeight(1);
             Button() {
               Image($r('app.media.ic_close'))
                 .width(18)
                 .height(18)
-                .fillColor(this.cTextSecondary)
+                .fillColor(this.colors.textSecondary)
             }
             .width(36)
             .height(36)
@@ -3942,7 +3967,7 @@ struct Index {
 
           Blank()
             .height(1)
-            .color(this.cBorder)
+            .color(this.colors.border)
             .margin({ left: 24, right: 24 });
 
           Scroll() {
@@ -3951,19 +3976,19 @@ struct Index {
                 Text($r('app.string.settings_edge_clamp'))
                   .fontSize(14)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor(this.cTextPrimary)
+                  .fontColor(this.colors.textPrimary)
                   .width('100%')
                   .margin({ bottom: 4 });
                 Text($r('app.string.settings_edge_clamp_desc'))
                   .fontSize(11)
                   .lineHeight(16)
-                  .fontColor(this.cTextSecondary)
+                  .fontColor(this.colors.textSecondary)
                   .width('100%')
                   .margin({ bottom: 12 });
                 Row() {
                   Text(this.editEdgeClampEnabled ? $r('app.string.status_on') : $r('app.string.status_off'))
                     .fontSize(13)
-                    .fontColor(this.cTextSecondary)
+                    .fontColor(this.colors.textSecondary)
                     .layoutWeight(1);
                   BrandSwitch({
                     isOn: this.editEdgeClampEnabled,
@@ -3980,8 +4005,8 @@ struct Index {
               }
               .width('100%')
               .padding(18)
-              .backgroundColor(this.cSurface)
-              .border({ width: 1, color: this.cBorder })
+              .backgroundColor(this.colors.surface)
+              .border({ width: 1, color: this.colors.border })
               .borderRadius(16);
             }
             .width('100%')
@@ -3994,7 +4019,7 @@ struct Index {
         .width('100%')
         .height('50%')
         .constraintSize({ maxWidth: 720 })
-        .backgroundColor(this.cSurfaceAlt)
+        .backgroundColor(this.colors.surfaceAlt)
         .borderRadius(24)
         .shadow({ radius: 32, color: 'rgba(12,20,22,0.18)', offsetX: 0, offsetY: 8 });
       }
@@ -4014,7 +4039,7 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.cSurface)
+    .backgroundColor(this.colors.surface)
     .focusable(true)
     .onKeyEvent((ev: KeyEvent) => this.handleConnectionListKeyEvent(ev));
   }

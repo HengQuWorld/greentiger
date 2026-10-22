@@ -1,6 +1,8 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import window from '@ohos.window';
+import { Configuration } from '@kit.AbilityKit';
 import { parseSshTunnelConfigText, resolveConnectionAddress } from '../utils/ConnectionUtils';
+import { syncSystemColorMode } from '../utils/ThemeConstants';
 
 interface WantLike {
   parameters?: Record<string, Object>;
@@ -35,6 +37,16 @@ interface WindowLike {
 }
 
 export default class ViewerAbility extends UIAbility {
+  onCreate(): void {
+    // Keeps the process-wide dark flag current even when the viewer window is
+    // the first thing launched (e.g. restored from a recent-task snapshot).
+    syncSystemColorMode(this.context.config.colorMode);
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    syncSystemColorMode(newConfig.colorMode);
+  }
+
   onDestroy(): void {
     // 通知主页（同进程 AppStorage）：查看器会话已结束，可尝试主动促评
     const seq = (AppStorage.get<number>('vncViewerSessionEndSeq') ?? 0) + 1;

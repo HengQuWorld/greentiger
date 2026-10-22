@@ -178,3 +178,33 @@ private buildDetailContent(): void {
 - 这块 UI 是不是写在 `@Builder` 里。
 - 它是不是通过参数拿数据。
 - 参数是不是多于一个，或者不是对象字面量。
+
+## 第二次踩坑：主题色被当成 `@Builder` 参数
+
+接入深色模式后复现了同一类问题，症状更隐蔽：
+
+- 现象：在设置里切换系统深色/浅色，页面背景、文字、卡片都跟着变了，但连接卡片右侧的图标按钮（打开 / 编辑 / 删除）一直停在切换前的配色——浅色主题下显示成黑底浅色图标。
+- 原因：这些按钮走 `buildIconButton(key, icon, iconColor, bg, bgPressed, border, ...)`，9 个参数、颜色全在参数里，属于典型的按值传参。
+- 卡片本身、文字等直接写 `this.colors.xxx` 的部分会正常刷新，所以看起来“只坏了一个角落”。
+
+正确做法是**只传语义，不传颜色**，颜色在 `@Builder` 内部读 `this.colors`：
+
+```ts
+this.buildIconButton(`conn_${c.id}_edit`, $r('app.media.ic_edit'), ICON_BUTTON_NEUTRAL, () => this.openEditDialog(c.id), true, 8);
+
+@Builder
+private buildIconButton(key: string, icon: Resource, variant: number, onClick: () => void, enabled: boolean = true, marginLeft: number = 0): void {
+  Button() {
+    Image(icon).fillColor(this.iconButtonIconColor(variant));
+  }
+  .backgroundColor(this.isBtnPressed(key) ? this.iconButtonPressedColor(variant) : this.iconButtonColor(variant))
+  .border(this.iconButtonBorder(variant))
+}
+```
+
+推论：**任何会随主题、断点、选中态变化的样式值，都不能作为多参数 `@Builder` 的入参**。要么在 builder 内部读 `this` 上的状态，要么改成 `$$` 单参数对象字面量。
+
+这条规则已经落成检查项：`./scripts/build_all.sh --ohos` 每次构建前都会跑
+`scripts/check_theme_tokens.py`，它校验浅色/深色两套色板与 `ThemeColors`
+接口一一对应，并把“把 `this.colors.*` 当参数传给多参数 `@Builder`”的调用
+列为警告。单独运行：`python3 scripts/check_theme_tokens.py -v`。

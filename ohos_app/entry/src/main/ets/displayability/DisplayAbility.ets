@@ -1,7 +1,9 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import window from '@ohos.window';
+import { Configuration } from '@kit.AbilityKit';
 import { viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
 import { DisplayLaunchParams } from '../pages/DisplayPage';
+import { syncSystemColorMode } from '../utils/ThemeConstants';
 
 interface WantLike {
   parameters?: Record<string, Object>;
@@ -29,6 +31,14 @@ function paramBool(params: Record<string, Object>, key: string, fallback: boolea
 }
 
 export default class DisplayAbility extends UIAbility {
+
+  onCreate(): void {
+    syncSystemColorMode(this.context.config.colorMode);
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    syncSystemColorMode(newConfig.colorMode);
+  }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     try {
