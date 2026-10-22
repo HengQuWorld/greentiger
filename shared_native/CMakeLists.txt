@@ -52,6 +52,7 @@ add_subdirectory("${LIBSSH2_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/libssh2")
 add_library(tigervnc_shared_client STATIC
   ssh_tunnel.cpp
   ssh_tunnel_config.cpp
+  desktop_resize.cpp
   vncclient.cpp
   monitor_segmentation.cpp
 )

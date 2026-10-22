@@ -14,6 +14,7 @@
 #include <napi/native_api.h>
 
 #include "vncclient.h"
+#include "desktop_resize.h"
 #include "monitor_segmentation.h"
 #include "pixel_convert.h"
 #include <vector>
@@ -83,6 +84,7 @@ struct ClientState {
 static bool GetStringArg(napi_env env, napi_value v, std::string* out);
 static bool GetInt32Arg(napi_env env, napi_value v, int32_t* out);
 static bool GetBoolArg(napi_env env, napi_value v, bool* out);
+static bool GetDoubleArg(napi_env env, napi_value v, double* out);
 static bool GetNamedProperty(napi_env env, napi_value obj, const char* name, napi_value* out);
 
 
@@ -297,6 +299,11 @@ static bool GetInt32Arg(napi_env env, napi_value v, int32_t* out)
 static bool GetBoolArg(napi_env env, napi_value v, bool* out)
 {
   return napi_get_value_bool(env, v, out) == napi_ok;
+}
+
+static bool GetDoubleArg(napi_env env, napi_value v, double* out)
+{
+  return napi_get_value_double(env, v, out) == napi_ok;
 }
 
 static bool GetNamedProperty(napi_env env, napi_value obj, const char* name, napi_value* out)
@@ -854,6 +861,95 @@ static napi_value VncRequestUpdate(napi_env env, napi_callback_info info)
   napi_value out;
   napi_create_int32(env, rc, &out);
   return out;
+}
+
+static napi_value VncSetDesktopSize(napi_env env, napi_callback_info info)
+{
+  size_t argc = 2;
+  napi_value argv[2];
+  napi_value jsthis = nullptr;
+  napi_get_cb_info(env, info, &argc, argv, &jsthis, nullptr);
+
+  int32_t width = 0, height = 0;
+  if (argc >= 1) GetInt32Arg(env, argv[0], &width);
+  if (argc >= 2) GetInt32Arg(env, argv[1], &height);
+
+  ClientState* st_ptr = nullptr;
+  napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
+  if (!st_ptr) return nullptr;
+  auto& st = *st_ptr;
+
+  int rc = VNCCLIENT_DESKTOP_RESIZE_NOT_CONNECTED;
+  try {
+    std::lock_guard<std::mutex> clientLock(st.clientMu);
+    if (st.client)
+      rc = vncclient_set_desktop_size(st.client, width, height);
+  } catch (...) {
+    rc = VNCCLIENT_DESKTOP_RESIZE_NOT_CONNECTED;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(st.mu);
+    if (st.debugEnabled && st.debugLevel >= 1) {
+      AppendDebugLogLocked(st, "setDesktopSize %dx%d rc=%d", width, height, rc);
+    }
+  }
+
+  napi_value out;
+  napi_create_int32(env, rc, &out);
+  return out;
+}
+
+static napi_value VncTakeDesktopResizeFailure(napi_env env, napi_callback_info info)
+{
+  napi_value jsthis = nullptr;
+  napi_get_cb_info(env, info, nullptr, nullptr, &jsthis, nullptr);
+  ClientState* st_ptr = nullptr;
+  napi_unwrap(env, jsthis, reinterpret_cast<void**>(&st_ptr));
+  if (!st_ptr) return nullptr;
+  auto& st = *st_ptr;
+
+  bool failed = false;
+  {
+    std::lock_guard<std::mutex> clientLock(st.clientMu);
+    if (st.client)
+      failed = vncclient_take_desktop_resize_failure(st.client) != 0;
+  }
+
+  napi_value out;
+  napi_get_boolean(env, failed, &out);
+  return out;
+}
+
+static napi_value VncComputeDesktopSizeTarget(napi_env env, napi_callback_info info)
+{
+  size_t argc = 3;
+  napi_value argv[3];
+  napi_value jsthis = nullptr;
+  napi_get_cb_info(env, info, &argc, argv, &jsthis, nullptr);
+
+  double viewportWidth = 0.0;
+  double viewportHeight = 0.0;
+  double pixelRatio = 1.0;
+  if (argc >= 1) GetDoubleArg(env, argv[0], &viewportWidth);
+  if (argc >= 2) GetDoubleArg(env, argv[1], &viewportHeight);
+  if (argc >= 3) GetDoubleArg(env, argv[2], &pixelRatio);
+
+  int targetWidth = 0;
+  int targetHeight = 0;
+  const bool ok = shared::ComputeDesktopTarget(viewportWidth, viewportHeight, pixelRatio,
+                                               &targetWidth, &targetHeight);
+
+  napi_value obj;
+  napi_create_object(env, &obj);
+  napi_value v;
+  napi_get_boolean(env, ok, &v);
+  napi_set_named_property(env, obj, "ok", v);
+  napi_create_int32(env, ok ? targetWidth : 0, &v);
+  napi_set_named_property(env, obj, "width", v);
+  napi_create_int32(env, ok ? targetHeight : 0, &v);
+  napi_set_named_property(env, obj, "height", v);
+  return obj;
 }
 
 static napi_value VncConsumeDamage(napi_env env, napi_callback_info info)
@@ -1537,6 +1633,9 @@ static napi_value Init(napi_env env, napi_value exports)
     { "process", 0, VncProcess, 0, 0, 0, napi_default, 0 },
     { "refresh", 0, VncRefresh, 0, 0, 0, napi_default, 0 },
     { "requestUpdate", 0, VncRequestUpdate, 0, 0, 0, napi_default, 0 },
+    { "setDesktopSize", 0, VncSetDesktopSize, 0, 0, 0, napi_default, 0 },
+    { "takeDesktopResizeFailure", 0, VncTakeDesktopResizeFailure, 0, 0, 0, napi_default, 0 },
+    { "computeDesktopSizeTarget", 0, VncComputeDesktopSizeTarget, 0, 0, 0, napi_default, 0 },
     { "consumeDamage", 0, VncConsumeDamage, 0, 0, 0, napi_default, 0 },
     { "getFramebufferInfo", 0, VncGetFramebufferInfo, 0, 0, 0, napi_default, 0 },
     { "copyFrameRGBA", 0, VncCopyFrameRGBA, 0, 0, 0, napi_default, 0 },

@@ -166,3 +166,15 @@ export async function saveCtrlPassthrough(enabled: boolean, context: common.UIAb
     console.error('Failed to save ctrl passthrough setting', e);
   }
 }
+
+const ADAPTIVE_RESOLUTION_KEY = 'adaptive_resolution_v1';
+
+export async function saveAdaptiveResolution(enabled: boolean, context: common.UIAbilityContext): Promise<void> {
+  try {
+    const pref = await dataPreferences.getPreferences(context, { name: EDGE_CLAMP_PREF_NAME });
+    await pref.put(ADAPTIVE_RESOLUTION_KEY, enabled);
+    await pref.flush();
+  } catch (e) {
+    console.error('Failed to save adaptive resolution setting', e);
+  }
+}

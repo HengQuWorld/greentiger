@@ -70,6 +70,17 @@ target_compile_options(apple_rfb_banner_test PRIVATE -Wall -Wextra)
 add_test(NAME apple_rfb_banner COMMAND apple_rfb_banner_test)
 
 # ---------------------------------------------------------------------------
+# Remote desktop resize rules (pure C++, no platform dependencies)
+# ---------------------------------------------------------------------------
+add_executable(desktop_resize_test
+  desktop_resize_test.cpp
+  "${SHARED_NATIVE_DIR}/desktop_resize.cpp"
+)
+target_link_libraries(desktop_resize_test PRIVATE test_support)
+target_compile_options(desktop_resize_test PRIVATE -Wall -Wextra)
+add_test(NAME desktop_resize COMMAND desktop_resize_test)
+
+# ---------------------------------------------------------------------------
 # Handle lifetime (intrusive reference count used by the VNC client handle)
 # ---------------------------------------------------------------------------
 add_executable(ref_counted_test ref_counted_test.cpp)

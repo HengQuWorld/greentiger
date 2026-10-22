@@ -19,7 +19,7 @@ import {
 } from '../utils/ConnectionUtils';
 import { keySymFromEvent } from '../utils/KeyMap';
 import { SharedViewerRect, VncClientLike, viewerMultiWindowStore } from '../utils/ViewerMultiWindow';
-import { InteractFrameThrottle, saveCtrlPassthrough } from '../utils/ViewerCommonUtils';
+import { InteractFrameThrottle, saveCtrlPassthrough, saveAdaptiveResolution } from '../utils/ViewerCommonUtils';
 import { recordRatingSession } from '../utils/AppRating';
 import { VncClient } from 'libvncviewer.so';
 
@@ -45,6 +45,9 @@ interface VncClientData {
   process(): number;
   refresh(): number;
   requestUpdate?(incremental?: boolean): number;
+  setDesktopSize?(width: number, height: number): number;
+  takeDesktopResizeFailure?(): boolean;
+  computeDesktopSizeTarget?(viewportWidth: number, viewportHeight: number, pixelRatio: number): DesktopSizeTarget;
   consumeDamage(): VncRect | null;
   getFramebufferInfo(): VncFramebufferInfo;
   copyFrameRGBA(order: number): ArrayBuffer | null;
@@ -89,6 +92,12 @@ interface SavedMonitorLayout {
 interface MonitorAspectOption {
   label: string;
   ratio: number;
+}
+
+interface DesktopSizeTarget {
+  ok: boolean;
+  width: number;
+  height: number;
 }
 
 const MAX_MANUAL_MONITOR_COUNT = 8;
@@ -349,6 +358,35 @@ struct Viewer {
   private touchDragging: boolean = false;
   private touchStartedOutside: boolean = false;
   private edgeClampEnabled: boolean = true;
+  // Adapting the remote desktop to the window is opt-out: the remote size is
+  // otherwise fixed by the server and the picture gets letterboxed.
+  @State private adaptiveResolutionEnabled: boolean = true;
+  // Set when this session's server cannot honour a resize, so the panel can say
+  // why the toggle did nothing instead of leaving the user guessing.
+  @State private adaptiveResizeNotice: string = '';
+  private adaptiveResizeTimer: number = -1;
+  private adaptiveResizeBlocked: boolean = false;
+  private adaptiveResizeTries: number = 0;
+  private adaptiveResizeTryW: number = 0;
+  private adaptiveResizeTryH: number = 0;
+  private adaptiveResizeLastTs: number = 0;
+  // A frame within this many pixels of the target already fills the window, so
+  // another round trip would only renegotiate for nothing.
+  private readonly adaptiveResizeTolerancePx: number = 32;
+  private readonly adaptiveResizeMaxAttempts: number = 4;
+  private readonly adaptiveResizeRetryDelayMs: number = 1500;
+  private readonly adaptiveResizeMinIntervalMs: number = 1200;
+  // The window keeps changing while it is being dragged, so the request waits
+  // for the size to settle.
+  private readonly adaptiveResizeSettleMs: number = 600;
+  private readonly adaptiveResizeInitialDelayMs: number = 300;
+  private readonly adaptiveResizeToggleDelayMs: number = 200;
+  // Mirrors vncclient_desktop_resize_result in shared_native/vncclient.h; the
+  // native tests keep those values from drifting.
+  private readonly desktopResizeOk: number = 0;
+  private readonly desktopResizeUnchanged: number = 1;
+  private readonly desktopResizeUnsupported: number = -3;
+  private readonly desktopResizeMultiScreen: number = -4;
   private touchScrollActive: boolean = false;
   private touchScrollLastX: number = 0;
   private touchScrollLastY: number = 0;
@@ -496,6 +534,7 @@ struct Viewer {
     viewerMultiWindowStore.ensureSession(this.sharedSessionId);
     this.refreshMonitorWindowsState();
     void this.loadEdgeClampSetting();
+    void this.loadAdaptiveResolutionSetting();
     const booted = this.applyWantParams();
     if (booted) {
       this.updateWindowTitle();
@@ -515,6 +554,7 @@ struct Viewer {
     this.refreshMonitorWindowsState();
     this.applyFullscreenToWindow();
     void this.loadEdgeClampSetting();
+    void this.loadAdaptiveResolutionSetting();
     this.tryAutoConnect();
   }
 
@@ -1945,6 +1985,157 @@ struct Viewer {
 
   private canUseZoomViewer(): boolean {
     return this.viewerW > 0 && this.viewerH > 0 && this.viewportMode !== 'tile';
+  }
+
+  private getViewportPixelRatio(): number {
+    try {
+      const ratio = this.getUIContext()?.vp2px?.(1);
+      if (typeof ratio === 'number' && ratio > 0) return ratio;
+    } catch (e) {
+    }
+    return 1;
+  }
+
+  // Target remote resolution: the window measured in physical pixels, so the
+  // picture lands on the screen 1:1 instead of being scaled down into a band.
+  // The conversion and its limits live in shared_native/desktop_resize.cpp so
+  // the clamping rules are covered by the host tests.
+  private getAdaptiveDesktopTarget(): VncRect | null {
+    if (this.viewerW <= 1 || this.viewerH <= 1 || this.bootstrapping) return null;
+    const target = this.vncClient.computeDesktopSizeTarget?.(
+      this.viewerW, this.viewerH, this.getViewportPixelRatio());
+    if (!target || target.ok !== true) return null;
+    if (target.width < 1 || target.height < 1) return null;
+    return { x: 0, y: 0, w: target.width, h: target.height };
+  }
+
+  private isAppleServer(): boolean {
+    try {
+      return this.vncClient.isServerLikelyMac?.() === true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private cancelAdaptiveDesktopResize(): void {
+    if (this.adaptiveResizeTimer !== -1) {
+      clearTimeout(this.adaptiveResizeTimer);
+      this.adaptiveResizeTimer = -1;
+    }
+  }
+
+  private scheduleAdaptiveDesktopResize(delayMs: number): void {
+    this.cancelAdaptiveDesktopResize();
+    if (!this.adaptiveResolutionEnabled || !this.connected || this.adaptiveResizeBlocked) return;
+    this.adaptiveResizeTimer = setTimeout(() => {
+      this.adaptiveResizeTimer = -1;
+      this.applyAdaptiveDesktopResize();
+    }, delayMs);
+  }
+
+  private applyAdaptiveDesktopResize(): void {
+    if (!this.adaptiveResolutionEnabled || !this.connected || this.adaptiveResizeBlocked) return;
+    if (this.bootstrapping || this.viewportMode === 'tile') return;
+    if (this.fbW <= 0 || this.fbH <= 0) return;
+
+    const target = this.getAdaptiveDesktopTarget();
+    if (!target) return;
+
+    // Close enough: the frame already maps onto the window without another
+    // round trip (servers and rounding rarely land on the exact request).
+    if (Math.abs(this.fbW - target.w) <= this.adaptiveResizeTolerancePx &&
+      Math.abs(this.fbH - target.h) <= this.adaptiveResizeTolerancePx) {
+      this.adaptiveResizeTries = 0;
+      this.adaptiveResizeNotice = '';
+      return;
+    }
+
+    const sameTarget =
+      Math.abs(target.w - this.adaptiveResizeTryW) <= this.adaptiveResizeTolerancePx &&
+      Math.abs(target.h - this.adaptiveResizeTryH) <= this.adaptiveResizeTolerancePx;
+    if (sameTarget && this.adaptiveResizeTries >= this.adaptiveResizeMaxAttempts) {
+      // The server accepted but kept a different size (it clamped the request to
+      // a supported mode). Retrying would only repeat the same answer.
+      console.info('[adaptive] giving up: server settled on a different size');
+      return;
+    }
+    if (sameTarget && (Date.now() - this.adaptiveResizeLastTs) < this.adaptiveResizeMinIntervalMs) return;
+
+    let rc = -1;
+    try {
+      rc = (this.vncClient.setDesktopSize?.(target.w, target.h) as number) ?? -1;
+    } catch (e) {
+      console.error(`[adaptive] setDesktopSize threw: ${(e as Error)?.message}`);
+      return;
+    }
+    this.adaptiveResizeTryW = target.w;
+    this.adaptiveResizeTryH = target.h;
+    this.adaptiveResizeTries = sameTarget ? this.adaptiveResizeTries + 1 : 1;
+    this.adaptiveResizeLastTs = Date.now();
+    console.info(`[adaptive] target=${target.w}x${target.h} current=${this.fbW}x${this.fbH} rc=${rc} tries=${this.adaptiveResizeTries}`);
+
+    if (rc === this.desktopResizeOk || rc === this.desktopResizeUnchanged) return;
+    if (rc === this.desktopResizeUnsupported) {
+      // The server never announced ExtendedDesktopSize. Give it a few seconds
+      // of updates to do so (some servers send the layout late), then say so.
+      if (this.adaptiveResizeTries < this.adaptiveResizeMaxAttempts) {
+        this.scheduleAdaptiveDesktopResize(this.adaptiveResizeRetryDelayMs);
+        return;
+      }
+      this.adaptiveResizeBlocked = true;
+      this.adaptiveResizeNotice = this.s($r('app.string.adaptive_resolution_unsupported_short'));
+      this.showStatusBanner(this.s(this.isAppleServer()
+        ? $r('app.string.adaptive_resolution_unsupported_apple')
+        : $r('app.string.adaptive_resolution_unsupported')));
+      return;
+    }
+    if (rc === this.desktopResizeMultiScreen) {
+      this.adaptiveResizeBlocked = true;
+      this.adaptiveResizeNotice = this.s($r('app.string.adaptive_resolution_multi_screen'));
+      return;
+    }
+    // Not connected yet or a hard error: stop asking for this session.
+    this.adaptiveResizeBlocked = true;
+  }
+
+  private checkAdaptiveResizeFailure(): void {
+    let failed = false;
+    try {
+      failed = this.vncClient.takeDesktopResizeFailure?.() === true;
+    } catch (e) {
+      failed = false;
+    }
+    if (!failed) return;
+    console.info('[adaptive] server rejected the resize request');
+    this.adaptiveResizeBlocked = true;
+    this.adaptiveResizeNotice = this.s($r('app.string.adaptive_resolution_unsupported_short'));
+    this.showStatusBanner(this.s($r('app.string.adaptive_resolution_refused')));
+  }
+
+  private setAdaptiveResolutionEnabled(enabled: boolean): void {
+    this.adaptiveResolutionEnabled = enabled;
+    console.info(`[adaptive] toggle enabled=${enabled}`);
+    this.adaptiveResizeBlocked = false;
+    this.adaptiveResizeNotice = '';
+    this.adaptiveResizeTries = 0;
+    this.adaptiveResizeTryW = 0;
+    this.adaptiveResizeTryH = 0;
+    this.adaptiveResizeLastTs = 0;
+    const ctx = this.getHostContext();
+    if (ctx) saveAdaptiveResolution(enabled, ctx);
+    if (enabled) this.scheduleAdaptiveDesktopResize(this.adaptiveResizeToggleDelayMs);
+    else this.cancelAdaptiveDesktopResize();
+  }
+
+  private async loadAdaptiveResolutionSetting(): Promise<void> {
+    try {
+      const ctx = this.getHostContext();
+      if (!ctx) return;
+      const pref = await dataPreferences.getPreferences(ctx, { name: 'vnc_store' });
+      this.adaptiveResolutionEnabled = !!(await pref.get('adaptive_resolution_v1', true)) as boolean;
+    } catch (e) {
+      console.error('Failed to load adaptive resolution setting', e);
+    }
   }
 
   private getAllMonitorMetrics(): ViewportTarget {
@@ -3945,6 +4136,7 @@ struct Viewer {
     let shouldContinueTickSoon = false;
     try {
       this.refreshFramebufferInfo();
+      this.checkAdaptiveResizeFailure();
       this.maybeAdoptServerNameAsConnName();
       
       let prc = 0;
@@ -4199,6 +4391,12 @@ struct Viewer {
       this.lastFramebufferUpdateTs = 0;
       this.lastServerRefreshRequestTs = 0;
       this.lastMask = 0;
+      this.adaptiveResizeBlocked = false;
+      this.adaptiveResizeNotice = '';
+      this.adaptiveResizeTries = 0;
+      this.adaptiveResizeTryW = 0;
+      this.adaptiveResizeTryH = 0;
+      this.adaptiveResizeLastTs = 0;
       this.refreshFramebufferInfo();
       this.maybeAdoptServerNameAsConnName();
       this.lastError = (this.vncClient.getLastError() as string) ?? '';
@@ -4220,6 +4418,9 @@ struct Viewer {
       this.maybeAdoptServerNameAsConnName();
       this.requestRemoteClipboard();
       this.startLoop();
+      // The first frame has landed, so the server's screen layout is known and
+      // the remote desktop can be matched to the window.
+      this.scheduleAdaptiveDesktopResize(this.adaptiveResizeInitialDelayMs);
       setTimeout(() => this.requestInputFocus(), 0);
       this.showStatusBanner(this.s($r('app.string.conn_connected')));
     } catch (e) {
@@ -4270,6 +4471,13 @@ struct Viewer {
 
   private disconnect(preserveError: boolean = false): void {
     this.stopLoop();
+    this.cancelAdaptiveDesktopResize();
+    this.adaptiveResizeBlocked = false;
+    this.adaptiveResizeNotice = '';
+    this.adaptiveResizeTries = 0;
+    this.adaptiveResizeTryW = 0;
+    this.adaptiveResizeTryH = 0;
+    this.adaptiveResizeLastTs = 0;
     void this.closeMonitorWindows(false);
     viewerMultiWindowStore.setVncClient(this.sharedSessionId, null);
     try { this.vncClient.disconnect(); } catch (e) {}
@@ -5167,6 +5375,7 @@ struct Viewer {
           this.viewerH = (newValue.height as number) ?? 1;
           this.ensureFsBtnPosition();
           this.clampZoomOffset();
+          this.scheduleAdaptiveDesktopResize(this.adaptiveResizeSettleMs);
         })
         .onTouch((ev: TouchEvent) => {
           const t = ev?.touches?.[0] ?? ev?.changedTouches?.[0];
@@ -5608,6 +5817,51 @@ struct Viewer {
         this.pulseChromeInteraction();
         $$.onClick();
       });
+  }
+
+  // Reads this.adaptiveResolutionEnabled directly instead of taking it as a
+  // parameter: @Builder parameters are passed by value, so a state variable
+  // handed in that way never re-renders the toggle when it changes, which made
+  // the switch look dead after a tap.
+  @Builder
+  private buildAdaptiveResolutionToggle(): void {
+    Row() {
+      Column() {
+        Text($r('app.string.more_adaptive_resolution'))
+          .fontSize(13)
+          .fontColor(this.cTextPrimary)
+          .maxLines(1);
+        Text($r('app.string.more_adaptive_resolution_desc'))
+          .fontSize(11)
+          .fontColor(this.cTextSecondary)
+          .maxLines(2);
+      }
+      .layoutWeight(1);
+      Row() {
+        Blank()
+          .width(18)
+          .height(18)
+          .backgroundColor(this.cSurfaceAlt)
+          .borderRadius(9)
+          .margin({ left: this.adaptiveResolutionEnabled ? 18 : 0 });
+      }
+      .width(42)
+      .height(24)
+      .padding(3)
+      .backgroundColor(this.adaptiveResolutionEnabled ? this.cPrimary : this.cBorder)
+      .borderRadius(12);
+    }
+    .width('100%')
+    .padding({ left: 12, right: 8, top: 8, bottom: 8 })
+    .backgroundColor(this.cSurfaceAlt)
+    .borderRadius(14)
+    .border({ width: 1, color: this.cBorder })
+    .onTouch((ev: TouchEvent) => this.handleChromeTouchInteraction(ev))
+    // The whole row is the hit area, not just the 42x24 switch.
+    .onClick(() => {
+      this.pulseChromeInteraction();
+      this.setAdaptiveResolutionEnabled(!this.adaptiveResolutionEnabled);
+    });
   }
 
   @Builder
@@ -6166,6 +6420,13 @@ struct Viewer {
         .fontColor(this.cTextSecondary)
         .width('100%');
       this.buildPanelAction({ label: this.s($r('app.string.more_clipboard_label')), primary: false, onClick: () => this.togglePanel('clipboard') });
+      this.buildAdaptiveResolutionToggle();
+      if (this.adaptiveResizeNotice) {
+        Text(this.adaptiveResizeNotice)
+          .fontSize(11)
+          .fontColor(this.cWarning)
+          .width('100%');
+      }
       if (this.runtimeMacMode) {
         Row() {
           Column() {

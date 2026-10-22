@@ -1,6 +1,7 @@
 #include "vncclient.h"
 
 #include "apple_rfb_banner.h"
+#include "desktop_resize.h"
 #include "ref_counted.h"
 #include "ssh_tunnel.h"
 
@@ -40,8 +41,10 @@
 #include <rfb/Exception.h>
 #include <rfb/PixelBuffer.h>
 #include <rfb/CSecurity.h>
+#include <rfb/ScreenSet.h>
 #include <rfb/Security.h>
 #include <rfb/SecurityClient.h>
+#include <rfb/screenTypes.h>
 
 static core::LogWriter vlog("shared-vncclient");
 
@@ -263,10 +266,48 @@ public:
     return 0;
   }
 
+  // Requests a framebuffer resize that reuses the existing single screen, so
+  // the server keeps treating it as the same display. The decision itself lives
+  // in shared::PlanDesktopResize so the rules can be tested on the host.
+  int requestDesktopSize(int width, int height)
+  {
+    if (state() != rfb::CConnection::RFBSTATE_NORMAL || !writer())
+      return VNCCLIENT_DESKTOP_RESIZE_NOT_CONNECTED;
+
+    const rfb::ScreenSet& current = server.screenLayout();
+    std::vector<shared::DesktopScreen> screens;
+    screens.reserve(static_cast<size_t>(current.num_screens()));
+    for (auto it = current.begin(); it != current.end(); ++it)
+      screens.push_back(shared::DesktopScreen{ it->id, it->flags });
+
+    const shared::DesktopResizePlan plan = shared::PlanDesktopResize(
+        true, server.supportsSetDesktopSize,
+        screens.empty() ? nullptr : screens.data(),
+        static_cast<int>(screens.size()),
+        server.width(), server.height(), width, height);
+
+    if (plan.result != shared::DesktopResizeResult::kOk)
+      return static_cast<int>(plan.result);
+
+    rfb::ScreenSet layout;
+    layout.add_screen(rfb::Screen(plan.screenId, 0, 0,
+                                  plan.width, plan.height, plan.screenFlags));
+    writer()->writeSetDesktopSize(plan.width, plan.height, layout);
+    return VNCCLIENT_DESKTOP_RESIZE_OK;
+  }
+
+  int takeResizeFailure()
+  {
+    if (!resizeFailure_)
+      return 0;
+    resizeFailure_ = false;
+    return 1;
+  }
+
   int getSecurityLevel() const {
     if (!csecurity) return 0;
     int type = csecurity->getType();
-    
+
     // Fully secure (Encryption of both Auth and Transmission)
     if (type == rfb::secTypeTLSNone || type == rfb::secTypeTLSVnc || type == rfb::secTypeTLSPlain ||
         type == rfb::secTypeX509None || type == rfb::secTypeX509Vnc || type == rfb::secTypeX509Plain ||
@@ -398,6 +439,18 @@ public:
   {
   }
 
+  // Client-initiated resizes are answered with reasonClient; only those matter
+  // for the "the server refused our request" signal.
+  void setExtendedDesktopSize(unsigned reason, unsigned result,
+                              int w, int h,
+                              const rfb::ScreenSet& layout) override
+  {
+    if (reason == rfb::reasonClient && result != rfb::resultSuccess)
+      resizeFailure_ = true;
+
+    rfb::CConnection::setExtendedDesktopSize(reason, result, w, h, layout);
+  }
+
   void handleClipboardAnnounce(bool available) override
   {
     if (callbacks_.on_clipboard_announce)
@@ -451,6 +504,7 @@ private:
 
   vncclient_callbacks callbacks_;
   SharedPixelBuffer* framebuffer_ = nullptr;
+  bool resizeFailure_ = false;
   std::chrono::steady_clock::time_point updateStartTime_ = std::chrono::steady_clock::now();
   size_t updateStartPos_ = 0;
   unsigned long long bandwidthEstimateBps_ = kInitialBandwidthEstimateBps;
@@ -679,6 +733,27 @@ struct vncclient_handle {
   Client impl;
   shared::RefCounted refs;
 };
+
+// The public C result codes and the planner's enum must stay in step: the NAPI
+// and JNI layers branch on the numeric values.
+static_assert(static_cast<int>(shared::DesktopResizeResult::kOk) ==
+                  VNCCLIENT_DESKTOP_RESIZE_OK,
+              "desktop resize result mismatch");
+static_assert(static_cast<int>(shared::DesktopResizeResult::kUnchanged) ==
+                  VNCCLIENT_DESKTOP_RESIZE_UNCHANGED,
+              "desktop resize result mismatch");
+static_assert(static_cast<int>(shared::DesktopResizeResult::kNotConnected) ==
+                  VNCCLIENT_DESKTOP_RESIZE_NOT_CONNECTED,
+              "desktop resize result mismatch");
+static_assert(static_cast<int>(shared::DesktopResizeResult::kInvalidSize) ==
+                  VNCCLIENT_DESKTOP_RESIZE_INVALID_SIZE,
+              "desktop resize result mismatch");
+static_assert(static_cast<int>(shared::DesktopResizeResult::kUnsupported) ==
+                  VNCCLIENT_DESKTOP_RESIZE_UNSUPPORTED,
+              "desktop resize result mismatch");
+static_assert(static_cast<int>(shared::DesktopResizeResult::kMultiScreen) ==
+                  VNCCLIENT_DESKTOP_RESIZE_MULTI_SCREEN,
+              "desktop resize result mismatch");
 
 vncclient_handle* vncclient_create(const vncclient_callbacks* callbacks)
 {
@@ -967,6 +1042,27 @@ int vncclient_request_update(vncclient_handle* client, int incremental)
   } catch (std::exception& e) {
     return fail(&client->impl, e.what());
   }
+}
+
+int vncclient_set_desktop_size(vncclient_handle* client, int width, int height)
+{
+  if (!validClient(client) || !client->impl.conn || !client->impl.sock)
+    return VNCCLIENT_DESKTOP_RESIZE_NOT_CONNECTED;
+  try {
+    int rc = client->impl.conn->requestDesktopSize(width, height);
+    if (rc == VNCCLIENT_DESKTOP_RESIZE_OK)
+      client->impl.sock->outStream().flush();
+    return rc;
+  } catch (std::exception& e) {
+    return fail(&client->impl, e.what());
+  }
+}
+
+int vncclient_take_desktop_resize_failure(vncclient_handle* client)
+{
+  if (!validClient(client) || !client->impl.conn)
+    return 0;
+  return client->impl.conn->takeResizeFailure();
 }
 
 int vncclient_get_framebuffer(vncclient_handle* client,

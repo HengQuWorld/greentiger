@@ -3,6 +3,9 @@ export class VncClient {
   disconnect(): void;
   process(): number;
   refresh(): number;
+  setDesktopSize(width: number, height: number): number;
+  takeDesktopResizeFailure(): boolean;
+  computeDesktopSizeTarget(viewportWidth: number, viewportHeight: number, pixelRatio: number): any;
   consumeDamage(): any;
   getFramebufferInfo(): any;
   copyFrameRGBA(order: number): ArrayBuffer | null;

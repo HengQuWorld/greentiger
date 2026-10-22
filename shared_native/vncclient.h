@@ -30,6 +30,19 @@ typedef struct vncclient_callbacks {
                     const uint8_t* rgba, int rgba_len);
 } vncclient_callbacks;
 
+// Result of vncclient_set_desktop_size(). Positive values are not failures.
+typedef enum vncclient_desktop_resize_result {
+  VNCCLIENT_DESKTOP_RESIZE_OK = 0,
+  // The server already reports the requested size; nothing was sent.
+  VNCCLIENT_DESKTOP_RESIZE_UNCHANGED = 1,
+  VNCCLIENT_DESKTOP_RESIZE_NOT_CONNECTED = -1,
+  VNCCLIENT_DESKTOP_RESIZE_INVALID_SIZE = -2,
+  // The server never advertised ExtendedDesktopSize support.
+  VNCCLIENT_DESKTOP_RESIZE_UNSUPPORTED = -3,
+  // The server reports more than one screen; the layout is left untouched.
+  VNCCLIENT_DESKTOP_RESIZE_MULTI_SCREEN = -4,
+} vncclient_desktop_resize_result;
+
 typedef enum vncclient_ssh_auth_type {
   VNCCLIENT_SSH_AUTH_NONE = 0,
   VNCCLIENT_SSH_AUTH_PASSWORD = 1,
@@ -84,6 +97,17 @@ const char* vncclient_get_name(vncclient_handle* client);
 int vncclient_process(vncclient_handle* client);
 int vncclient_refresh(vncclient_handle* client);
 int vncclient_request_update(vncclient_handle* client, int incremental);
+
+// Asks the server to resize the remote desktop (RFB SetDesktopSize) so the
+// picture can match the local viewport instead of being letterboxed. Only
+// single-screen desktops are resized; see vncclient_desktop_resize_result for
+// the returned codes. The request is asynchronous: the new size arrives as a
+// regular framebuffer resize on a later vncclient_process().
+int vncclient_set_desktop_size(vncclient_handle* client, int width, int height);
+
+// Reports once whether a client-requested resize was refused by the server.
+// Returns 1 the first call after a refusal, 0 otherwise.
+int vncclient_take_desktop_resize_failure(vncclient_handle* client);
 
 int vncclient_get_framebuffer(vncclient_handle* client,
                               int* width, int* height,

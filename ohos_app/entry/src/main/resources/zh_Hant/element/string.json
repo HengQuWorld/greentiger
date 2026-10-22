@@ -1529,6 +1529,34 @@
       "value": "剪貼簿"
     },
     {
+      "name": "more_adaptive_resolution",
+      "value": "自適應遠端解析度"
+    },
+    {
+      "name": "more_adaptive_resolution_desc",
+      "value": "依視窗大小調整遠端桌面解析度，畫面鋪滿螢幕（需伺服器支援）"
+    },
+    {
+      "name": "adaptive_resolution_refused",
+      "value": "伺服器未接受解析度調整"
+    },
+    {
+      "name": "adaptive_resolution_unsupported",
+      "value": "此伺服器無法調整遠端解析度"
+    },
+    {
+      "name": "adaptive_resolution_unsupported_apple",
+      "value": "macOS 內建的螢幕共享無法調整遠端解析度"
+    },
+    {
+      "name": "adaptive_resolution_unsupported_short",
+      "value": "目前伺服器不支援"
+    },
+    {
+      "name": "adaptive_resolution_multi_screen",
+      "value": "遠端包含多塊螢幕，未調整解析度"
+    },
+    {
       "name": "more_panel_desc",
       "value": "低頻操作收納在這裡，避免長期佔據主畫布。"
     },

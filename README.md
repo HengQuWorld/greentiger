@@ -140,6 +140,7 @@ cd android_app
 - `monitor_segmentation`：多显示器分割。校验退化输入、矩形始终落在画面内、超宽画面切分与单窗口裁剪。
 - `ssh_tunnel_config`：SSH 隧道参数校验与默认值填充。
 - `apple_rfb_banner`：从 RFB 版本横幅识别 macOS 屏幕共享。校验完整横幅、截断横幅与读取中途的字节分类（不匹配可立即放弃，前缀匹配则继续等待）。
+- `desktop_resize`：远程分辨率自适应规则。校验未连接、尺寸非法、尺寸已一致、服务器不支持与多屏不重排的判定顺序，单屏 id/flags 的复用，以及目标分辨率的下限、上限与 RFB 16 位字段边界。
 
 新增可测试的原生逻辑时，把不依赖平台头文件和第三方库的实现放在 `shared_native/` 的独立源文件中，并在 `shared_native/tests/CMakeLists.txt` 里登记。
 
